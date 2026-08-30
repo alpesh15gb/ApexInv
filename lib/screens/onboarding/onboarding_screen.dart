@@ -10,7 +10,7 @@ import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/company_info.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/providers/repositories.dart';
-import 'package:apexbooks/screens/dashboard_screen.dart';
+import 'package:apexbooks/screens/responsive_dashboard_screen.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_appearance.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_company.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_done.dart';
@@ -222,7 +222,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => DashboardScreen(widget.user)),
+      MaterialPageRoute(
+        builder: (context) => ResponsiveDashboardScreen(widget.user),
+      ),
     );
   }
 

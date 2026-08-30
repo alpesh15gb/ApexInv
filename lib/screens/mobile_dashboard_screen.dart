@@ -251,14 +251,19 @@ class _MobileDashboardScreenState
     switch (index) {
       case 0:
         await _selectTab(0);
+        return;
       case 1:
         await _selectTab(1);
+        return;
       case 2:
         await _selectTab(2);
+        return;
       case 3:
         await _selectTab(5);
+        return;
       case 4:
         _scaffoldKey.currentState?.openDrawer();
+        return;
     }
   }
 

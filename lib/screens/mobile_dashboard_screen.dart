@@ -9,7 +9,7 @@ import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/screens/auth/login_screen.dart';
 import 'package:apexbooks/screens/create_invoice_screen_v2.dart';
 import 'package:apexbooks/screens/customer_management_screen_v2.dart';
-import 'package:apexbooks/screens/dashboard_screen.dart' show DashboardHome;
+import 'package:apexbooks/screens/mobile_dashboard_home.dart';
 import 'package:apexbooks/screens/expense_management_screen.dart';
 import 'package:apexbooks/screens/invoice_management_screen_v2.dart';
 import 'package:apexbooks/screens/product_management_screen_v2.dart';
@@ -155,7 +155,7 @@ class _MobileDashboardScreenState
   Widget _buildScreen() {
     switch (_selectedIndex) {
       case 0:
-        return DashboardHome(
+        return MobileDashboardHome(
           onEditInvoice: _editInvoice,
           onCloneInvoice: _cloneInvoice,
           user: _currentUser,

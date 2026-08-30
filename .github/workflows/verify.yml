@@ -4,15 +4,12 @@ on:
   push:
     branches:
       - responsive-mobile
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: read
 
 jobs:
-  analyze-and-test:
+  analyze-test-build:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -32,3 +29,6 @@ jobs:
 
       - name: Test
         run: flutter test
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug

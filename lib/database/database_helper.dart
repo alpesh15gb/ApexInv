@@ -3,8 +3,8 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
-import 'package:invoiso/utils/app_logger.dart';
-import 'package:invoiso/utils/password_utils.dart';
+import 'package:apexbooks/utils/app_logger.dart';
+import 'package:apexbooks/utils/password_utils.dart';
 
 const _tag = 'DatabaseHelper';
 
@@ -15,7 +15,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 43;
+  final dbVersion = 44;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -25,7 +25,7 @@ class DatabaseHelper {
 
   Future<Database> _initDB() async {
     final dbDir = await getApplicationSupportDirectory();
-    _path = join(dbDir.path, 'invoice_manager.db');
+    _path = join(dbDir.path, 'apexbooks.db');
     return await openDatabase(
       _path!,
       version: dbVersion,
@@ -51,7 +51,10 @@ class DatabaseHelper {
         phone TEXT,
         address TEXT,
         gstin TEXT,
-        business_name TEXT DEFAULT ''
+        business_name TEXT DEFAULT '',
+        credit_limit REAL DEFAULT 0,
+        credit_limit_enabled INTEGER DEFAULT 0,
+        payment_term_id TEXT DEFAULT ''
       )
     ''');
 
@@ -118,7 +121,9 @@ class DatabaseHelper {
         invoice_title TEXT,
         hide_invoice_number INTEGER DEFAULT 0,
         custom_invoice_number TEXT,
-        is_interstate INTEGER DEFAULT 0
+        is_interstate INTEGER DEFAULT 0,
+        payment_term_id TEXT DEFAULT '',
+        custom_fields TEXT DEFAULT ''
       )
     ''');
 
@@ -245,6 +250,123 @@ class DatabaseHelper {
 
     // Insert default currency
     await db.insert('settings', {'key': 'currency', 'value': 'INR'});
+
+    // ── Phase 2: Payment Terms ──
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS payment_terms (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        days INTEGER NOT NULL DEFAULT 0,
+        is_default INTEGER DEFAULT 0
+      )
+    ''');
+    final termDefaults = [
+      {'id': 'term-0', 'name': 'Due on Receipt', 'days': 0, 'is_default': 1},
+      {'id': 'term-15', 'name': 'Net 15', 'days': 15, 'is_default': 0},
+      {'id': 'term-30', 'name': 'Net 30', 'days': 30, 'is_default': 0},
+      {'id': 'term-45', 'name': 'Net 45', 'days': 45, 'is_default': 0},
+      {'id': 'term-60', 'name': 'Net 60', 'days': 60, 'is_default': 0},
+    ];
+    for (final t in termDefaults) {
+      await db.insert('payment_terms', t);
+    }
+
+
+    // ── Phase 3: Expenses ──
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS expense_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS expenses (
+        id TEXT PRIMARY KEY,
+        description TEXT NOT NULL,
+        amount REAL NOT NULL DEFAULT 0,
+        date TEXT NOT NULL,
+        category_id TEXT NOT NULL,
+        payment_method TEXT,
+        notes TEXT
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)');
+    final expenseCats = [
+      {'id': 'cat-rent', 'name': 'Rent'},
+      {'id': 'cat-salary', 'name': 'Salary'},
+      {'id': 'cat-transport', 'name': 'Transport'},
+      {'id': 'cat-utilities', 'name': 'Utilities'},
+      {'id': 'cat-office', 'name': 'Office Supplies'},
+      {'id': 'cat-marketing', 'name': 'Marketing'},
+      {'id': 'cat-maintenance', 'name': 'Maintenance'},
+      {'id': 'cat-other', 'name': 'Other'},
+    ];
+    for (final c in expenseCats) {
+      await db.insert('expense_categories', c);
+    }
+
+    // ── Phase 4: Purchase Orders ──
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id TEXT PRIMARY KEY,
+        order_number TEXT,
+        vendor_name TEXT NOT NULL,
+        vendor_phone TEXT,
+        vendor_email TEXT,
+        vendor_address TEXT,
+        date TEXT NOT NULL,
+        expected_date TEXT,
+        status TEXT DEFAULT 'draft',
+        total_amount REAL DEFAULT 0,
+        amount_paid REAL DEFAULT 0,
+        notes TEXT,
+        currency_code TEXT DEFAULT 'INR',
+        currency_symbol TEXT DEFAULT '₹'
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS purchase_order_items (
+        id TEXT PRIMARY KEY,
+        purchase_order_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        quantity REAL NOT NULL DEFAULT 0,
+        price_per_unit REAL NOT NULL DEFAULT 0,
+        tax_rate REAL DEFAULT 0,
+        discount REAL DEFAULT 0,
+        description TEXT
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_po_items_order ON purchase_order_items(purchase_order_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_po_date ON purchase_orders(date)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status)');
+
+    // ── Phase 5: Batch/Serial Tracking ──
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS batch_info (
+        id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        batch_number TEXT NOT NULL,
+        serial_number TEXT,
+        quantity REAL DEFAULT 0,
+        mrp REAL DEFAULT 0,
+        expiry_date TEXT,
+        manufacturing_date TEXT,
+        size TEXT
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_batch_product ON batch_info(product_id)');
+
+    // ── Phase 6: Custom Fields ──
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS custom_fields (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        type TEXT DEFAULT 'text',
+        enabled INTEGER DEFAULT 1
+      )
+    ''');
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -725,6 +847,152 @@ class DatabaseHelper {
         await db.execute(
           'ALTER TABLE invoices ADD COLUMN is_interstate INTEGER DEFAULT 0',
         );
+      });
+    }
+
+    if (oldVersion < 44) {
+      // Phase 2: Payment Terms table
+      await _runMigrationStep(db, 44, 'create_payment_terms_table', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS payment_terms (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            days INTEGER NOT NULL DEFAULT 0,
+            is_default INTEGER DEFAULT 0
+          )
+        ''');
+        // Seed default terms
+        final defaults = [
+          {'id': 'term-0', 'name': 'Due on Receipt', 'days': 0, 'is_default': 1},
+          {'id': 'term-15', 'name': 'Net 15', 'days': 15, 'is_default': 0},
+          {'id': 'term-30', 'name': 'Net 30', 'days': 30, 'is_default': 0},
+          {'id': 'term-45', 'name': 'Net 45', 'days': 45, 'is_default': 0},
+          {'id': 'term-60', 'name': 'Net 60', 'days': 60, 'is_default': 0},
+        ];
+        for (final t in defaults) {
+          await db.insert('payment_terms', t,
+              conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+      });
+
+      // Phase 2: Add credit limit + payment term to customers
+      await _runMigrationStep(db, 44, 'add_credit_limit_to_customers', () async {
+        await db.execute("ALTER TABLE customers ADD COLUMN credit_limit REAL DEFAULT 0");
+        await db.execute("ALTER TABLE customers ADD COLUMN credit_limit_enabled INTEGER DEFAULT 0");
+        await db.execute("ALTER TABLE customers ADD COLUMN payment_term_id TEXT DEFAULT ''");
+      });
+
+      // Phase 2: Add payment_term_id to invoices
+      await _runMigrationStep(db, 44, 'add_payment_term_to_invoices', () async {
+        await db.execute("ALTER TABLE invoices ADD COLUMN payment_term_id TEXT DEFAULT ''");
+      });
+
+      // Phase 3: Expenses tables
+      await _runMigrationStep(db, 44, 'create_expenses_tables', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS expense_categories (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS expenses (
+            id TEXT PRIMARY KEY,
+            description TEXT NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            date TEXT NOT NULL,
+            category_id TEXT NOT NULL,
+            payment_method TEXT,
+            notes TEXT
+          )
+        ''');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)');
+        // Seed default categories
+        final cats = [
+          {'id': 'cat-rent', 'name': 'Rent'},
+          {'id': 'cat-salary', 'name': 'Salary'},
+          {'id': 'cat-transport', 'name': 'Transport'},
+          {'id': 'cat-utilities', 'name': 'Utilities'},
+          {'id': 'cat-office', 'name': 'Office Supplies'},
+          {'id': 'cat-marketing', 'name': 'Marketing'},
+          {'id': 'cat-maintenance', 'name': 'Maintenance'},
+          {'id': 'cat-other', 'name': 'Other'},
+        ];
+        for (final c in cats) {
+          await db.insert('expense_categories', c,
+              conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+      });
+
+      // Phase 4: Purchase Orders tables
+      await _runMigrationStep(db, 44, 'create_purchase_orders_tables', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS purchase_orders (
+            id TEXT PRIMARY KEY,
+            order_number TEXT,
+            vendor_name TEXT NOT NULL,
+            vendor_phone TEXT,
+            vendor_email TEXT,
+            vendor_address TEXT,
+            date TEXT NOT NULL,
+            expected_date TEXT,
+            status TEXT DEFAULT 'draft',
+            total_amount REAL DEFAULT 0,
+            amount_paid REAL DEFAULT 0,
+            notes TEXT,
+            currency_code TEXT DEFAULT 'INR',
+            currency_symbol TEXT DEFAULT '₹'
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS purchase_order_items (
+            id TEXT PRIMARY KEY,
+            purchase_order_id TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            product_name TEXT NOT NULL,
+            quantity REAL NOT NULL DEFAULT 0,
+            price_per_unit REAL NOT NULL DEFAULT 0,
+            tax_rate REAL DEFAULT 0,
+            discount REAL DEFAULT 0,
+            description TEXT
+          )
+        ''');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_po_items_order ON purchase_order_items(purchase_order_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_po_date ON purchase_orders(date)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status)');
+      });
+
+      // Phase 5: Batch/Serial tracking table
+      await _runMigrationStep(db, 44, 'create_batch_info_table', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS batch_info (
+            id TEXT PRIMARY KEY,
+            product_id TEXT NOT NULL,
+            batch_number TEXT NOT NULL,
+            serial_number TEXT,
+            quantity REAL DEFAULT 0,
+            mrp REAL DEFAULT 0,
+            expiry_date TEXT,
+            manufacturing_date TEXT,
+            size TEXT
+          )
+        ''');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_batch_product ON batch_info(product_id)');
+      });
+
+      // Phase 6: Custom fields table
+      await _runMigrationStep(db, 44, 'create_custom_fields_table', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS custom_fields (
+            id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            type TEXT DEFAULT 'text',
+            enabled INTEGER DEFAULT 1
+          )
+        ''');
+        // Add custom_fields column to invoices
+        await db.execute("ALTER TABLE invoices ADD COLUMN custom_fields TEXT DEFAULT ''");
       });
     }
   }

@@ -1,10 +1,10 @@
 [Setup]
-AppName=InvoiceApp
+AppName=Apex Books
 AppVersion=1.0.0
-DefaultDirName={pf}\InvoiceApp
-DefaultGroupName=InvoiceApp
+DefaultDirName={pf}\ApexBooks
+DefaultGroupName=Apex Books
 OutputDir=Output
-OutputBaseFilename=InvoiceAppSetup
+OutputBaseFilename=ApexBooksSetup
 Compression=lzma
 SolidCompression=yes
 
@@ -12,5 +12,5 @@ SolidCompression=yes
 Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs
 
 [Icons]
-Name: "{group}\InvoiceApp"; Filename: "{app}\invoiso.exe"
-Name: "{commondesktop}\InvoiceApp"; Filename: "{app}\invoiso.exe"
+Name: "{group}\Apex Books"; Filename: "{app}\ApexBooks.exe"
+Name: "{commondesktop}\Apex Books"; Filename: "{app}\ApexBooks.exe"

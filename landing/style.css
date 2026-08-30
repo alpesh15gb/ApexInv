@@ -376,7 +376,7 @@ body {
     min-height: 180px;
     background:
         linear-gradient(135deg, rgba(79,142,247,0.22), rgba(139,92,246,0.12)),
-        var(--blog-card-image, url("assets/images/invoiso_banner.webp")) center/cover;
+        var(--blog-card-image, url("assets/images/apexbooks_banner.webp")) center/cover;
 }
 
 .blog-card-body {
@@ -5707,7 +5707,7 @@ footer .border-t {
 .reveal-d4 { transition-delay: 0.32s; }
 .reveal-d5 { transition-delay: 0.40s; }
 
-/* ── Comparison table — Invoiso column highlight ── */
+/* ── Comparison table — Apex Books column highlight ── */
 .comparison-table td:nth-child(2),
 .comparison-table th:nth-child(2) {
     background: rgba(79,142,247,0.06) !important;

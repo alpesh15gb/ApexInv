@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-APP_NAME="Invoiso"
+APP_NAME="Apex Books"
 REPO_OWNER="Anooppandikashala"
-REPO_NAME="invoiso"
+REPO_NAME="apexbooks"
 RELEASE_API_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
 
 MY_OS_ARCH=$(uname -m)
@@ -79,11 +79,11 @@ if [ "$INSTALL_MODE" = "deb" ]; then
         case "$MY_OS_VERSION" in
 
             22.04)
-                APP_FILE_NAME="Invoiso-${APP_VERSION}-ubuntu22.deb"
+                APP_FILE_NAME="Apex Books-${APP_VERSION}-ubuntu22.deb"
                 ;;
 
             24.04)
-                APP_FILE_NAME="Invoiso-${APP_VERSION}-ubuntu24.deb"
+                APP_FILE_NAME="Apex Books-${APP_VERSION}-ubuntu24.deb"
                 ;;
 
             *)
@@ -97,9 +97,9 @@ fi
 
 if [ "$INSTALL_MODE" = "appimage" ] && [ "${APP_FILE_NAME:-}" = "" ]; then
     if [ "$MY_OS_ID" = "ubuntu" ] && [ "$MY_OS_VERSION" = "24.04" ]; then
-        APP_FILE_NAME="Invoiso-${APP_VERSION}-ubuntu24-x86_64.AppImage"
+        APP_FILE_NAME="Apex Books-${APP_VERSION}-ubuntu24-x86_64.AppImage"
     else
-        APP_FILE_NAME="Invoiso-${APP_VERSION}-x86_64.AppImage"
+        APP_FILE_NAME="Apex Books-${APP_VERSION}-x86_64.AppImage"
     fi
 fi
 

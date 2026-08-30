@@ -1,4 +1,4 @@
-import 'package:invoiso/models/customer.dart';
+import 'package:apexbooks/models/customer.dart';
 
 abstract class CustomerRepository {
   Future<void> insertCustomer(Customer customer);

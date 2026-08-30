@@ -1,19 +1,15 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
-import 'package:invoiso/common/app_config.dart';
-import 'package:invoiso/common/constants.dart';
-import 'package:invoiso/models/user.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/screens/auth/forgot_password_screen.dart';
-import 'package:invoiso/screens/auth/change_password_screen.dart';
-import 'package:invoiso/screens/test_gate_screen.dart';
+import 'package:apexbooks/common/app_config.dart';
+import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/screens/auth/forgot_password_screen.dart';
+import 'package:apexbooks/screens/auth/change_password_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:invoiso/providers/app_config_provider.dart';
-import 'package:invoiso/utils/post_auth_navigation.dart';
+import 'package:apexbooks/providers/app_config_provider.dart';
+import 'package:apexbooks/utils/post_auth_navigation.dart';
 
 // Login Screen
 class LoginScreen extends ConsumerStatefulWidget {
@@ -92,8 +88,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _afterLoginNavigate(AppEditionConfig cfg, User user) async {
-    if (TestBuildConfig.isTestBuild && !await _testGatePasses(cfg, user)) return;
-
     if(cfg.isCloud)
     {
       if (!mounted) return;
@@ -116,43 +110,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   }
 
-  // Uses the existing analytics heartbeat endpoint's response Date header as a
-  // trusted clock — local device time is spoofable and would defeat this gate.
-  Future<bool> _testGatePasses(AppEditionConfig cfg, User user) async {
-    DateTime serverTime;
-    try {
-      final resp = await http
-          .head(Uri.parse(AnalyticsConfig.heartbeatUrl))
-          .timeout(const Duration(seconds: 5));
-      final dateHeader = resp.headers['date'];
-      if (dateHeader == null) throw const HttpException('missing Date header');
-      serverTime = HttpDate.parse(dateHeader);
-    } catch (_) {
-      if (!mounted) return false;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TestGateScreen(
-            reason: TestGateReason.noInternet,
-            onRetry: () => _afterLoginNavigate(cfg, user),
-          ),
-        ),
-      );
-      return false;
-    }
 
-    final expiry = DateTime.fromMillisecondsSinceEpoch(TestBuildConfig.buildEpochSeconds * 1000)
-        .add(const Duration(days: TestBuildConfig.testExpiryDays));
-    if (serverTime.isAfter(expiry)) {
-      if (!mounted) return false;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const TestGateScreen(reason: TestGateReason.expired)),
-      );
-      return false;
-    }
-    return true;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -183,7 +141,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       cursor: SystemMouseCursors.click,
                       child: GestureDetector(
                         onTap: () => launchUrl(
-                          Uri.parse('https://invoiso.co.in/customization.html'),
+                          Uri.parse(AppConfig.website),
                           mode: LaunchMode.externalApplication,
                         ),
                         child: Container(
@@ -209,7 +167,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         color: Colors.white, fontSize: 13),
                                   ),
                                   const Text(
-                                    '"Invoiso Cloud Edition"',
+                                    '"Apex Books Cloud Edition"',
                                     style: TextStyle(
                                         color: Colors.yellow, fontSize: 13),
                                   ),

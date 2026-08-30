@@ -262,11 +262,11 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get dashboardSupportBannerReviewSubtitle =>
-      'Invoiso पसंद आ रहा है? एक त्वरित समीक्षा बहुत मदद करती है।';
+      'Apex Books पसंद आ रहा है? एक त्वरित समीक्षा बहुत मदद करती है।';
 
   @override
   String get dashboardSupportBannerSupportSubtitle =>
-      'लगता है Invoiso आपके काम का हिस्सा बन गया है। अगर यह मददगार रहा हो, तो जब उचित लगे प्रोजेक्ट को सपोर्ट करने पर विचार करें।';
+      'लगता है Apex Books आपके काम का हिस्सा बन गया है। अगर यह मददगार रहा हो, तो जब उचित लगे प्रोजेक्ट को सपोर्ट करने पर विचार करें।';
 
   @override
   String get dashboardReviewAction => 'समीक्षा करें';
@@ -3929,7 +3929,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get customizationWhiteLabelDescription =>
-      'ऐप और PDF आउटपुट से सारी Invoiso ब्रांडिंग हटाएं, और इसे अपनी कंपनी की पहचान से बदलें।';
+      'ऐप और PDF आउटपुट से सारी Apex Books ब्रांडिंग हटाएं, और इसे अपनी कंपनी की पहचान से बदलें।';
 
   @override
   String get customizationWhiteLabelDelivery => '3–6 दिन';
@@ -4082,7 +4082,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get updateDialogBodyMessage =>
-      'invoiso का नया संस्करण उपलब्ध है। नवीनतम रिलीज़ पाने के लिए डाउनलोड पेज पर जाएं।';
+      'apex books का नया संस्करण उपलब्ध है। नवीनतम रिलीज़ पाने के लिए डाउनलोड पेज पर जाएं।';
 
   @override
   String get pageSizeA4Label => 'मानक A4';

@@ -1,10 +1,10 @@
-# Invoiso
+# Apex Books
 
-> Invoiso is a free, open-source, offline invoice and billing desktop application for Windows, Linux, and macOS. No subscription, no cloud, no account required. Popular free alternative to Vyapar, Zoho Invoice, and Wave for Indian small businesses.
+> Apex Books is a free, open-source, offline invoice and billing desktop application for Windows, Linux, and macOS. No subscription, no cloud, no account required. Popular free alternative to Vyapar, Zoho Invoice, and Wave for Indian small businesses.
 
 ## About
 
-Invoiso is built for freelancers, small businesses, shop owners, and consultants who need professional invoicing without internet dependency or recurring costs. All data is stored locally on the user's device using a SQLite database — nothing is sent to any server.
+Apex Books is built for freelancers, small businesses, shop owners, and consultants who need professional invoicing without internet dependency or recurring costs. All data is stored locally on the user's device using a SQLite database — nothing is sent to any server.
 
 ## Key Features
 
@@ -26,7 +26,7 @@ Invoiso is built for freelancers, small businesses, shop owners, and consultants
 
 ## Use Cases
 
-Invoiso is well suited for:
+Apex Books is well suited for:
 - Indian small businesses needing free GST billing software
 - Kirana shops, retailers, traders, and wholesalers who need offline billing
 - Freelancers and consultants who need PDF invoices without a subscription
@@ -36,25 +36,25 @@ Invoiso is well suited for:
 
 ## Pages
 
-- [Home](https://invoiso.co.in/) — Overview, features, comparison vs Vyapar/Zoho/Wave, screenshots, and demo
-- [Download](https://invoiso.co.in/download.html) — Latest release for Windows, Linux, and macOS
-- [Free Online Invoice Maker](https://invoiso.co.in/invoice-maker.html) — Browser-based PDF invoice generator, no signup
-- [FAQ](https://invoiso.co.in/faq.html) — Answers to common questions
-- [Release Notes](https://invoiso.co.in/changelog.html) — Full version history
-- [Free GST Billing Software](https://invoiso.co.in/free-gst-billing-software.html) — GST-ready invoice workflow for Indian small businesses
-- [Offline Billing Software](https://invoiso.co.in/offline-billing-software.html) — Desktop billing with local data and no cloud dependency
-- [Free Vyapar Alternative](https://invoiso.co.in/vyapar-alternative.html) — Comparison-focused page for businesses evaluating alternatives
-- [Open Source Invoice Software](https://invoiso.co.in/open-source-invoice-software.html) — Source-code and transparency focused overview
-- [Invoice Software for Linux](https://invoiso.co.in/invoice-software-for-linux.html) — Linux AppImage and DEB invoice app overview
-- [Blog](https://invoiso.co.in/blog/) — Practical guides for GST invoices, UPI QR payments, offline billing, and Linux invoicing
-- [Reports Are Coming Next Month](https://invoiso.co.in/blog/reports-coming-next-month.html) — Product update announcing the upcoming Reports section
+- [Home](https://apexbooks.co.in/) — Overview, features, comparison vs Vyapar/Zoho/Wave, screenshots, and demo
+- [Download](https://apexbooks.co.in/download.html) — Latest release for Windows, Linux, and macOS
+- [Free Online Invoice Maker](https://apexbooks.co.in/invoice-maker.html) — Browser-based PDF invoice generator, no signup
+- [FAQ](https://apexbooks.co.in/faq.html) — Answers to common questions
+- [Release Notes](https://apexbooks.co.in/changelog.html) — Full version history
+- [Free GST Billing Software](https://apexbooks.co.in/free-gst-billing-software.html) — GST-ready invoice workflow for Indian small businesses
+- [Offline Billing Software](https://apexbooks.co.in/offline-billing-software.html) — Desktop billing with local data and no cloud dependency
+- [Free Vyapar Alternative](https://apexbooks.co.in/vyapar-alternative.html) — Comparison-focused page for businesses evaluating alternatives
+- [Open Source Invoice Software](https://apexbooks.co.in/open-source-invoice-software.html) — Source-code and transparency focused overview
+- [Invoice Software for Linux](https://apexbooks.co.in/invoice-software-for-linux.html) — Linux AppImage and DEB invoice app overview
+- [Blog](https://apexbooks.co.in/blog/) — Practical guides for GST invoices, UPI QR payments, offline billing, and Linux invoicing
+- [Reports Are Coming Next Month](https://apexbooks.co.in/blog/reports-coming-next-month.html) — Product update announcing the upcoming Reports section
 
 ## Download
 
-Latest release: https://github.com/Anooppandikashala/invoiso/releases/latest
-Source code: https://github.com/Anooppandikashala/invoiso
+Latest release: https://github.com/ApexBooks/releases/latest
+Source code: https://github.com/ApexBooks
 
 ## Support
 
-- GitHub Issues: https://github.com/Anooppandikashala/invoiso/issues
+- GitHub Issues: https://github.com/ApexBooks/issues
 - Email: anooppkrishnan96@gmail.com

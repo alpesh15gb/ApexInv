@@ -5,16 +5,16 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/models/company_info.dart';
-import 'package:invoiso/models/user.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/screens/dashboard_screen.dart';
-import 'package:invoiso/screens/onboarding/onboarding_step_appearance.dart';
-import 'package:invoiso/screens/onboarding/onboarding_step_company.dart';
-import 'package:invoiso/screens/onboarding/onboarding_step_done.dart';
-import 'package:invoiso/screens/onboarding/onboarding_step_invoice.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/models/company_info.dart';
+import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/screens/dashboard_screen.dart';
+import 'package:apexbooks/screens/onboarding/onboarding_step_appearance.dart';
+import 'package:apexbooks/screens/onboarding/onboarding_step_company.dart';
+import 'package:apexbooks/screens/onboarding/onboarding_step_done.dart';
+import 'package:apexbooks/screens/onboarding/onboarding_step_invoice.dart';
 
 /// One-time, skippable first-login setup wizard. Each step persists its own
 /// fields immediately on "Next" so progress survives even if the app is

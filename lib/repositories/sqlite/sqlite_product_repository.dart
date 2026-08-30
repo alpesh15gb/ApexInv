@@ -1,6 +1,6 @@
-import 'package:invoiso/database/product_service.dart';
-import 'package:invoiso/models/product.dart';
-import 'package:invoiso/repositories/product_repository.dart';
+import 'package:apexbooks/database/product_service.dart';
+import 'package:apexbooks/models/product.dart';
+import 'package:apexbooks/repositories/product_repository.dart';
 
 class SqliteProductRepository implements ProductRepository {
   @override

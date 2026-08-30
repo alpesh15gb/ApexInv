@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Invoiso';
+  String get appTitle => 'Apex Books';
 
   @override
   String get actionSave => 'Save';
@@ -262,11 +262,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dashboardSupportBannerReviewSubtitle =>
-      'Enjoying Invoiso? A quick review helps a lot.';
+      'Enjoying Apex Books? A quick review helps a lot.';
 
   @override
   String get dashboardSupportBannerSupportSubtitle =>
-      'Looks like Invoiso is part of your workflow. If it\'s been helpful, consider supporting the project — whenever it feels right.';
+      'Looks like Apex Books is part of your workflow. If it\'s been helpful, consider supporting the project — whenever it feels right.';
 
   @override
   String get dashboardReviewAction => 'Review';
@@ -3915,7 +3915,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get customizationWhiteLabelDescription =>
-      'Remove all Invoiso branding from the app and PDF outputs, and replace it with your own company identity.';
+      'Remove all Apex Books branding from the app and PDF outputs, and replace it with your own company identity.';
 
   @override
   String get customizationWhiteLabelDelivery => '3–6 days';
@@ -4066,7 +4066,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateDialogBodyMessage =>
-      'A new version of invoiso is available. Visit the download page to get the latest release.';
+      'A new version of apex books is available. Visit the download page to get the latest release.';
 
   @override
   String get pageSizeA4Label => 'Standard A4';

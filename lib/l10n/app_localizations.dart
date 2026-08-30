@@ -111,7 +111,7 @@ abstract class AppLocalizations {
   /// The application title
   ///
   /// In en, this message translates to:
-  /// **'Invoiso'**
+  /// **'Apex Books'**
   String get appTitle;
 
   /// No description provided for @actionSave.
@@ -579,13 +579,13 @@ abstract class AppLocalizations {
   /// No description provided for @dashboardSupportBannerReviewSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Enjoying Invoiso? A quick review helps a lot.'**
+  /// **'Enjoying Apex Books? A quick review helps a lot.'**
   String get dashboardSupportBannerReviewSubtitle;
 
   /// No description provided for @dashboardSupportBannerSupportSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Looks like Invoiso is part of your workflow. If it\'s been helpful, consider supporting the project — whenever it feels right.'**
+  /// **'Looks like Apex Books is part of your workflow. If it\'s been helpful, consider supporting the project — whenever it feels right.'**
   String get dashboardSupportBannerSupportSubtitle;
 
   /// No description provided for @dashboardReviewAction.
@@ -6615,7 +6615,7 @@ abstract class AppLocalizations {
   /// No description provided for @customizationWhiteLabelDescription.
   ///
   /// In en, this message translates to:
-  /// **'Remove all Invoiso branding from the app and PDF outputs, and replace it with your own company identity.'**
+  /// **'Remove all Apex Books branding from the app and PDF outputs, and replace it with your own company identity.'**
   String get customizationWhiteLabelDescription;
 
   /// No description provided for @customizationWhiteLabelDelivery.
@@ -6879,7 +6879,7 @@ abstract class AppLocalizations {
   /// No description provided for @updateDialogBodyMessage.
   ///
   /// In en, this message translates to:
-  /// **'A new version of invoiso is available. Visit the download page to get the latest release.'**
+  /// **'A new version of apex books is available. Visit the download page to get the latest release.'**
   String get updateDialogBodyMessage;
 
   /// No description provided for @pageSizeA4Label.

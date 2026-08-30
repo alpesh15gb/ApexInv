@@ -1,6 +1,6 @@
-import 'package:invoiso/models/invoice_item.dart';
-import 'package:invoiso/models/product.dart';
-import 'package:invoiso/utils/app_logger.dart';
+import 'package:apexbooks/models/invoice_item.dart';
+import 'package:apexbooks/models/product.dart';
+import 'package:apexbooks/utils/app_logger.dart';
 import 'database_helper.dart';
 
 const _tag = 'InvoiceItemService';

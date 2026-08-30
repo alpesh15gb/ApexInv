@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:invoiso/backup/backup_manager.dart';
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/models/backup_info.dart';
+import 'package:apexbooks/backup/backup_manager.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/models/backup_info.dart';
+import 'package:apexbooks/screens/import_screen.dart';
 
 class BackupManagementScreen extends StatefulWidget {
   const BackupManagementScreen({super.key});
@@ -211,6 +212,20 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
                               onPressed: _importBackup,
                               icon: const Icon(Icons.upload),
                               label: Text(l10n.backupImportButton),
+                            ),
+                          ),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const ImportScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.file_download),
+                              label: const Text('Import from Vyapar'),
                             ),
                           ),
                         ],

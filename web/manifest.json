@@ -1,11 +1,11 @@
 {
-    "name": "invoiso",
-    "short_name": "invoiso",
+    "name": "Apex Books",
+    "short_name": "Apex Books",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Invoice generating desktop app built with Flutter",
+    "description": "Apex Books - Invoice and billing management app",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

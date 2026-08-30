@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://invoiso.co.in/sitemap.xml
+Sitemap: https://apexbooks.co.in/sitemap.xml

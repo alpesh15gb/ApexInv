@@ -11,7 +11,7 @@ var testimonials = [
   {
     name: 'Raul V',
     location: '',
-    text: 'I\u2019ve been looking for a long time for a simple but useful invoicing program, multi platform. I found complete accounting suites, complicated, and not really useful if you just want to create invoices and keep record of payments and sales taxes. Then I found Invoiso and I was amazed!, beautiful interface and functionality, it does everything you need without complicating things like the full accounting suites. Try it, you will not be disappointed.',
+    text: 'I\u2019ve been looking for a long time for a simple but useful invoicing program, multi platform. I found complete accounting suites, complicated, and not really useful if you just want to create invoices and keep record of payments and sales taxes. Then I found Apex Books and I was amazed!, beautiful interface and functionality, it does everything you need without complicating things like the full accounting suites. Try it, you will not be disappointed.',
     stars: 5,
   }
 ];
@@ -55,7 +55,7 @@ document.addEventListener('click', function (e) {
   if (!el) return;
   var iframe = document.createElement('iframe');
   iframe.src = 'https://www.youtube-nocookie.com/embed/' + el.dataset.id +
-               '?rel=0&autoplay=1&origin=https://invoiso.co.in';
+               '?rel=0&autoplay=1&origin=https://apexbooks.co.in';
   iframe.title = el.dataset.title || 'Video';
   iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
   iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
@@ -137,36 +137,36 @@ function loadSwiper() {
 // ─── Screenshots + Swiper init (runs only after Swiper JS loads) ──────────────
 function initScreenshots() {
   var screenshots = [
-    { src: 'login.png',                          text: 'Invoiso Login Page',            alt: 'Invoiso login screen \u2014 secure desktop invoicing app for Windows and Linux',                          category: 'Invoices' },
-    { src: 'dashboard.png',                      text: 'Invoiso Dashboard Page',        alt: 'Invoiso dashboard showing total revenue, invoice count, and recent invoices overview',               category: 'Invoices' },
-    { src: 'dashboard_layouts.png',              text: 'Invoiso Dashboard Layouts Page',alt: 'Invoiso 4 dashboard layouts: Default view, Classic, Bento and Simple Feed ',                         category: 'Invoices' },
-    { src: 'create_new_invoice1.png',            text: 'Create Invoice Page',           alt: 'Create a new invoice in Invoiso \u2014 select customer, add products, apply tax rate',                    category: 'Invoices' },
-    { src: 'create_new_invoice2.png',            text: 'Create Invoice with Products',  alt: 'Invoiso invoice creation screen with products and line items added',                                 category: 'Invoices' },
-    { src: 'invoice_actions.png',                text: 'Invoice Created Successfully',  alt: 'Invoice created successfully in Invoiso \u2014 ready to preview, print or export as PDF',                 category: 'Invoices' },
-    { src: 'invoice_simple_view.png',            text: 'Invoice Details Page',          alt: 'Invoice details view in Invoiso showing customer info, line items and total amount due',             category: 'Invoices' },
-    { src: 'edit_invoice.png',                   text: 'Edit Your Invoice',             alt: 'Edit an existing invoice in Invoiso \u2014 update customer, products and tax settings',                   category: 'Invoices' },
+    { src: 'login.png',                          text: 'Apex Books Login Page',            alt: 'Apex Books login screen \u2014 secure desktop invoicing app for Windows and Linux',                          category: 'Invoices' },
+    { src: 'dashboard.png',                      text: 'Apex Books Dashboard Page',        alt: 'Apex Books dashboard showing total revenue, invoice count, and recent invoices overview',               category: 'Invoices' },
+    { src: 'dashboard_layouts.png',              text: 'Apex Books Dashboard Layouts Page',alt: 'Apex Books 4 dashboard layouts: Default view, Classic, Bento and Simple Feed ',                         category: 'Invoices' },
+    { src: 'create_new_invoice1.png',            text: 'Create Invoice Page',           alt: 'Create a new invoice in Apex Books \u2014 select customer, add products, apply tax rate',                    category: 'Invoices' },
+    { src: 'create_new_invoice2.png',            text: 'Create Invoice with Products',  alt: 'Apex Books invoice creation screen with products and line items added',                                 category: 'Invoices' },
+    { src: 'invoice_actions.png',                text: 'Invoice Created Successfully',  alt: 'Invoice created successfully in Apex Books \u2014 ready to preview, print or export as PDF',                 category: 'Invoices' },
+    { src: 'invoice_simple_view.png',            text: 'Invoice Details Page',          alt: 'Invoice details view in Apex Books showing customer info, line items and total amount due',             category: 'Invoices' },
+    { src: 'edit_invoice.png',                   text: 'Edit Your Invoice',             alt: 'Edit an existing invoice in Apex Books \u2014 update customer, products and tax settings',                   category: 'Invoices' },
     { src: 'duplicate_invoice_list.png',         text: 'Duplicate Invoice Action',      alt: 'Invoice Duplicating action',                                                                         category: 'Invoices' },
-    { src: 'invoice_lists_and_actions.png',      text: 'Invoice Listing Page',          alt: 'Invoice management list in Invoiso showing all invoices with search, filter and bulk actions',       category: 'Invoices' },
-    { src: 'invoice_pdf_view.png',               text: 'Sample Invoice PDF',            alt: 'Professional PDF invoice generated by Invoiso with company logo, itemised list and total amount',    category: 'PDF' },
+    { src: 'invoice_lists_and_actions.png',      text: 'Invoice Listing Page',          alt: 'Invoice management list in Apex Books showing all invoices with search, filter and bulk actions',       category: 'Invoices' },
+    { src: 'invoice_pdf_view.png',               text: 'Sample Invoice PDF',            alt: 'Professional PDF invoice generated by Apex Books with company logo, itemised list and total amount',    category: 'PDF' },
     { src: 'invoice_print_view.png',             text: 'Sample Invoice PDF Print View', alt: 'Professional PDF invoice Print View',                                                                category: 'PDF' },
-    { src: 'Invoice_template_selection_screen.png', text: 'Invoice Templates',          alt: 'Invoiso PDF template selection \u2014 Classic, Modern and Minimal invoice templates side by side',      category: 'PDF' },
-    { src: 'template_classic.png',               text: 'Classic Invoice Template',      alt: 'Classic PDF invoice template with branded company header and itemised table \u2014 Invoiso',            category: 'PDF' },
-    { src: 'template_executive.png',             text: 'Executive Invoice Template',    alt: 'Executive PDF invoice template with blue header block and professional layout \u2014 Invoiso',             category: 'PDF' },
-    { src: 'template_modern.png',                text: 'Modern Invoice Template',       alt: 'Modern PDF invoice template with blue header block and professional layout \u2014 Invoiso',             category: 'PDF' },
-    { src: 'template_minimal.png',               text: 'Minimal Invoice Template',      alt: 'Minimal PDF invoice template \u2014 clean, simple and distraction-free design \u2014 Invoiso',           category: 'PDF' },
-    { src: 'template_compact_a6.png',            text: 'A6 Size Compact Invoice Template', alt: 'Compact PDF invoice template \u2014 Space efficient receipt layout design \u2014 Invoiso',           category: 'PDF' },
-    { src: 'customer_list.png',                  text: 'Customer Management Page',      alt: 'Customer management screen in Invoiso showing client list with search, sort and edit options',       category: 'Clients' },
-    { src: 'edit_customer.png',                  text: 'Customer Editing Page',         alt: 'Edit customer details in Invoiso \u2014 name, email, phone, address and GSTIN fields',                  category: 'Clients' },
-    { src: 'product_list.png',                   text: 'Product Management Page',       alt: 'Product management screen in Invoiso showing items with price, stock and HSN code',                  category: 'Products' },
-    { src: 'edit_product.png',                   text: 'Product Editing Page',          alt: 'Edit product in Invoiso \u2014 set name, price, stock, HSN code and tax rate',                          category: 'Products' },
-    { src: 'system_users_management.png',        text: 'User Management Page',          alt: 'User management screen in Invoiso \u2014 add and manage app users with role-based access',              category: 'Settings' },
-    { src: 'Company_settings_page.png',          text: 'Organisation Information',      alt: 'Company information settings in Invoiso \u2014 name, address, phone, email, GSTIN and logo',            category: 'Settings' },
-    { src: 'invoice_settings_page.png',          text: 'Invoice Settings',              alt: 'Invoice settings screen in Invoiso \u2014 configure prefix, currency, tax and UPI QR code',             category: 'Settings' },
-    { src: 'backup_and_restore_page.png',        text: 'Backup Management',             alt: 'Backup and restore screen in Invoiso \u2014 one-click database backup to keep your data safe',          category: 'Settings' },
-    { src: 'software_info_page.png',             text: 'About Invoiso',                 alt: 'About Invoiso screen \u2014 version, developer info and open source license details',                   category: 'Settings' },
-    { src: 'report_screen_with_multiple_types.png', text: 'Reports Dashboard',           alt: 'Invoiso reports dashboard with sidebar navigation showing multiple report types',                      category: 'Reports' },
-    { src: 'report_invoice_status.png',          text: 'Invoice Status Report',          alt: 'Invoice status report in Invoiso \u2014 paid, unpaid and overdue invoices with filter chips',             category: 'Reports' },
-    { src: 'report_customer_wise_statement.png', text: 'Customer Statement Report',      alt: 'Customer-wise statement report in Invoiso showing revenue and outstanding balance per client',          category: 'Reports' },
+    { src: 'Invoice_template_selection_screen.png', text: 'Invoice Templates',          alt: 'Apex Books PDF template selection \u2014 Classic, Modern and Minimal invoice templates side by side',      category: 'PDF' },
+    { src: 'template_classic.png',               text: 'Classic Invoice Template',      alt: 'Classic PDF invoice template with branded company header and itemised table \u2014 Apex Books',            category: 'PDF' },
+    { src: 'template_executive.png',             text: 'Executive Invoice Template',    alt: 'Executive PDF invoice template with blue header block and professional layout \u2014 Apex Books',             category: 'PDF' },
+    { src: 'template_modern.png',                text: 'Modern Invoice Template',       alt: 'Modern PDF invoice template with blue header block and professional layout \u2014 Apex Books',             category: 'PDF' },
+    { src: 'template_minimal.png',               text: 'Minimal Invoice Template',      alt: 'Minimal PDF invoice template \u2014 clean, simple and distraction-free design \u2014 Apex Books',           category: 'PDF' },
+    { src: 'template_compact_a6.png',            text: 'A6 Size Compact Invoice Template', alt: 'Compact PDF invoice template \u2014 Space efficient receipt layout design \u2014 Apex Books',           category: 'PDF' },
+    { src: 'customer_list.png',                  text: 'Customer Management Page',      alt: 'Customer management screen in Apex Books showing client list with search, sort and edit options',       category: 'Clients' },
+    { src: 'edit_customer.png',                  text: 'Customer Editing Page',         alt: 'Edit customer details in Apex Books \u2014 name, email, phone, address and GSTIN fields',                  category: 'Clients' },
+    { src: 'product_list.png',                   text: 'Product Management Page',       alt: 'Product management screen in Apex Books showing items with price, stock and HSN code',                  category: 'Products' },
+    { src: 'edit_product.png',                   text: 'Product Editing Page',          alt: 'Edit product in Apex Books \u2014 set name, price, stock, HSN code and tax rate',                          category: 'Products' },
+    { src: 'system_users_management.png',        text: 'User Management Page',          alt: 'User management screen in Apex Books \u2014 add and manage app users with role-based access',              category: 'Settings' },
+    { src: 'Company_settings_page.png',          text: 'Organisation Information',      alt: 'Company information settings in Apex Books \u2014 name, address, phone, email, GSTIN and logo',            category: 'Settings' },
+    { src: 'invoice_settings_page.png',          text: 'Invoice Settings',              alt: 'Invoice settings screen in Apex Books \u2014 configure prefix, currency, tax and UPI QR code',             category: 'Settings' },
+    { src: 'backup_and_restore_page.png',        text: 'Backup Management',             alt: 'Backup and restore screen in Apex Books \u2014 one-click database backup to keep your data safe',          category: 'Settings' },
+    { src: 'software_info_page.png',             text: 'About Apex Books',                 alt: 'About Apex Books screen \u2014 version, developer info and open source license details',                   category: 'Settings' },
+    { src: 'report_screen_with_multiple_types.png', text: 'Reports Dashboard',           alt: 'Apex Books reports dashboard with sidebar navigation showing multiple report types',                      category: 'Reports' },
+    { src: 'report_invoice_status.png',          text: 'Invoice Status Report',          alt: 'Invoice status report in Apex Books \u2014 paid, unpaid and overdue invoices with filter chips',             category: 'Reports' },
+    { src: 'report_customer_wise_statement.png', text: 'Customer Statement Report',      alt: 'Customer-wise statement report in Apex Books showing revenue and outstanding balance per client',          category: 'Reports' },
   ];
 
   // Build slides

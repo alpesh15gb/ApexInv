@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/providers/locale_provider.dart';
-import 'package:invoiso/providers/repositories.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/providers/locale_provider.dart';
+import 'package:apexbooks/providers/repositories.dart';
 
 // Each language's own name, in its own script — these are endonyms and are
 // intentionally NOT translated (a language picker always shows "Français",

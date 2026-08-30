@@ -6,16 +6,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/common/constants.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/providers/theme_provider.dart';
-import 'package:invoiso/widgets/language_picker.dart';
-import 'package:invoiso/common/invoiso_colors.dart';
-import 'package:invoiso/models/company_info.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/providers/theme_provider.dart';
+import 'package:apexbooks/widgets/language_picker.dart';
+import 'package:apexbooks/common/invoiso_colors.dart';
+import 'package:apexbooks/models/company_info.dart';
 
-import 'package:invoiso/common/app_countries.dart';
+import 'package:apexbooks/common/app_countries.dart';
 
 class CompanyInfoScreen extends ConsumerStatefulWidget {
   const CompanyInfoScreen({super.key});

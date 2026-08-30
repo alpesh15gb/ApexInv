@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:invoiso/common/app_config.dart';
-import 'package:invoiso/common/constants.dart';
-import 'package:invoiso/services/backend_services.dart';
+import 'package:apexbooks/common/app_config.dart';
+import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/services/backend_services.dart';
 
 class CloudflareAnalyticsService {
   static Future<void> sendHeartbeat() async {

@@ -4,9 +4,9 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:qr/qr.dart';
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/models/invoice.dart';
-import 'package:invoiso/utils/amount_in_words.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/utils/amount_in_words.dart';
 
 /// Tracks how much table-row height has been painted so far, so the
 /// watermark image reads as one continuous strip running down the items

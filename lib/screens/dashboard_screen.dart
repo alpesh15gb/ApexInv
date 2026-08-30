@@ -2,44 +2,47 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/widgets/discovery_banner.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/widgets/discovery_banner.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/common/app_config.dart';
-import 'package:invoiso/common/constants.dart';
-import 'package:invoiso/providers/app_config_provider.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/services/update_service.dart';
-import 'package:invoiso/widgets/update_dialog.dart';
-import 'package:invoiso/domain/invoice_calculator.dart';
-import 'package:invoiso/domain/customer_identity.dart';
-import 'package:invoiso/common/invoiso_colors.dart';
-import 'package:invoiso/models/invoice.dart';
-import 'package:invoiso/models/product.dart';
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/screens/settings/settings_screen.dart';
-import 'package:invoiso/services/invoice_pdf_services.dart';
-import 'package:invoiso/services/pdf_service.dart';
-import 'package:invoiso/utils/formatters.dart';
-import 'package:invoiso/widgets/apply_payment_dialog.dart';
-import 'package:invoiso/widgets/customer_info_button.dart';
-import 'package:invoiso/utils/session_manager.dart';
+import 'package:apexbooks/common/app_config.dart';
+import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/providers/app_config_provider.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/services/update_service.dart';
+import 'package:apexbooks/widgets/update_dialog.dart';
+import 'package:apexbooks/domain/invoice_calculator.dart';
+import 'package:apexbooks/domain/customer_identity.dart';
+import 'package:apexbooks/common/invoiso_colors.dart';
+import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/models/product.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/screens/settings/settings_screen.dart';
+import 'package:apexbooks/services/invoice_pdf_services.dart';
+import 'package:apexbooks/services/pdf_service.dart';
+import 'package:apexbooks/utils/formatters.dart';
+import 'package:apexbooks/widgets/apply_payment_dialog.dart';
+import 'package:apexbooks/widgets/customer_info_button.dart';
+import 'package:apexbooks/utils/session_manager.dart';
 
-import 'package:invoiso/models/user.dart';
-// import 'package:invoiso/screens/customer_management_screen.dart';
-import 'package:invoiso/screens/customer_management_screen_v2.dart';
-import 'package:invoiso/database/database_helper.dart';
-import 'package:invoiso/screens/screens_v1/create_invoice_screen.dart' as v1;
-import 'package:invoiso/screens/create_invoice_screen_v2.dart';
-// import 'package:invoiso/screens/product_management_screen.dart';
-import 'package:invoiso/screens/product_management_screen_v2.dart';
-// import 'package:invoiso/screens/invoice_management_screen.dart';
-import 'package:invoiso/screens/invoice_management_screen_v2.dart';
-import 'package:invoiso/screens/auth/login_screen.dart';
-import 'package:invoiso/screens/reports_screen.dart';
+import 'package:apexbooks/models/user.dart';
+// import 'package:apexbooks/screens/customer_management_screen.dart';
+import 'package:apexbooks/screens/customer_management_screen_v2.dart';
+import 'package:apexbooks/database/database_helper.dart';
+import 'package:apexbooks/screens/screens_v1/create_invoice_screen.dart' as v1;
+import 'package:apexbooks/screens/create_invoice_screen_v2.dart';
+// import 'package:apexbooks/screens/product_management_screen.dart';
+import 'package:apexbooks/screens/product_management_screen_v2.dart';
+// import 'package:apexbooks/screens/invoice_management_screen.dart';
+import 'package:apexbooks/screens/invoice_management_screen_v2.dart';
+import 'package:apexbooks/screens/auth/login_screen.dart';
+import 'package:apexbooks/screens/reports_screen.dart';
+import 'package:apexbooks/screens/expense_management_screen.dart';
+import 'package:apexbooks/screens/purchase_order_screen.dart';
+import 'package:apexbooks/screens/import_screen.dart';
 
 // invoice.type is a raw internal value ('Invoice'/'Quotation'/'Receipt') used
 // for comparisons throughout this file — only the displayed label is localized.
@@ -231,6 +234,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         _pendingReportsStatementCustomerKey = null;
         return ReportsScreen(initialStatementCustomerKey: statementCustomerKey);
       case 8:
+        return const ExpenseManagementScreen();
+      case 9:
+        return const PurchaseOrderScreen();
+      case 10:
         return SettingsScreen(
           currentUser: _currentUser,
           openAccessibilityToken: _accessibilityJumpToken,
@@ -534,7 +541,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         AppLocalizations.of(context)!.navProducts),
                     _buildNavItem(7, Icons.bar_chart_outlined, Icons.bar_chart,
                         AppLocalizations.of(context)!.navReports),
-                    _buildNavItem(8, Icons.settings_outlined, Icons.settings,
+                    _buildNavItem(8, Icons.receipt_long_outlined, Icons.receipt_long,
+                        'Expenses'),
+                    _buildNavItem(9, Icons.shopping_cart_outlined, Icons.shopping_cart,
+                        'Purchase Orders'),
+                    _buildNavItem(10, Icons.settings_outlined, Icons.settings,
                         AppLocalizations.of(context)!.navSettings,
                         showDot: _hasUpdate),
                   ],
@@ -1340,8 +1351,8 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           : AppLocalizations.of(context)!.dashboardSupportAction,
       onAction: () async {
         final uri = Uri.parse(isReviewMilestone
-            ? 'https://invoiso.co.in/review.html'
-            : 'https://buymeacoffee.com/anoopp');
+            ? '${AppConfig.website}/review'
+            : '${AppConfig.website}/support');
         if (await canLaunchUrl(uri)) await launchUrl(uri);
       },
       actionColor: const Color(0xFF92400E),

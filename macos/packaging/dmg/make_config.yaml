@@ -1,4 +1,4 @@
-title: "Invoiso"
+title: "Apex Books"
 icon: AppIcon.icns
 icon-size: 80
 window:
@@ -12,7 +12,7 @@ contents:
   - x: 170
     y: 200
     type: file
-    path: "invoiso.app"
+    path: "ApexBooks.app"
   - x: 430
     y: 200
     type: link

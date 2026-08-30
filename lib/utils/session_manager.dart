@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:invoiso/services/analytics/cloudflare_analytics_service.dart';
-
 class SessionManager {
   static Timer? _timer;
   static VoidCallback? _onTimeout;
@@ -15,7 +13,6 @@ class SessionManager {
       onTimeout();
     };
     _sessionExpired = false;
-    unawaited(CloudflareAnalyticsService.sendHeartbeat());
     _resetTimer();
   }
 
@@ -25,7 +22,6 @@ class SessionManager {
 
     if (_sessionExpired) {
       _sessionExpired = false;
-      unawaited(CloudflareAnalyticsService.sendHeartbeat());
     }
     _resetTimer();
   }

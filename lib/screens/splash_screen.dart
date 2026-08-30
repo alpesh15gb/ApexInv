@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:invoiso/database/database_helper.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/screens/auth/login_screen.dart';
-import 'package:invoiso/common/constants.dart';
-import 'package:invoiso/utils/app_logger.dart';
+import 'package:apexbooks/database/database_helper.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/screens/auth/login_screen.dart';
+import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/utils/app_logger.dart';
 
 const _tag = 'SplashScreen';
 

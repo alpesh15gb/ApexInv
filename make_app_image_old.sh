@@ -33,7 +33,7 @@ rm -rf AppDir
 mkdir -p AppDir/usr/bin
 #cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
 cp -r build/linux/x64/release/bundle/* AppDir/
-cp build/linux/x64/release/bundle/invoiso AppDir/invoiso
+cp build/linux/x64/release/bundle/apexbooks AppDir/apexbooks
 
 mkdir -p AppDir/usr/share/icons
 cp assets/deb/images/logo.png AppDir/usr/share/icons/logo.png

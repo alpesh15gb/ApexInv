@@ -1,8 +1,8 @@
-display_name: Invoiso
-package_name: invoiso-2.2.2
+display_name: Apex Books
+package_name: apexbooks-1.0.0
 maintainer:
-  name: ANOOP P
-  email: anooppkrishnan96@gmail.com
+  name: ApexBooks
+  email: support@apexbooks.in
 priority: optional
 section: x11
 installed_size: 6604
@@ -10,7 +10,7 @@ essential: false
 icon: assets/deb/images/logo.png
 
 postinstall_scripts:
-  - echo "Installed Invoiso"
+  - echo "Installed Apex Books"
 postuninstall_scripts:
   - echo "Surprised Pickachu face"
 
@@ -20,7 +20,7 @@ postuninstall_scripts:
 #  - Test
 #  - Application
 
-generic_name: Invoice Application
+generic_name: Invoice and Billing Application
 
 categories:
   - Invoice

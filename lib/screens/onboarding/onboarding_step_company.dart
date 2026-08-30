@@ -3,11 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/common/app_countries.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/providers/theme_provider.dart';
-import 'package:invoiso/widgets/language_picker.dart';
+import 'package:apexbooks/common/app_countries.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/providers/theme_provider.dart';
+import 'package:apexbooks/widgets/language_picker.dart';
 
 /// Step 1 of the onboarding wizard: language, theme, and core company
 /// details. All values live in [OnboardingScreen]'s state — this widget

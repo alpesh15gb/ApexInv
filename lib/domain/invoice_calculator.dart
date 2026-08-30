@@ -1,4 +1,4 @@
-import 'package:invoiso/common/common.dart';
+import 'package:apexbooks/common/common.dart';
 
 class InvoiceCalculator {
   static const double moneyEpsilon = 0.005;

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
 
 /// Step 4 of the onboarding wizard: confirmation only, no fields.
 class OnboardingStepDone extends StatelessWidget {

@@ -1,11 +1,11 @@
 import 'package:uuid/uuid.dart';
 
-import 'package:invoiso/domain/invoice_calculator.dart';
-import 'package:invoiso/domain/payment_receipt_numbers.dart';
-import 'package:invoiso/models/invoice.dart';
-import 'package:invoiso/models/invoice_payment.dart';
-import 'package:invoiso/utils/app_date.dart';
-import 'package:invoiso/utils/app_logger.dart';
+import 'package:apexbooks/domain/invoice_calculator.dart';
+import 'package:apexbooks/domain/payment_receipt_numbers.dart';
+import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/models/invoice_payment.dart';
+import 'package:apexbooks/utils/app_date.dart';
+import 'package:apexbooks/utils/app_logger.dart';
 import 'database_helper.dart';
 
 const _tag = 'PaymentService';

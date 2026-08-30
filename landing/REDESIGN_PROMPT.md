@@ -1,16 +1,16 @@
-# Invoiso Website Redesign Prompt
+# Apex Books Website Redesign Prompt
 
-Use this prompt to redesign the `landing/` website for Invoiso.
+Use this prompt to redesign the `landing/` website for Apex Books.
 
 ---
 
 You are a senior product designer, frontend engineer, technical SEO strategist, AEO/GEO content strategist, and conversion-rate optimization specialist.
 
-Redesign the Invoiso website as a modern, professional, fast, accessible, SEO-optimized static website using only plain HTML, CSS, and vanilla JavaScript. Do not use React, Vue, Angular, Tailwind, Bootstrap, jQuery, icon-font frameworks, Swiper, or any other frontend framework. The final output must be deployable on GitHub Pages as static files.
+Redesign the Apex Books website as a modern, professional, fast, accessible, SEO-optimized static website using only plain HTML, CSS, and vanilla JavaScript. Do not use React, Vue, Angular, Tailwind, Bootstrap, jQuery, icon-font frameworks, Swiper, or any other frontend framework. The final output must be deployable on GitHub Pages as static files.
 
 ## Product Context
 
-Invoiso is a free, open-source, offline billing and invoicing desktop app for small businesses, freelancers, shops, traders, wholesalers, service businesses, and GST-registered businesses in India.
+Apex Books is a free, open-source, offline billing and invoicing desktop app for small businesses, freelancers, shops, traders, wholesalers, service businesses, and GST-registered businesses in India.
 
 Core positioning:
 
@@ -24,9 +24,9 @@ Core positioning:
 - Creates professional PDF invoices
 - Supports customers, products, payment tracking, UPI QR, invoice templates, backups, and multi-currency workflows
 
-Primary domain: `https://invoiso.co.in/`
+Primary domain: `https://apexbooks.co.in/`
 
-GitHub repository: `https://github.com/Anooppandikashala/invoiso`
+GitHub repository: `https://github.com/ApexBooks`
 
 Existing site files include:
 
@@ -47,8 +47,8 @@ Important assets:
 
 - `assets/images/logo.svg`
 - `assets/images/logo1.svg`
-- `assets/images/invoiso_banner.webp`
-- `assets/images/invoiso_banner.png`
+- `assets/images/apexbooks_banner.webp`
+- `assets/images/apexbooks_banner.png`
 - `assets/images/screenshots/`
 - `assets/images/screenshots2/`
 - `assets/images/pngs/`
@@ -93,7 +93,7 @@ Design principles:
 
 The homepage should immediately answer:
 
-- What is Invoiso?
+- What is Apex Books?
 - Who is it for?
 - Why is it free?
 - Does it work offline?
@@ -115,7 +115,7 @@ The homepage should immediately answer:
    - Primary CTA: Download Free
    - Secondary CTA: View on GitHub or Try Free Invoice Maker
    - Trust chips: Open source, Offline, No login, Windows/Linux/macOS, GST-ready, UPI QR
-   - Use a real Invoiso dashboard or invoice screenshot as the main visual
+   - Use a real Apex Books dashboard or invoice screenshot as the main visual
 
 3. Product Proof Strip
    - Free forever
@@ -156,7 +156,7 @@ The homepage should immediately answer:
    - Avoid loading all large screenshots above the fold
 
 8. Comparison
-   - Compare Invoiso against Vyapar, Zoho Invoice, Wave, and generic cloud billing tools
+   - Compare Apex Books against Vyapar, Zoho Invoice, Wave, and generic cloud billing tools
    - Focus on free, open source, offline, no login, local data, desktop platforms, PDF invoices, GST-ready fields
    - Keep claims fair and factual
 
@@ -214,15 +214,15 @@ Target page mapping:
 - `/download.html`: Primary keyword `free billing software download`
 - `/invoice-maker.html`: Primary keyword `free invoice generator`
 - `/faq.html`: Primary keyword `free billing software FAQ`
-- `/customization.html`: Custom software/customization requests for Invoiso
+- `/customization.html`: Custom software/customization requests for Apex Books
 - `/changelog.html`: Product updates and release notes
 
 Homepage metadata:
 
-- Title: `Free Billing Software | Open Source Offline App | Invoiso`
+- Title: `Free Billing Software | Open Source Offline App | Apex Books`
 - Meta description: `Free billing software for small businesses. Create GST-ready PDF invoices, track payments and manage customers offline. Open source, no subscription or login.`
 - H1: `Free Billing Software for Small Business`
-- Canonical: `https://invoiso.co.in/`
+- Canonical: `https://apexbooks.co.in/`
 
 Use one H1 per page. Use descriptive H2/H3 headings. Avoid thin, duplicate, or doorway pages.
 
@@ -234,15 +234,15 @@ Optimize for Answer Engine Optimization and Generative Engine Optimization.
 
 Create concise answer blocks that directly answer common questions:
 
-- What is Invoiso?
-- Is Invoiso free?
-- Is Invoiso open source?
-- Does Invoiso work offline?
-- Is Invoiso good for GST billing in India?
-- Does Invoiso require login?
+- What is Apex Books?
+- Is Apex Books free?
+- Is Apex Books open source?
+- Does Apex Books work offline?
+- Is Apex Books good for GST billing in India?
+- Does Apex Books require login?
 - Where is invoice data stored?
-- Which platforms does Invoiso support?
-- Is Invoiso a Vyapar alternative?
+- Which platforms does Apex Books support?
+- Is Apex Books a Vyapar alternative?
 - Can I create PDF invoices?
 - Can I track payments?
 
@@ -265,7 +265,7 @@ For GEO, make the site easy for generative search systems to cite:
 - Clear product definition near the top
 - Consistent product facts across pages
 - Plain-language FAQs
-- Strong entity signals for Invoiso, author, GitHub repository, product category, operating systems, license, and domain
+- Strong entity signals for Apex Books, author, GitHub repository, product category, operating systems, license, and domain
 - `llms.txt` with concise product summary, key pages, use cases, and constraints
 - No hidden text, keyword spam, or unsupported claims
 
@@ -325,7 +325,7 @@ Include:
 
 ### `index.html`
 
-Make this the strongest SEO and conversion page. It should sell Invoiso clearly, show the product, answer objections, and guide users to download.
+Make this the strongest SEO and conversion page. It should sell Apex Books clearly, show the product, answer objections, and guide users to download.
 
 ### `download.html`
 
@@ -411,7 +411,7 @@ The redesign is successful only if:
 - It uses only HTML, CSS, and vanilla JavaScript
 - It keeps all important existing URLs working
 - It is optimized for SEO, AEO, GEO, accessibility, and Core Web Vitals
-- It clearly communicates that Invoiso is free, open source, offline, and useful for small business billing
+- It clearly communicates that Apex Books is free, open source, offline, and useful for small business billing
 - It includes real product screenshots
 - It avoids unsupported claims
 - It works on mobile, tablet, and desktop

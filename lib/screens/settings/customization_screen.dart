@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:invoiso/common/constants.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
+import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
 
 class CustomizationScreen extends StatefulWidget {
   final int? highlightIndex;
@@ -25,7 +25,7 @@ class _CustomizationScreenState extends State<CustomizationScreen> {
     final primaryColor = Theme.of(context).primaryColor;
     final l10n = AppLocalizations.of(context)!;
 
-    const formUrl = 'https://forms.gle/LyX6Z2kBNR2BpwVu7';
+    const formUrl = 'https://apexbooks.in/customization';
 
     final options = [
       _CustomOption(

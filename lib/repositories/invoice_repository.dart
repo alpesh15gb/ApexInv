@@ -1,4 +1,4 @@
-import 'package:invoiso/models/invoice.dart';
+import 'package:apexbooks/models/invoice.dart';
 
 abstract class InvoiceRepository {
   Future<void> insertInvoice(Invoice invoice);

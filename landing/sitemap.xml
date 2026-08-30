@@ -2,147 +2,147 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 
   <url>
-    <loc>https://invoiso.co.in/</loc>
+    <loc>https://apexbooks.co.in/</loc>
     <lastmod>2026-05-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/download.html</loc>
+    <loc>https://apexbooks.co.in/download.html</loc>
     <lastmod>2026-05-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/invoice-maker.html</loc>
+    <loc>https://apexbooks.co.in/invoice-maker.html</loc>
     <lastmod>2026-05-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/customization.html</loc>
+    <loc>https://apexbooks.co.in/customization.html</loc>
     <lastmod>2026-05-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/contact.html</loc>
+    <loc>https://apexbooks.co.in/contact.html</loc>
     <lastmod>2026-05-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/faq.html</loc>
+    <loc>https://apexbooks.co.in/faq.html</loc>
     <lastmod>2026-05-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/privacy.html</loc>
-    <lastmod>2026-05-21</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.6</priority>
-  </url>
-
-  <url>
-    <loc>https://invoiso.co.in/terms.html</loc>
+    <loc>https://apexbooks.co.in/privacy.html</loc>
     <lastmod>2026-05-21</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/changelog.html</loc>
+    <loc>https://apexbooks.co.in/terms.html</loc>
+    <lastmod>2026-05-21</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <url>
+    <loc>https://apexbooks.co.in/changelog.html</loc>
     <lastmod>2026-05-17</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/free-gst-billing-software.html</loc>
+    <loc>https://apexbooks.co.in/free-gst-billing-software.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/offline-billing-software.html</loc>
+    <loc>https://apexbooks.co.in/offline-billing-software.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/vyapar-alternative.html</loc>
+    <loc>https://apexbooks.co.in/vyapar-alternative.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/open-source-invoice-software.html</loc>
+    <loc>https://apexbooks.co.in/open-source-invoice-software.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/invoice-software-for-linux.html</loc>
+    <loc>https://apexbooks.co.in/invoice-software-for-linux.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/blog/</loc>
+    <loc>https://apexbooks.co.in/blog/</loc>
     <lastmod>2026-05-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/blog/reports-coming-next-month.html</loc>
+    <loc>https://apexbooks.co.in/blog/reports-coming-next-month.html</loc>
     <lastmod>2026-05-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/blog/how-to-create-gst-invoice.html</loc>
+    <loc>https://apexbooks.co.in/blog/how-to-create-gst-invoice.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/blog/offline-vs-cloud-billing-software.html</loc>
+    <loc>https://apexbooks.co.in/blog/offline-vs-cloud-billing-software.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/blog/vyapar-vs-invoiso.html</loc>
+    <loc>https://apexbooks.co.in/blog/vyapar-vs-apexbooks.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/blog/how-to-add-upi-qr-code-to-invoice.html</loc>
+    <loc>https://apexbooks.co.in/blog/how-to-add-upi-qr-code-to-invoice.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <url>
-    <loc>https://invoiso.co.in/blog/free-invoice-software-for-linux.html</loc>
+    <loc>https://apexbooks.co.in/blog/free-invoice-software-for-linux.html</loc>
     <lastmod>2026-05-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>

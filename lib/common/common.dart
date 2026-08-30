@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
 
 export 'setting_key.dart';
 export 'pdf_styles.dart';

@@ -1,4 +1,4 @@
-import 'package:invoiso/models/product.dart';
+import 'package:apexbooks/models/product.dart';
 
 abstract class ProductRepository {
   Future<void> insertProduct(Product product);

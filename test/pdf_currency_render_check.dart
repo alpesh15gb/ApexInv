@@ -1,16 +1,16 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/services/pdf/pdf_font_assets.dart';
-import 'package:invoiso/common/supported_currencies.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/services/pdf/pdf_font_assets.dart';
+import 'package:apexbooks/common/supported_currencies.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../test_support/ttf_glyph_coverage.dart';
 
 Future<void> main() async {
-  const outputPath = 'output/invoiso_currency_render_check.pdf';
+  const outputPath = 'output/apexbooks_currency_render_check.pdf';
 
   final fontBytes = _loadFontBytes();
   final missingRunes = _findMissingCurrencyRunes(fontBytes);
@@ -27,8 +27,8 @@ Future<void> main() async {
   }
 
   final pdf = pw.Document(
-    title: 'Invoiso Currency Font Check',
-    creator: 'Invoiso PDF currency render check',
+    title: 'Apex Books Currency Font Check',
+    creator: 'Apex Books PDF currency render check',
   );
   // Fonts read directly from disk (not via PdfFontService.loadTheme(),
   // which uses rootBundle) since rootBundle needs a Flutter asset-bundle
@@ -77,7 +77,7 @@ Future<void> main() async {
       theme: theme,
       build: (context) => [
         pw.Text(
-          'Invoiso Currency Symbol Render Check',
+          'Apex Books Currency Symbol Render Check',
           style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(height: 12),

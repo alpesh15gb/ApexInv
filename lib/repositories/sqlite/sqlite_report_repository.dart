@@ -1,5 +1,5 @@
-import 'package:invoiso/database/report_service.dart';
-import 'package:invoiso/repositories/report_repository.dart';
+import 'package:apexbooks/database/report_service.dart';
+import 'package:apexbooks/repositories/report_repository.dart';
 
 class SqliteReportRepository implements ReportRepository {
   @override

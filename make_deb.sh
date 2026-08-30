@@ -5,9 +5,9 @@ set -x
 # -------------------------
 # DEFAULT CONFIG
 # -------------------------
-APP_NAME="invoiso"
+APP_NAME="apexbooks"
 APP_VERSION="1.0.0"
-MAINTAINER="Anoop P <anooppkrishnan96@gmail.com>"
+MAINTAINER="ApexBooks <support@apexbooks.in>"
 BUILD_NUMBER_FILE=".build_number"
 DEFAULT_BUILD_DIR="build/linux/x64/release/bundle"
 
@@ -172,8 +172,8 @@ EOF
 # -------------------------
 cat <<EOF > "$PKG_DIR/usr/share/applications/$APP_NAME.desktop"
 [Desktop Entry]
-Name=Invoiso
-Comment=Invoice generating desktop app built with Flutter
+Name=Apex Books
+Comment=Invoice and billing management app
 Exec=$APP_NAME
 Icon=$APP_NAME
 Terminal=false

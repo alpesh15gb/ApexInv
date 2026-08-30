@@ -9,7 +9,7 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get appTitle => 'Invoiso';
+  String get appTitle => 'Apex Books';
 
   @override
   String get actionSave => '保存';
@@ -256,11 +256,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dashboardSupportBannerReviewSubtitle =>
-      '喜欢 Invoiso 吗？一个简单的好评会有很大帮助。';
+      '喜欢 Apex Books 吗？一个简单的好评会有很大帮助。';
 
   @override
   String get dashboardSupportBannerSupportSubtitle =>
-      '看起来 Invoiso 已成为您工作流程的一部分。如果它对您有帮助，欢迎在方便的时候支持这个项目。';
+      '看起来 Apex Books 已成为您工作流程的一部分。如果它对您有帮助，欢迎在方便的时候支持这个项目。';
 
   @override
   String get dashboardReviewAction => '评价';
@@ -3763,7 +3763,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get customizationWhiteLabelDescription =>
-      '从应用和PDF输出中移除所有Invoiso品牌标识，替换为您自己的企业标识。';
+      '从应用和PDF输出中移除所有Apex Books品牌标识，替换为您自己的企业标识。';
 
   @override
   String get customizationWhiteLabelDelivery => '3–6 天';
@@ -3908,7 +3908,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateDialogTitle => '有可用更新';
 
   @override
-  String get updateDialogBodyMessage => 'invoiso 有新版本可用。请访问下载页面获取最新版本。';
+  String get updateDialogBodyMessage => 'apex books 有新版本可用。请访问下载页面获取最新版本。';
 
   @override
   String get pageSizeA4Label => '标准 A4';

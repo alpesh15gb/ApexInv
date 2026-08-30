@@ -1,4 +1,4 @@
-import 'package:invoiso/models/product.dart';
+import 'package:apexbooks/models/product.dart';
 import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 

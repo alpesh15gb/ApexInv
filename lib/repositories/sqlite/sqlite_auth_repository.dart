@@ -1,6 +1,6 @@
-import 'package:invoiso/database/user_service.dart';
-import 'package:invoiso/models/user.dart';
-import 'package:invoiso/repositories/auth_repository.dart';
+import 'package:apexbooks/database/user_service.dart';
+import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/repositories/auth_repository.dart';
 
 
 class SqliteAuthRepository implements AuthRepository {

@@ -1,4 +1,4 @@
-import 'package:invoiso/models/report_models.dart';
+import 'package:apexbooks/models/report_models.dart';
 
 abstract class ReportRepository {
   Future<RevenueKpi> getRevenueSummary(DateTime from, DateTime to, {String? currencyCode});

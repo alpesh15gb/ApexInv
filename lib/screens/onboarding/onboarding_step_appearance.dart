@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/widgets/template_list_tile.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/widgets/template_list_tile.dart';
 
 /// Step 3 of the onboarding wizard: page size + invoice template, reusing
 /// the same catalog/tile widget and page-size/template compatibility rules

@@ -1,13 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/repositories/auth_repository.dart';
-import 'package:invoiso/repositories/company_info_repository.dart';
-import 'package:invoiso/repositories/customer_repository.dart';
-import 'package:invoiso/repositories/invoice_item_repository.dart';
-import 'package:invoiso/repositories/invoice_repository.dart';
-import 'package:invoiso/repositories/payment_repository.dart';
-import 'package:invoiso/repositories/product_repository.dart';
-import 'package:invoiso/repositories/report_repository.dart';
-import 'package:invoiso/repositories/settings_repository.dart';
+import 'package:apexbooks/repositories/auth_repository.dart';
+import 'package:apexbooks/repositories/company_info_repository.dart';
+import 'package:apexbooks/repositories/customer_repository.dart';
+import 'package:apexbooks/repositories/invoice_item_repository.dart';
+import 'package:apexbooks/repositories/invoice_repository.dart';
+import 'package:apexbooks/repositories/payment_repository.dart';
+import 'package:apexbooks/repositories/product_repository.dart';
+import 'package:apexbooks/repositories/report_repository.dart';
+import 'package:apexbooks/repositories/settings_repository.dart';
 
 final customerRepositoryProvider = Provider<CustomerRepository>((ref) {
   throw UnimplementedError(
@@ -65,20 +65,20 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 
 
 // import 'package:flutter_riverpod/flutter_riverpod.dart';
-// import 'package:invoiso/repositories/company_info_repository.dart';
-// import 'package:invoiso/repositories/customer_repository.dart';
-// import 'package:invoiso/repositories/invoice_repository.dart';
-// import 'package:invoiso/repositories/payment_repository.dart';
-// import 'package:invoiso/repositories/product_repository.dart';
-// import 'package:invoiso/repositories/report_repository.dart';
-// import 'package:invoiso/repositories/settings_repository.dart';
-// import 'package:invoiso/repositories/sqlite/sqlite_company_info_repository.dart';
-// import 'package:invoiso/repositories/sqlite/sqlite_customer_repository.dart';
-// import 'package:invoiso/repositories/sqlite/sqlite_invoice_repository.dart';
-// import 'package:invoiso/repositories/sqlite/sqlite_payment_repository.dart';
-// import 'package:invoiso/repositories/sqlite/sqlite_product_repository.dart';
-// import 'package:invoiso/repositories/sqlite/sqlite_report_repository.dart';
-// import 'package:invoiso/repositories/sqlite/sqlite_settings_repository.dart';
+// import 'package:apexbooks/repositories/company_info_repository.dart';
+// import 'package:apexbooks/repositories/customer_repository.dart';
+// import 'package:apexbooks/repositories/invoice_repository.dart';
+// import 'package:apexbooks/repositories/payment_repository.dart';
+// import 'package:apexbooks/repositories/product_repository.dart';
+// import 'package:apexbooks/repositories/report_repository.dart';
+// import 'package:apexbooks/repositories/settings_repository.dart';
+// import 'package:apexbooks/repositories/sqlite/sqlite_company_info_repository.dart';
+// import 'package:apexbooks/repositories/sqlite/sqlite_customer_repository.dart';
+// import 'package:apexbooks/repositories/sqlite/sqlite_invoice_repository.dart';
+// import 'package:apexbooks/repositories/sqlite/sqlite_payment_repository.dart';
+// import 'package:apexbooks/repositories/sqlite/sqlite_product_repository.dart';
+// import 'package:apexbooks/repositories/sqlite/sqlite_report_repository.dart';
+// import 'package:apexbooks/repositories/sqlite/sqlite_settings_repository.dart';
 //
 // final customerRepositoryProvider = Provider<CustomerRepository>((ref) => SqliteCustomerRepository());
 // final invoiceRepositoryProvider = Provider<InvoiceRepository>((ref) => SqliteInvoiceRepository());

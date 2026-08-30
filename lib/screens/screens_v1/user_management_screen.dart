@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/common/constants.dart';
-import 'package:invoiso/models/user.dart';
-import 'package:invoiso/utils/password_utils.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/utils/password_utils.dart';
 
 class UserManagementScreen extends ConsumerStatefulWidget {
   final User currentUser;

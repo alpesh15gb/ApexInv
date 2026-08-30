@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
 
 /// Dismissible "New: ..." feature-discovery banner. Shared shape for all
 /// discovery banners on the dashboard (layout, theme, shortcuts, support) —

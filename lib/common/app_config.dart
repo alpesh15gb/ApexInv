@@ -2,12 +2,13 @@
 class AppConfig
 {
   static const kIsCloud = false;
-  static const name = "invoiso";
-  static const version = "v4.3.9";
-  static const developer = "ANOOP P";
-  static const supportEmail = "anooppkrishnan96@gmail.com";
-  static const supportForm = "https://forms.gle/k2Pk7CHr4fAewE7VA";
-  static const website = "https://invoiso.co.in/";
+  static const name = "Apex Books";
+  static const version = "v1.0.0";
+  static const developer = "ApexBooks";
+  static const supportEmail = "support@apexbooks.in";
+  static const supportForm = "https://apexbooks.in/support";
+  static const website = "https://apexbooks.in";
+  static const appUrl = "https://app.apexbooks.in";
   static const license = "MIT";
-  static const description = "Invoiso is a modern invoice and quotation management app for freelancers and small businesses.";
+  static const description = "ApexBooks is a modern invoice and billing management app for freelancers and small businesses.";
 }

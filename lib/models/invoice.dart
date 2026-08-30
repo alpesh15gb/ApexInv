@@ -1,6 +1,6 @@
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/domain/invoice_calculator.dart';
-import 'package:invoiso/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/domain/invoice_calculator.dart';
+import 'package:apexbooks/domain/invoice_totals_calculator.dart';
 import 'additional_cost.dart';
 import 'customer.dart';
 import 'invoice_item.dart';
@@ -33,6 +33,8 @@ class Invoice {
   double invoiceDiscountValue;
   bool hideInvoiceNumber; // hide real invoice number in PDF output only
   String? customInvoiceNumber; // shown instead of invoiceNumber in PDF when hideInvoiceNumber is true
+  String paymentTermId; // linked payment term ID
+  String? customFields; // JSON string of custom field values
 
   Invoice({
     required this.id,
@@ -59,6 +61,8 @@ class Invoice {
     this.invoiceDiscountValue = 0.0,
     this.hideInvoiceNumber = false,
     this.customInvoiceNumber,
+    this.paymentTermId = '',
+    this.customFields,
   });
 
   /// Text to render for the invoice number in PDF/receipt output, or null to omit the line entirely.

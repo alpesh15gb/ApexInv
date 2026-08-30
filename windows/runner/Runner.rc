@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "anoopp" "\0"
-            VALUE "FileDescription", "invoiso" "\0"
+            VALUE "CompanyName", "ApexBooks" "\0"
+            VALUE "FileDescription", "Apex Books" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "invoiso" "\0"
-            VALUE "LegalCopyright", "Copyright ©️ 2025 anoopp. All rights reserved." "\0"
-            VALUE "OriginalFilename", "invoiso.exe" "\0"
-            VALUE "ProductName", "invoiso" "\0"
+            VALUE "InternalName", "apexbooks" "\0"
+            VALUE "LegalCopyright", "Copyright ©️ 2026 ApexBooks. All rights reserved." "\0"
+            VALUE "OriginalFilename", "ApexBooks.exe" "\0"
+            VALUE "ProductName", "Apex Books" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

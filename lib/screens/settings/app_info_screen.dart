@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:invoiso/common/constants.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/providers/app_config_provider.dart';
-import 'package:invoiso/services/update_service.dart';
+import 'package:apexbooks/common/app_config.dart';
+import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/providers/app_config_provider.dart';
+import 'package:apexbooks/services/update_service.dart';
 
 class AppInfoScreen extends ConsumerStatefulWidget {
   final UpdateInfo? updateInfo;
@@ -377,7 +378,7 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
                         icon: const Icon(Icons.download_rounded, size: 16),
                         label: Text(l10n.createInvoiceDownloadLabel),
                         onPressed: () => launchUrl(
-                          Uri.parse('https://invoiso.co.in/download.html'),
+                          Uri.parse('${AppConfig.appUrl}'),
                           mode: LaunchMode.externalApplication,
                         ),
                       ),

@@ -1,5 +1,5 @@
-import 'package:invoiso/models/invoice.dart';
-import 'package:invoiso/models/invoice_payment.dart';
+import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/models/invoice_payment.dart';
 
 abstract class PaymentRepository {
   Future<InvoicePayment> addPayment({

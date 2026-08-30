@@ -3,11 +3,11 @@ version: 1
 AppDir:
   path: ./AppDir
   app_info:
-    id: com.invoiso
-    name: Invoiso
+    id: com.apexbooks.app
+    name: Apex Books
     icon: logo
     version: 1.0.0
-    exec: usr/bin/invoiso
+    exec: usr/bin/apexbooks
     exec_args: $@
 
   apt:

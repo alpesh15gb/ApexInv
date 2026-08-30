@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/models/user.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/screens/dashboard_screen.dart';
-import 'package:invoiso/screens/onboarding/onboarding_screen.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/screens/dashboard_screen.dart';
+import 'package:apexbooks/screens/onboarding/onboarding_screen.dart';
 
 /// Routes to the onboarding wizard on a user's first login, else straight
 /// to the dashboard. Shared by every post-auth navigation call site so the

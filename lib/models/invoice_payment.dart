@@ -1,4 +1,4 @@
-import 'package:invoiso/utils/app_date.dart';
+import 'package:apexbooks/utils/app_date.dart';
 
 class InvoicePayment {
   final String id;

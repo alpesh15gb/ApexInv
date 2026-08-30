@@ -2,11 +2,11 @@ import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/database/settings_service.dart';
-import 'package:invoiso/providers/repositories.dart';
+import 'package:apexbooks/database/settings_service.dart';
+import 'package:apexbooks/providers/repositories.dart';
 
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/common/constants.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/common/constants.dart';
 
 // Legacy screen (out of i18n scope) — these mirror the English text that
 // used to live in PageSize/ThermalCompanyNameSize's `.label` getters in

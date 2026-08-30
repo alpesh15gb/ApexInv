@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/domain/invoice_calculator.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
-import 'package:invoiso/models/invoice.dart';
-import 'package:invoiso/models/invoice_payment.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/services/payment_receipt_service.dart';
-import 'package:invoiso/utils/app_date.dart';
+import 'package:apexbooks/domain/invoice_calculator.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/models/invoice_payment.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/services/payment_receipt_service.dart';
+import 'package:apexbooks/utils/app_date.dart';
 
 String _paymentMethodLabel(AppLocalizations l10n, String method) {
   switch (method) {

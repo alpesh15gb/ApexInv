@@ -1,5 +1,5 @@
-name: invoiso
-description: "Invoice generating desktop app built with Flutter"
+name: apexbooks
+description: "Apex Books - Invoice and billing management app built with Flutter"
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 4.3.9
 environment:
@@ -80,17 +80,17 @@ flutter_launcher_icons:
 
 package_rename_config:
   linux:
-    app_name: invoiso
-    package_name: invoiso
-    exe_name: invoiso
+    app_name: apexbooks
+    package_name: apexbooks
+    exe_name: apexbooks
 
   windows:
-    app_name: invoiso
-    organization: anoopp
-    copyright_notice: Copyright ©️ 2025 anoopp. All rights reserved.
-    exe_name: invoiso
+    app_name: ApexBooks
+    organization: apexbooks
+    copyright_notice: Copyright ©️ 2026 ApexBooks. All rights reserved.
+    exe_name: ApexBooks
 
   web:
-    app_name: invoiso
-    short_app_name: invoiso
-    description: Invoice generating desktop app built with Flutter
+    app_name: Apex Books
+    short_app_name: Apex Books
+    description: Apex Books - Invoice and billing management app

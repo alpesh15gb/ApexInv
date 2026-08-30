@@ -18,7 +18,7 @@
 // step ordering bug, or old data getting clobbered/lost during the chain.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:invoiso/database/database_helper.dart';
+import 'package:apexbooks/database/database_helper.dart';
 
 const _v4Schema = [
   '''

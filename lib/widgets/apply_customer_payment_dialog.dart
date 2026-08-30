@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/domain/invoice_calculator.dart';
-import 'package:invoiso/models/customer.dart';
-import 'package:invoiso/models/invoice.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/utils/app_date.dart';
-import 'package:invoiso/widgets/apply_payment_dialog.dart' show PaymentSummaryCard;
+import 'package:apexbooks/domain/invoice_calculator.dart';
+import 'package:apexbooks/models/customer.dart';
+import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/utils/app_date.dart';
+import 'package:apexbooks/widgets/apply_payment_dialog.dart' show PaymentSummaryCard;
 
 /// Applies one payment across several of a customer's open invoices —
 /// smallest outstanding balance first by default, editable per invoice

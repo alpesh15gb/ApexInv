@@ -1,6 +1,6 @@
-import 'package:invoiso/database/invoice_item_service.dart';
-import 'package:invoiso/models/invoice_item.dart';
-import 'package:invoiso/repositories/invoice_item_repository.dart';
+import 'package:apexbooks/database/invoice_item_service.dart';
+import 'package:apexbooks/models/invoice_item.dart';
+import 'package:apexbooks/repositories/invoice_item_repository.dart';
 
 class SqliteInvoiceItemRepository implements InvoiceItemRepository
 {

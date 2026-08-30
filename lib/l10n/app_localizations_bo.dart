@@ -9,7 +9,7 @@ class AppLocalizationsBo extends AppLocalizations {
   AppLocalizationsBo([String locale = 'bo']) : super(locale);
 
   @override
-  String get appTitle => 'Invoiso';
+  String get appTitle => 'Apex Books';
 
   @override
   String get actionSave => 'ཉར་ཚགས།';
@@ -265,11 +265,11 @@ class AppLocalizationsBo extends AppLocalizations {
 
   @override
   String get dashboardSupportBannerReviewSubtitle =>
-      'Invoiso ལ་དགའ་བོ་ཡོད་དམ? མྱུར་བའི་བསྐྱར་ཞིབ་ཅིག་གིས་ཕན་ཐོགས་ཆེན་པོ་ཡོད།';
+      'Apex Books ལ་དགའ་བོ་ཡོད་དམ? མྱུར་བའི་བསྐྱར་ཞིབ་ཅིག་གིས་ཕན་ཐོགས་ཆེན་པོ་ཡོད།';
 
   @override
   String get dashboardSupportBannerSupportSubtitle =>
-      'Invoiso ཁྱེད་ཀྱི་ལས་ཀའི་ཆ་ཤས་ཤིག་ཏུ་གྱུར་འདུག ཕན་ཐོགས་བྱུང་ན, དུས་ཚོད་འགྲིག་པའི་སྐབས་ལས་གཞི་ལ་རོགས་སྐྱོར་བསམ་བློ་གཏོང་རོགས།';
+      'Apex Books ཁྱེད་ཀྱི་ལས་ཀའི་ཆ་ཤས་ཤིག་ཏུ་གྱུར་འདུག ཕན་ཐོགས་བྱུང་ན, དུས་ཚོད་འགྲིག་པའི་སྐབས་ལས་གཞི་ལ་རོགས་སྐྱོར་བསམ་བློ་གཏོང་རོགས།';
 
   @override
   String get dashboardReviewAction => 'བསྐྱར་ཞིབ།';
@@ -3918,7 +3918,7 @@ class AppLocalizationsBo extends AppLocalizations {
 
   @override
   String get customizationWhiteLabelDescription =>
-      'མཉེན་ཆས་དང PDF ནང་གི Invoiso མཚན་བརྗོད་ཡོངས་རྫོགས་བསུབ་ནས་ཁྱེད་རང་གི་ཚོང་ལས་ངོ་བོས་ཚབ་བྱེད།';
+      'མཉེན་ཆས་དང PDF ནང་གི Apex Books མཚན་བརྗོད་ཡོངས་རྫོགས་བསུབ་ནས་ཁྱེད་རང་གི་ཚོང་ལས་ངོ་བོས་ཚབ་བྱེད།';
 
   @override
   String get customizationWhiteLabelDelivery => 'ཉིན་ ༣–༦';
@@ -4068,7 +4068,7 @@ class AppLocalizationsBo extends AppLocalizations {
 
   @override
   String get updateDialogBodyMessage =>
-      'invoiso གི་པར་གཞི་གསར་པ་ཐོན་ཡོད། གསར་ཤོས་བླང་ཆེད་ཕབ་ལེན་ཤོག་ངོས་སུ་གཟིགས་རོགས།';
+      'apex books གི་པར་གཞི་གསར་པ་ཐོན་ཡོད། གསར་ཤོས་བླང་ཆེད་ཕབ་ལེན་ཤོག་ངོས་སུ་གཟིགས་རོགས།';
 
   @override
   String get pageSizeA4Label => 'སྤྱི་ཚད་ A4';

@@ -1,4 +1,4 @@
-package com.example.invoiso
+package com.apexbooks.app
 
 import io.flutter.embedding.android.FlutterActivity
 

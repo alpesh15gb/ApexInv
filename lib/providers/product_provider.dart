@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:invoiso/providers/repositories.dart';
-import 'package:invoiso/models/product.dart';
+import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/models/product.dart';
 
 class ProductNotifier extends AsyncNotifier<List<Product>> {
   @override

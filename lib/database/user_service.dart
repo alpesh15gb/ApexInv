@@ -1,8 +1,8 @@
-import 'package:invoiso/models/user.dart';
-import 'package:invoiso/utils/session_manager.dart';
+import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/utils/session_manager.dart';
 import 'database_helper.dart';
-import 'package:invoiso/utils/app_logger.dart';
-import 'package:invoiso/utils/password_utils.dart';
+import 'package:apexbooks/utils/app_logger.dart';
+import 'package:apexbooks/utils/password_utils.dart';
 
 const _tag = 'UserService';
 

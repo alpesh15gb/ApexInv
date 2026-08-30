@@ -1,8 +1,8 @@
 import 'package:uuid/uuid.dart';
 
-import 'package:invoiso/models/product.dart';
+import 'package:apexbooks/models/product.dart';
 
-import 'package:invoiso/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/domain/invoice_totals_calculator.dart';
 
 class InvoiceItem {
   String id;

@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'package:invoiso/services/backend_services.dart';
+import 'package:apexbooks/services/backend_services.dart';
 import 'package:http/http.dart' as http;
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/common/app_config.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/common/app_config.dart';
 
 class UpdateInfo {
   final String latestVersion;
@@ -30,8 +30,7 @@ class UpdateInfo {
 }
 
 class UpdateService {
-  static const _apiUrl =
-      'https://api.github.com/repos/Anooppandikashala/invoiso/releases/latest';
+  static const _apiUrl = '';
   static const _checkIntervalHours = 24;
 
   /// Returns [UpdateInfo] if a check was performed (or cached).

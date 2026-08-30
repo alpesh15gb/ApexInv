@@ -1,6 +1,6 @@
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/database/settings_service.dart';
-import 'package:invoiso/repositories/settings_repository.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/database/settings_service.dart';
+import 'package:apexbooks/repositories/settings_repository.dart';
 
 class SqliteSettingsRepository implements SettingsRepository {
   @override

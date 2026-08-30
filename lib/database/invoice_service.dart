@@ -1,17 +1,17 @@
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/database/invoice_item_service.dart';
-import 'package:invoiso/database/settings_service.dart';
-import 'package:invoiso/domain/invoice_calculator.dart';
-import 'package:invoiso/domain/invoice_totals_calculator.dart';
-import 'package:invoiso/database/product_service.dart';
-import 'package:invoiso/models/additional_cost.dart';
-import 'package:invoiso/models/invoice.dart';
-import 'package:invoiso/models/product.dart';
-import 'package:invoiso/models/customer.dart';
-import 'package:invoiso/models/invoice_item.dart';
-import 'package:invoiso/models/invoice_payment.dart';
-import 'package:invoiso/utils/app_date.dart';
-import 'package:invoiso/utils/app_logger.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/database/invoice_item_service.dart';
+import 'package:apexbooks/database/settings_service.dart';
+import 'package:apexbooks/domain/invoice_calculator.dart';
+import 'package:apexbooks/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/database/product_service.dart';
+import 'package:apexbooks/models/additional_cost.dart';
+import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/models/product.dart';
+import 'package:apexbooks/models/customer.dart';
+import 'package:apexbooks/models/invoice_item.dart';
+import 'package:apexbooks/models/invoice_payment.dart';
+import 'package:apexbooks/utils/app_date.dart';
+import 'package:apexbooks/utils/app_logger.dart';
 import 'database_helper.dart';
 import 'payment_service.dart';
 
@@ -53,6 +53,8 @@ class InvoiceService {
         'invoice_discount_value': invoice.invoiceDiscountValue,
         'hide_invoice_number': invoice.hideInvoiceNumber ? 1 : 0,
         'custom_invoice_number': invoice.customInvoiceNumber,
+        'payment_term_id': invoice.paymentTermId,
+        'custom_fields': invoice.customFields ?? '',
       });
 
       for (var item in invoice.items) {
@@ -129,6 +131,8 @@ class InvoiceService {
           'invoice_discount_value': invoice.invoiceDiscountValue,
           'hide_invoice_number': invoice.hideInvoiceNumber ? 1 : 0,
           'custom_invoice_number': invoice.customInvoiceNumber,
+          'payment_term_id': invoice.paymentTermId,
+          'custom_fields': invoice.customFields ?? '',
         },
         where: 'id = ?',
         whereArgs: [invoice.id],
@@ -402,6 +406,8 @@ class InvoiceService {
           (i['invoice_discount_value'] as num?)?.toDouble() ?? 0.0,
       hideInvoiceNumber: (i['hide_invoice_number'] as int?) == 1,
       customInvoiceNumber: i['custom_invoice_number'] as String?,
+      paymentTermId: i['payment_term_id'] as String? ?? '',
+      customFields: i['custom_fields'] as String?,
       payments: payments,
     );
   }
@@ -693,6 +699,8 @@ class InvoiceService {
               (map['invoice_discount_value'] as num?)?.toDouble() ?? 0.0,
           hideInvoiceNumber: (map['hide_invoice_number'] as int?) == 1,
           customInvoiceNumber: map['custom_invoice_number'] as String?,
+          paymentTermId: map['payment_term_id'] as String? ?? '',
+          customFields: map['custom_fields'] as String?,
         ),
       );
     }

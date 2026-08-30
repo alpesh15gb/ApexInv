@@ -1,7 +1,7 @@
 // constants.dart
 import 'package:flutter/material.dart';
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/l10n/app_localizations.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/l10n/app_localizations.dart';
 
 class AppSpacing {
   static const baseValue = 8.0;
@@ -102,7 +102,7 @@ class PdfLayout {
 }
 
 class UpdateConfig {
-  static const enableUpdateCheck = true;
+  static const enableUpdateCheck = false;
 }
 
 class TestBuildConfig {
@@ -116,7 +116,4 @@ class TestBuildConfig {
   static const testExpiryDays = 7;
 }
 
-class AnalyticsConfig {
-  static const heartbeatUrl =
-      "__HEARTBEAT_URL__"; // test https://www.google.com;
-}
+// Analytics removed for rebranding

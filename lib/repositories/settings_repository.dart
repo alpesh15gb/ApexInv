@@ -1,4 +1,4 @@
-import 'package:invoiso/common/common.dart';
+import 'package:apexbooks/common/common.dart';
 
 abstract class SettingsRepository {
   Future<void> setSetting(SettingKey key, String value);

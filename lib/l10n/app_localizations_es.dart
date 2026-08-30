@@ -9,7 +9,7 @@ class AppLocalizationsEs extends AppLocalizations {
   AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
-  String get appTitle => 'Invoiso';
+  String get appTitle => 'Apex Books';
 
   @override
   String get actionSave => 'Guardar';
@@ -266,11 +266,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dashboardSupportBannerReviewSubtitle =>
-      '¿Te gusta Invoiso? Una reseña rápida ayuda mucho.';
+      '¿Te gusta Apex Books? Una reseña rápida ayuda mucho.';
 
   @override
   String get dashboardSupportBannerSupportSubtitle =>
-      'Parece que Invoiso forma parte de tu flujo de trabajo. Si te ha resultado útil, considera apoyar el proyecto — cuando te parezca bien.';
+      'Parece que Apex Books forma parte de tu flujo de trabajo. Si te ha resultado útil, considera apoyar el proyecto — cuando te parezca bien.';
 
   @override
   String get dashboardReviewAction => 'Reseñar';
@@ -3994,7 +3994,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get customizationWhiteLabelDescription =>
-      'Elimina toda la marca Invoiso de la app y los PDF, y reemplázala con la identidad de tu empresa.';
+      'Elimina toda la marca Apex Books de la app y los PDF, y reemplázala con la identidad de tu empresa.';
 
   @override
   String get customizationWhiteLabelDelivery => '3 – 6 días';
@@ -4148,7 +4148,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get updateDialogBodyMessage =>
-      'Hay una nueva versión de invoiso disponible. Visita la página de descargas para obtener la última versión.';
+      'Hay una nueva versión de apex books disponible. Visita la página de descargas para obtener la última versión.';
 
   @override
   String get pageSizeA4Label => 'A4 estándar';

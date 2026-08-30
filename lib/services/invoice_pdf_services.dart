@@ -1,14 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:invoiso/services/backend_services.dart';
-import 'package:invoiso/models/invoice.dart';
-import 'package:invoiso/services/pdf_service.dart';
-import 'package:invoiso/services/thermal_printer_service_v1.dart';
+import 'package:apexbooks/services/backend_services.dart';
+import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/services/pdf_service.dart';
+import 'package:apexbooks/services/thermal_printer_service_v1.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
-import 'package:invoiso/common/common.dart';
-import 'package:invoiso/utils/formatters.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/utils/formatters.dart';
 
 class InvoicePdfServices {
   static Future<void> generatePDF(BuildContext context, Invoice invoice) async {

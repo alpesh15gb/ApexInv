@@ -16,7 +16,7 @@ import 'package:apexbooks/screens/product_management_screen_v2.dart';
 import 'package:apexbooks/screens/purchase_order_screen.dart';
 import 'package:apexbooks/screens/reports_screen.dart';
 import 'package:apexbooks/screens/settings/settings_screen.dart';
-import 'package:apexbooks/services/session_manager.dart';
+import 'package:apexbooks/utils/session_manager.dart';
 
 /// Phone-first application shell.
 ///

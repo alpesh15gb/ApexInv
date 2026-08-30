@@ -22,7 +22,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
 Future<void> main() async {
-  // Set up error handlers BEFORE runApp
+  // Set up error handlers BEFORE runApp.
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
   };
@@ -51,7 +51,9 @@ Future<void> main() async {
             ),
             const SizedBox(height: 8),
             Text(
-              kDebugMode ? details.exceptionAsString() : 'Please restart the app.',
+              kDebugMode
+                  ? details.exceptionAsString()
+                  : 'Please restart the app.',
               style: const TextStyle(fontSize: 14, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
@@ -61,20 +63,26 @@ Future<void> main() async {
     );
   };
 
-  if (!Platform.isAndroid) {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // sqflite_common_ffi is a desktop implementation. Android and iOS must use
+  // the native sqflite database factory supplied by the sqflite plugin.
+  final isDesktop =
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+  if (isDesktop) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
-  WidgetsFlutterBinding.ensureInitialized();
+
   BackendServices.configure(
     settings: SqliteSettingsRepository(),
     companyInfo: SqliteCompanyInfoRepository(),
     invoices: SqliteInvoiceRepository(),
     payments: SqlitePaymentRepository(),
-    installation: SqliteInstallationRepository()
+    installation: SqliteInstallationRepository(),
   );
 
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+  if (isDesktop) {
     await windowManager.ensureInitialized();
 
     const WindowOptions options = WindowOptions(
@@ -91,10 +99,12 @@ Future<void> main() async {
     });
   }
 
-  runApp(ProviderScope(
-    overrides: sqliteRepositoryOverrides,
-    child: const MyApp()
-  ));
+  runApp(
+    ProviderScope(
+      overrides: sqliteRepositoryOverrides,
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends ConsumerStatefulWidget {
@@ -138,9 +148,15 @@ class _MyAppState extends ConsumerState<MyApp> {
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
-        FallbackLocalizationsDelegate<MaterialLocalizations>(GlobalMaterialLocalizations.delegate),
-        FallbackLocalizationsDelegate<WidgetsLocalizations>(GlobalWidgetsLocalizations.delegate),
-        FallbackLocalizationsDelegate<CupertinoLocalizations>(GlobalCupertinoLocalizations.delegate),
+        FallbackLocalizationsDelegate<MaterialLocalizations>(
+          GlobalMaterialLocalizations.delegate,
+        ),
+        FallbackLocalizationsDelegate<WidgetsLocalizations>(
+          GlobalWidgetsLocalizations.delegate,
+        ),
+        FallbackLocalizationsDelegate<CupertinoLocalizations>(
+          GlobalCupertinoLocalizations.delegate,
+        ),
       ],
       home: const SplashScreen(),
     );

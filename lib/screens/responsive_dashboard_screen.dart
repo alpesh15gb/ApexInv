@@ -6,7 +6,7 @@ import 'package:apexbooks/screens/mobile_dashboard_screen.dart';
 import 'package:apexbooks/utils/responsive_layout.dart';
 
 /// Keeps the existing desktop dashboard untouched while selecting the
-/// phone-first shell when the available viewport is compact.
+/// touch-friendly shell for phone and tablet-sized viewports.
 class ResponsiveDashboardScreen extends StatelessWidget {
   final User loggedInUser;
 
@@ -14,7 +14,7 @@ class ResponsiveDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (context.isCompactLayout) {
+    if (!context.isWideLayout) {
       return MobileDashboardScreen(loggedInUser);
     }
     return DashboardScreen(loggedInUser);

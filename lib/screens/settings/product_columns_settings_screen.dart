@@ -367,16 +367,16 @@ class _ProductColumnsSettingsScreenState
         builder: (context, size) {
           switch (size) {
             case WindowSize.compact:
+            case WindowSize.medium:
               // Full-width vertical form; Save pinned above the bottom safe
-              // area instead of a desktop side panel.
+              // area instead of a desktop side panel (medium windows have
+              // no 240px panel either, so this is the only way to save).
               return Column(
                 children: [
                   Expanded(child: _settingsList()),
                   StickyActionBar(child: _saveButton()),
                 ],
               );
-            case WindowSize.medium:
-              return _settingsList();
             case WindowSize.expanded:
               // Desktop: keep the side save panel arrangement.
               return Row(

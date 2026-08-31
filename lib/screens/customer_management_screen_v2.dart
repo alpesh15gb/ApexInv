@@ -320,7 +320,11 @@ class _CustomerManagementScreenV2State
               ],
             ),
             content: SizedBox(
-              width: MediaQuery.of(context).size.width * 0.4,
+              // 90% of a phone window; fixed 520 on wide screens — the old
+              // `width * 0.4` collapsed to ~128px on 320px phones.
+              width: MediaQuery.sizeOf(context).width < Breakpoints.compactMax
+                  ? MediaQuery.sizeOf(context).width * 0.90
+                  : 520,
               child: Form(
                 key: dialogFormKey,
                 child: SingleChildScrollView(
@@ -548,7 +552,9 @@ class _CustomerManagementScreenV2State
           ],
         ),
         content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.45,
+          width: MediaQuery.sizeOf(context).width < Breakpoints.compactMax
+              ? MediaQuery.sizeOf(context).width * 0.90
+              : 520,
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

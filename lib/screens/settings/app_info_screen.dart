@@ -373,104 +373,138 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
             const SizedBox(height: 16),
             const Divider(height: 1, color: Color(0xFFF5F5F5)),
             const SizedBox(height: 16),
-            // Wrap: version info and the action buttons flow to separate
-            // lines on narrow windows instead of overflowing.
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 16,
-              runSpacing: 12,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.tag_rounded,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 14),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(l10n.appInfoCurrentVersionLabel,
-                            style: TextStyle(
-                                fontSize: AppFontSize.xsmall,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                                fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 3),
-                        Text(cfg.version,
-                            style: const TextStyle(
-                                fontSize: AppFontSize.medium,
-                                fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                    if (info != null) ...[
-                      const SizedBox(width: 32),
-                      Icon(Icons.new_releases_outlined,
-                          size: 18,
-                          color: hasUpdate
-                              ? Colors.orange.shade400
-                              : Theme.of(context).colorScheme.onSurfaceVariant),
-                      const SizedBox(width: 14),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(l10n.appInfoLatestVersionLabel,
-                              style: TextStyle(
-                                  fontSize: AppFontSize.xsmall,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                  fontWeight: FontWeight.w500)),
-                          const SizedBox(height: 3),
-                          Text(
-                            info.latestVersion,
-                            style: TextStyle(
+            // Compact: the version blocks stack and the action buttons wrap —
+            // Current+Latest in one Row can still exceed a 320px card.
+            // Wide: single space-between Wrap.
+            LayoutBuilder(builder: (context, updateConstraints) {
+              final currentVersionRow = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.tag_rounded,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 14),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l10n.appInfoCurrentVersionLabel,
+                          style: TextStyle(
+                              fontSize: AppFontSize.xsmall,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                              fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 3),
+                      Text(cfg.version,
+                          style: const TextStyle(
                               fontSize: AppFontSize.medium,
-                              fontWeight: FontWeight.w600,
-                              color: hasUpdate
-                                  ? Colors.orange.shade700
-                                  : Colors.green.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
+                              fontWeight: FontWeight.w500)),
                     ],
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: widget.isCheckingUpdate
-                          ? null
-                          : widget.onCheckForUpdates,
-                      icon: const Icon(Icons.refresh_rounded, size: 16),
-                      label: Text(l10n.appInfoCheckNowButton),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: primaryColor,
-                        side: BorderSide(
-                            color: primaryColor.withValues(alpha: 0.4)),
+                  ),
+                ],
+              );
+              final latestVersionRow = info == null
+                  ? const SizedBox.shrink()
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.new_releases_outlined,
+                            size: 18,
+                            color: hasUpdate
+                                ? Colors.orange.shade400
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant),
+                        const SizedBox(width: 14),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(l10n.appInfoLatestVersionLabel,
+                                style: TextStyle(
+                                    fontSize: AppFontSize.xsmall,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 3),
+                            Text(
+                              info.latestVersion,
+                              style: TextStyle(
+                                fontSize: AppFontSize.medium,
+                                fontWeight: FontWeight.w600,
+                                color: hasUpdate
+                                    ? Colors.orange.shade700
+                                    : Colors.green.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+              final actionButtons = Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: widget.isCheckingUpdate
+                        ? null
+                        : widget.onCheckForUpdates,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: Text(l10n.appInfoCheckNowButton),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: primaryColor,
+                      side: BorderSide(
+                          color: primaryColor.withValues(alpha: 0.4)),
+                    ),
+                  ),
+                  if (hasUpdate)
+                    FilledButton.icon(
+                      style:
+                          FilledButton.styleFrom(backgroundColor: primaryColor),
+                      icon: const Icon(Icons.download_rounded, size: 16),
+                      label: Text(l10n.createInvoiceDownloadLabel),
+                      onPressed: () => launchUrl(
+                        Uri.parse('${AppConfig.appUrl}'),
+                        mode: LaunchMode.externalApplication,
                       ),
                     ),
-                    if (hasUpdate) ...[
-                      const SizedBox(width: 10),
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                            backgroundColor: primaryColor),
-                        icon: const Icon(Icons.download_rounded, size: 16),
-                        label: Text(l10n.createInvoiceDownloadLabel),
-                        onPressed: () => launchUrl(
-                          Uri.parse('${AppConfig.appUrl}'),
-                          mode: LaunchMode.externalApplication,
-                        ),
-                      ),
+                ],
+              );
+              if (updateConstraints.maxWidth < Breakpoints.compactMax) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    currentVersionRow,
+                    if (info != null) ...[
+                      const SizedBox(height: 12),
+                      latestVersionRow,
                     ],
+                    const SizedBox(height: 12),
+                    actionButtons,
                   ],
-                ),
-              ],
-            ),
+                );
+              }
+              return Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 16,
+                runSpacing: 12,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      currentVersionRow,
+                      if (info != null) ...[
+                        const SizedBox(width: 32),
+                        latestVersionRow,
+                      ],
+                    ],
+                  ),
+                  actionButtons,
+                ],
+              );
+            }),
           ],
         ),
       ),

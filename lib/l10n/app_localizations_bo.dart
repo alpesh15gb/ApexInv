@@ -210,6 +210,18 @@ class AppLocalizationsBo extends AppLocalizations {
   String get navSettings => 'སྒྲིག་འགོད།';
 
   @override
+  String get navMore => 'More';
+
+  @override
+  String get moreSectionDocuments => 'Documents';
+
+  @override
+  String get moreSectionAnalytics => 'Analytics & Data';
+
+  @override
+  String get moreSectionPreferences => 'Preferences';
+
+  @override
   String get dashboardRoleAdmin => 'དོ་དམ་པ།';
 
   @override

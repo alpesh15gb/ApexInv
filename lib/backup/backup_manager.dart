@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 import 'package:apexbooks/common/app_config.dart';
 import 'package:apexbooks/database/database_helper.dart';
+import 'package:apexbooks/sync/sync_controller.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,6 +17,19 @@ import 'package:apexbooks/models/backup_results.dart';
 class BackupManager {
   static const String _backupExtension = '.invoicedb';
   static const String _jsonExtension = '.json';
+
+  /// Post-restore sync hook (dbplan §3.7): the restored DB's cursors and
+  /// outbox describe the *old* device's state. If cloud sync is linked,
+  /// force a full LWW merge on next cycle. Failure-safe: sync issues must
+  /// never fail the restore itself.
+  void _notifyDatabaseReplaced() {
+    try {
+      final engine = SyncController.instance.engineIfLinked;
+      if (engine != null) unawaited(engine.onDatabaseReplaced());
+    } catch (_) {
+      // SyncController not initialized (tests / never linked) — nothing to do.
+    }
+  }
 
   // Tables excluded from JSON exports (contain sensitive data).
   static const Set<String> _excludedFromJsonExport = {'users'};
@@ -151,6 +166,10 @@ class BackupManager {
           message: 'Unsupported backup format',
         );
       }
+
+      // Post-restore hook (dbplan §3.7): the restored file's sync cursors
+      // describe the *old* device — force a full LWW merge on next sync.
+      _notifyDatabaseReplaced();
 
       return BackupResult(
         success: true,

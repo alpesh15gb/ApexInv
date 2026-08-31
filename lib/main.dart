@@ -18,6 +18,7 @@ import 'package:apexbooks/repositories/sqlite/sqlite_payment_repository.dart';
 import 'package:apexbooks/repositories/sqlite/sqlite_settings_repository.dart';
 import 'package:apexbooks/screens/splash_screen.dart';
 import 'package:apexbooks/services/backend_services.dart';
+import 'package:apexbooks/sync/sync_controller.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -110,6 +111,16 @@ class _MyAppState extends ConsumerState<MyApp> {
     super.initState();
     _loadThemeMode();
     _loadAppLocale();
+    _initSync();
+  }
+
+  /// Restores any persisted cloud-sync account and arms the sync engine
+  /// (dormant when the user never linked — kill switch semantics).
+  Future<void> _initSync() async {
+    await SyncController.init(
+      settings: ref.read(settingsRepositoryProvider),
+      installation: SqliteInstallationRepository(),
+    );
   }
 
   Future<void> _loadThemeMode() async {

@@ -203,6 +203,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get navSettings => '设置';
 
   @override
+  String get navMore => '更多';
+
+  @override
+  String get moreSectionDocuments => '文档';
+
+  @override
+  String get moreSectionAnalytics => '分析与数据';
+
+  @override
+  String get moreSectionPreferences => '偏好设置';
+
+  @override
   String get dashboardRoleAdmin => '管理员';
 
   @override

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ApexInv - Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-tint": "#3e5e95",
+                        "on-error": "#ffffff",
+                        "primary-container": "#002d62",
+                        "surface-container-low": "#f1f4fa",
+                        "on-secondary-container": "#0e7143",
+                        "on-primary-fixed": "#001b3f",
+                        "error": "#ba1a1a",
+                        "on-background": "#181c20",
+                        "primary-fixed": "#d7e2ff",
+                        "on-tertiary-fixed": "#0c1d2b",
+                        "inverse-on-surface": "#eef1f7",
+                        "primary": "#00193c",
+                        "on-surface": "#181c20",
+                        "surface-bright": "#f7f9ff",
+                        "tertiary": "#0a1b2a",
+                        "on-tertiary-container": "#8798aa",
+                        "inverse-surface": "#2d3135",
+                        "surface-variant": "#dfe3e8",
+                        "background": "#f7f9ff",
+                        "on-primary-container": "#7796d1",
+                        "secondary": "#046d3f",
+                        "surface": "#f7f9ff",
+                        "secondary-fixed-dim": "#81d9a1",
+                        "tertiary-fixed": "#d3e4f9",
+                        "surface-container-high": "#e5e8ee",
+                        "on-tertiary": "#ffffff",
+                        "inverse-primary": "#abc7ff",
+                        "outline": "#747781",
+                        "surface-dim": "#d7dae0",
+                        "on-secondary-fixed-variant": "#00522e",
+                        "tertiary-fixed-dim": "#b7c8dc",
+                        "on-primary": "#ffffff",
+                        "on-primary-fixed-variant": "#24467c",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#ebeef4",
+                        "secondary-fixed": "#9df5bc",
+                        "secondary-container": "#9af2b9",
+                        "surface-container-highest": "#dfe3e8",
+                        "on-error-container": "#93000a",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed-variant": "#384858",
+                        "outline-variant": "#c4c6d1",
+                        "primary-fixed-dim": "#abc7ff",
+                        "error-container": "#ffdad6",
+                        "on-surface-variant": "#43474f",
+                        "tertiary-container": "#20303f",
+                        "on-secondary-fixed": "#002110"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "unit": "4px",
+                        "sm": "8px",
+                        "margin-tablet": "24px",
+                        "xl": "32px",
+                        "gutter": "16px",
+                        "xs": "4px",
+                        "safe": "env(safe-area-inset-bottom)"
+                    },
+                    "fontFamily": {
+                        "title-lg": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "title-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-lg": ["Inter"],
+                        "headline-sm": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "headline-lg-mobile": ["Inter"]
+                    },
+                    "fontSize": {
+                        "title-lg": ["22px", { "lineHeight": "28px", "fontWeight": "500" }],
+                        "display-lg": ["57px", { "lineHeight": "64px", "letterSpacing": "-0.25px", "fontWeight": "400" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0.25px", "fontWeight": "400" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.5px", "fontWeight": "500" }],
+                        "title-md": ["16px", { "lineHeight": "24px", "letterSpacing": "0.15px", "fontWeight": "500" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0.5px", "fontWeight": "400" }],
+                        "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.1px", "fontWeight": "500" }],
+                        "headline-sm": ["24px", { "lineHeight": "32px", "fontWeight": "400" }],
+                        "headline-md": ["28px", { "lineHeight": "36px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "34px", "fontWeight": "600" }]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background antialiased pt-[56px] pb-[80px]">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface border-b border-outline-variant/12 flex justify-between items-center h-14 px-margin-mobile">
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:bg-surface-container-low transition-colors duration-200 active:opacity-70 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h1 class="font-title-lg text-title-lg font-bold text-primary">ApexInv</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-on-surface-variant hover:bg-surface-container-low transition-colors duration-200 active:opacity-70 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="refresh">refresh</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-container-low transition-colors duration-200 active:opacity-70 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Main Content -->
+<main class="px-margin-mobile py-lg max-w-[600px] mx-auto">
+<!-- Welcome Summary -->
+<section class="mb-lg">
+<h2 class="font-headline-sm text-headline-sm text-primary mb-xs">Good Morning, Rahul</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Here's your financial overview for today.</p>
+</section>
+<!-- KPI Grid -->
+<section class="grid grid-cols-2 gap-gutter mb-xl">
+<!-- Total Revenue -->
+<div class="bg-surface-container-lowest rounded-lg p-md shadow-sm border border-outline-variant/12 relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-[4px] bg-secondary"></div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-xs">Total Revenue</p>
+<p class="font-title-md text-title-md font-bold text-on-surface">₹14,50,000</p>
+</div>
+<!-- Outstanding -->
+<div class="bg-surface-container-lowest rounded-lg p-md shadow-sm border border-outline-variant/12 relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-[4px] bg-error"></div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-xs">Outstanding</p>
+<p class="font-title-md text-title-md font-bold text-on-surface">₹1,13,400</p>
+</div>
+<!-- Invoices -->
+<div class="bg-surface-container-lowest rounded-lg p-md shadow-sm border border-outline-variant/12">
+<p class="font-label-md text-label-md text-on-surface-variant mb-xs">Invoices (This Month)</p>
+<p class="font-title-md text-title-md font-bold text-on-surface">45</p>
+</div>
+<!-- Customers -->
+<div class="bg-surface-container-lowest rounded-lg p-md shadow-sm border border-outline-variant/12">
+<p class="font-label-md text-label-md text-on-surface-variant mb-xs">Active Customers</p>
+<p class="font-title-md text-title-md font-bold text-on-surface">12</p>
+</div>
+</section>
+<!-- Quick Actions -->
+<section class="mb-xl">
+<h3 class="font-title-md text-title-md font-bold text-on-surface mb-md">Quick Actions</h3>
+<div class="grid grid-cols-4 gap-sm">
+<button class="flex flex-col items-center justify-center gap-sm bg-surface-container-low rounded-lg p-sm hover:bg-surface-container-high transition-colors active:scale-95">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="add" style="font-variation-settings: 'FILL' 1;">add</span>
+</div>
+<span class="font-label-md text-label-md text-center text-on-surface-variant leading-tight">New<br/>Invoice</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-sm bg-surface-container-low rounded-lg p-sm hover:bg-surface-container-high transition-colors active:scale-95">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="person_add" style="font-variation-settings: 'FILL' 1;">person_add</span>
+</div>
+<span class="font-label-md text-label-md text-center text-on-surface-variant leading-tight">Add<br/>Customer</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-sm bg-surface-container-low rounded-lg p-sm hover:bg-surface-container-high transition-colors active:scale-95">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="inventory_2" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+</div>
+<span class="font-label-md text-label-md text-center text-on-surface-variant leading-tight">Add<br/>Product</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-sm bg-surface-container-low rounded-lg p-sm hover:bg-surface-container-high transition-colors active:scale-95">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="receipt_long" style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+</div>
+<span class="font-label-md text-label-md text-center text-on-surface-variant leading-tight">Record<br/>Expense</span>
+</button>
+</div>
+</section>
+<!-- Outstanding Payments Summary -->
+<section class="mb-xl bg-error-container rounded-lg p-md flex items-center justify-between shadow-sm">
+<div>
+<p class="font-title-md text-title-md font-bold text-on-error-container">₹1,13,400 Overdue</p>
+<p class="font-body-md text-body-md text-on-error-container/80">From 3 customers</p>
+</div>
+<button class="font-label-md text-label-md bg-on-error-container text-error-container px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Send Reminders
+            </button>
+</section>
+<!-- Recent Invoices -->
+<section>
+<div class="flex justify-between items-center mb-md">
+<h3 class="font-title-md text-title-md font-bold text-on-surface">Recent Invoices</h3>
+<button class="font-label-md text-label-md text-primary font-medium hover:underline">View All</button>
+</div>
+<div class="flex flex-col gap-sm">
+<!-- Invoice Item 1 -->
+<div class="bg-surface-container-lowest rounded-lg p-md shadow-sm border border-outline-variant/12 flex items-center justify-between h-[64px]">
+<div class="flex items-center gap-md">
+<div class="w-2 h-8 rounded-full bg-secondary"></div>
+<div>
+<p class="font-label-lg text-label-lg font-bold text-on-surface">#INV-2023-042</p>
+<p class="font-label-md text-label-md text-on-surface-variant">Tech Solutions Ltd • Oct 24</p>
+</div>
+</div>
+<div class="text-right flex flex-col items-end">
+<p class="font-title-md text-title-md font-bold text-on-surface">₹45,000</p>
+<span class="bg-secondary-container text-on-secondary-container font-label-md text-label-md px-2 py-0.5 rounded text-[10px]">Paid</span>
+</div>
+</div>
+<!-- Invoice Item 2 -->
+<div class="bg-surface-container-lowest rounded-lg p-md shadow-sm border border-outline-variant/12 flex items-center justify-between h-[64px]">
+<div class="flex items-center gap-md">
+<div class="w-2 h-8 rounded-full bg-error"></div>
+<div>
+<p class="font-label-lg text-label-lg font-bold text-on-surface">#INV-2023-041</p>
+<p class="font-label-md text-label-md text-on-surface-variant">Acme Corp • Oct 20</p>
+</div>
+</div>
+<div class="text-right flex flex-col items-end">
+<p class="font-title-md text-title-md font-bold text-on-surface">₹1,13,400</p>
+<span class="bg-error-container text-on-error-container font-label-md text-label-md px-2 py-0.5 rounded text-[10px]">Overdue</span>
+</div>
+</div>
+<!-- Invoice Item 3 -->
+<div class="bg-surface-container-lowest rounded-lg p-md shadow-sm border border-outline-variant/12 flex items-center justify-between h-[64px]">
+<div class="flex items-center gap-md">
+<div class="w-2 h-8 rounded-full bg-primary-container"></div>
+<div>
+<p class="font-label-lg text-label-lg font-bold text-on-surface">#INV-2023-040</p>
+<p class="font-label-md text-label-md text-on-surface-variant">Global Logistics • Oct 18</p>
+</div>
+</div>
+<div class="text-right flex flex-col items-end">
+<p class="font-title-md text-title-md font-bold text-on-surface">₹22,500</p>
+<span class="bg-surface-container-high text-on-surface-variant font-label-md text-label-md px-2 py-0.5 rounded text-[10px]">Draft</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 px-2 pb-safe bg-surface-container border-t border-outline-variant/12 rounded-t-none shadow-sm md:hidden">
+<button class="flex flex-col items-center justify-center transition-all duration-200 active:scale-95 group w-16">
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 mb-1">
+<span class="material-symbols-outlined" data-icon="home" data-weight="fill" style="font-variation-settings: 'FILL' 1;">home</span>
+</div>
+<span class="font-label-md text-label-md text-on-surface">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center transition-all duration-200 active:scale-95 hover:bg-surface-container-high rounded-lg p-1 group w-16 text-on-surface-variant">
+<div class="flex flex-col items-center justify-center px-4 py-1 mb-1">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+</div>
+<span class="font-label-md text-label-md">New</span>
+</button>
+<button class="flex flex-col items-center justify-center transition-all duration-200 active:scale-95 hover:bg-surface-container-high rounded-lg p-1 group w-16 text-on-surface-variant">
+<div class="flex flex-col items-center justify-center px-4 py-1 mb-1">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</div>
+<span class="font-label-md text-label-md">Invoices</span>
+</button>
+<button class="flex flex-col items-center justify-center transition-all duration-200 active:scale-95 hover:bg-surface-container-high rounded-lg p-1 group w-16 text-on-surface-variant">
+<div class="flex flex-col items-center justify-center px-4 py-1 mb-1">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+</div>
+<span class="font-label-md text-label-md">Customers</span>
+</button>
+<button class="flex flex-col items-center justify-center transition-all duration-200 active:scale-95 hover:bg-surface-container-high rounded-lg p-1 group w-16 text-on-surface-variant">
+<div class="flex flex-col items-center justify-center px-4 py-1 mb-1">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+</div>
+<span class="font-label-md text-label-md">More</span>
+</button>
+</nav>
+</body></html>

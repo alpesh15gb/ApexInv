@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -23,9 +24,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
   Future<void> _pickFile() async {
     try {
+      // FileType.any + code-side validation: .vyb has no registered MIME
+      // type on Android, so FileType.custom with allowedExtensions can
+      // grey the file out in the system picker.
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['vyb'],
+        type: FileType.any,
       );
       if (result == null || result.files.isEmpty) return;
 
@@ -37,7 +40,20 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       });
 
       final file = result.files.first;
-      final bytes = file.bytes;
+      if (file.extension?.toLowerCase() != 'vyb') {
+        setState(() {
+          _error = 'Please select a Vyapar .vyb backup file.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // file_picker only fills `bytes` on web; on Android/desktop the data
+      // must be read from the (already copied) file path instead.
+      Uint8List? bytes = file.bytes;
+      if (bytes == null && file.path != null) {
+        bytes = await File(file.path!).readAsBytes();
+      }
       if (bytes == null) {
         setState(() {
           _error = 'Could not read file';

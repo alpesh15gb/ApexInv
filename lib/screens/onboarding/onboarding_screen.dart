@@ -12,9 +12,11 @@ import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/screens/dashboard_screen.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_appearance.dart';
+import 'package:apexbooks/screens/onboarding/onboarding_step_cloud.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_company.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_done.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_invoice.dart';
+import 'package:apexbooks/screens/settings/cloud_sync_screen.dart';
 
 /// One-time, skippable first-login setup wizard. Each step persists its own
 /// fields immediately on "Next" so progress survives even if the app is
@@ -30,7 +32,7 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  static const _stepCount = 4;
+  static const _stepCount = 5;
   // Keeps form fields readable instead of stretching edge-to-edge on
   // desktop/tablet windows; has no effect once the window is narrower
   // than this (mobile just fills the available width as before).
@@ -58,6 +60,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   PageSize _pageSize = PageSize.a4;
   InvoiceTemplate _template = InvoiceTemplate.classic;
 
+  // Step 4 — Cloud (optional): '' = not chosen yet, 'enabled' = sign in to
+  // cloud sync right after onboarding, 'declined' = opt out of cloud.
+  String _cloudChoice = '';
+
   @override
   void initState() {
     super.initState();
@@ -78,6 +84,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       settingsRepo.getSetting(SettingKey.defaultTaxRate),
       settingsRepo.getPageSize(),
       settingsRepo.getInvoiceTemplate(),
+      settingsRepo.getSetting(SettingKey.cloudSyncChoice), // 9
     ]);
 
     if (!mounted) return;
@@ -97,6 +104,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       _taxRateController.text = (results[6] as String?) ?? '18';
       _pageSize = results[7] as PageSize;
       _template = results[8] as InvoiceTemplate;
+      _cloudChoice = (results[9] as String?) ?? '';
     });
   }
 
@@ -201,6 +209,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           await _saveInvoiceStep();
         case 2:
           await _saveAppearanceStep();
+        case 3:
+          await ref
+              .read(settingsRepositoryProvider)
+              .setSetting(SettingKey.cloudSyncChoice, _cloudChoice);
       }
       if (!mounted) return;
       await _goToPage(_currentStep + 1);
@@ -220,10 +232,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         .read(settingsRepositoryProvider)
         .setSetting(SettingKey.onboardingCompleted, 'true');
     if (!mounted) return;
+    final wantsCloudNow = _cloudChoice == 'enabled';
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => DashboardScreen(widget.user)),
     );
+    // User picked "Sign in to cloud sync" — land them on the sign-in form
+    // immediately, framed with a back bar so they can leave anytime.
+    if (wantsCloudNow) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: const Text('Cloud Sync')),
+            body: const SafeArea(child: CloudSyncScreen()),
+          ),
+        ),
+      );
+    }
   }
 
   ({IconData icon, String title, String subtitle}) _headerFor(
@@ -239,10 +265,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           title: l10n.onboardingStepInvoiceTitle,
           subtitle: l10n.onboardingStepInvoiceSubtitle
         ),
-      _ => (
+      2 => (
           icon: Icons.palette_rounded,
           title: l10n.onboardingStepAppearanceTitle,
           subtitle: l10n.onboardingStepAppearanceSubtitle
+        ),
+      _ => (
+          icon: Icons.cloud_sync_rounded,
+          title: 'Cloud Backup',
+          subtitle: 'Optional — keep data on this device or sync to the cloud'
         ),
     };
   }
@@ -307,7 +338,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ],
                       ),
                     ),
-                    if (_currentStep < 3) ...[
+                    if (_currentStep < 4) ...[
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
@@ -379,6 +410,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             onTemplateChanged: (t) =>
                                 setState(() => _template = t),
                           ),
+                          OnboardingStepCloud(
+                            choice: _cloudChoice,
+                            onChanged: (c) => setState(() => _cloudChoice = c),
+                          ),
                           const OnboardingStepDone(),
                         ],
                       ),
@@ -394,7 +429,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                               label: Text(l10n.actionBack),
                             ),
                           const Spacer(),
-                          if (_currentStep < 3)
+                          if (_currentStep < 4)
                             TextButton(
                               onPressed: _isBusy ? null : _handleSkip,
                               child: Text(l10n.actionSkip),
@@ -403,17 +438,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           FilledButton.icon(
                             onPressed: _isBusy
                                 ? null
-                                : (_currentStep < 3 ? _handleNext : _finish),
+                                : (_currentStep < 4 ? _handleNext : _finish),
                             icon: _isBusy
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2))
-                                : Icon(_currentStep < 3
+                                : Icon(_currentStep < 4
                                     ? Icons.arrow_forward_rounded
                                     : Icons.rocket_launch_rounded),
-                            label: Text(_currentStep < 3
+                            label: Text(_currentStep < 4
                                 ? l10n.actionNext
                                 : l10n.actionGetStarted),
                           ),

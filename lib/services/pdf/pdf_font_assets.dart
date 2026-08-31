@@ -1,10 +1,9 @@
 class PdfFontAssets {
-  // Primary fonts
-  static const regular = 'assets/fonts/DejaVuSans.ttf';
-  static const bold = 'assets/fonts/DejaVuSans-Bold.ttf';
-  static const italic = 'assets/fonts/DejaVuSans-Oblique.ttf';
-  static const boldItalic = 'assets/fonts/DejaVuSans-BoldOblique.ttf';
-  static const interRegular = 'assets/fonts/Inter-Regular.ttf';
+  // Primary fonts (Inter)
+  static const regular = 'assets/fonts/Inter-Regular.ttf';
+  static const bold = 'assets/fonts/Inter-Bold.ttf';
+  static const italic = 'assets/fonts/Inter-Italic.ttf';
+  static const boldItalic = 'assets/fonts/Inter-BoldItalic.ttf';
 
   // Sinhala
   static const sinhalaFallback = 'assets/fonts/lklug.ttf';

@@ -211,6 +211,18 @@ class AppLocalizationsNe extends AppLocalizations {
   String get navSettings => 'सेटिङहरू';
 
   @override
+  String get navMore => 'थप';
+
+  @override
+  String get moreSectionDocuments => 'कागजातहरू';
+
+  @override
+  String get moreSectionAnalytics => 'विश्लेषण र डाटा';
+
+  @override
+  String get moreSectionPreferences => 'प्राथमिकताहरू';
+
+  @override
   String get dashboardRoleAdmin => 'एडमिन';
 
   @override

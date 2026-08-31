@@ -1598,17 +1598,20 @@ class _InvoiceManagementScreenV2State
       children: [
         searchField,
         const SizedBox(height: 10),
-        Row(
+        // Wrap instead of a fixed Row: buttons flow to a second line and the
+        // total/page status gets its own line instead of clipping off-screen.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             customerButton,
-            const SizedBox(width: 8),
             filterButton,
-            if (widget.filterType == 'Invoice') const SizedBox(width: 8),
-            sortButton,
-            const Spacer(),
-            statText,
+            if (widget.filterType == 'Invoice') sortButton,
           ],
         ),
+        const SizedBox(height: 6),
+        statText,
       ],
     );
   }

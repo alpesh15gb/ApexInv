@@ -82,3 +82,8 @@ lib/screens/test_old_screens/
 android/build/
 
 gh_actions_cleanup.py
+
+# Sync server secrets
+server/.env
+
+# Local tooling cache.freebuff/

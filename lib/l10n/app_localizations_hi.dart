@@ -208,6 +208,18 @@ class AppLocalizationsHi extends AppLocalizations {
   String get navSettings => 'सेटिंग्स';
 
   @override
+  String get navMore => 'और';
+
+  @override
+  String get moreSectionDocuments => 'दस्तावेज़';
+
+  @override
+  String get moreSectionAnalytics => 'एनालिटिक्स और डेटा';
+
+  @override
+  String get moreSectionPreferences => 'प्राथमिकताएँ';
+
+  @override
   String get dashboardRoleAdmin => 'एडमिन';
 
   @override

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Create GST Invoice</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary": "#000666",
+                      "inverse-on-surface": "#f2eff8",
+                      "on-surface-variant": "#454652",
+                      "on-surface": "#1b1b21",
+                      "error": "#ba1a1a",
+                      "inverse-primary": "#bdc2ff",
+                      "surface-container": "#efecf5",
+                      "on-background": "#1b1b21",
+                      "on-secondary-fixed": "#002116",
+                      "surface-container-high": "#eae7ef",
+                      "tertiary-fixed-dim": "#c5c7c8",
+                      "secondary-fixed-dim": "#8bd6b6",
+                      "on-tertiary": "#ffffff",
+                      "surface-dim": "#dbd9e1",
+                      "outline": "#767683",
+                      "on-tertiary-container": "#969899",
+                      "surface": "#fbf8ff",
+                      "primary-container": "#1a237e",
+                      "on-secondary-container": "#237157",
+                      "secondary-container": "#a6f2d1",
+                      "surface-bright": "#fbf8ff",
+                      "on-primary-fixed": "#000767",
+                      "surface-container-highest": "#e4e1ea",
+                      "outline-variant": "#c6c5d4",
+                      "error-container": "#ffdad6",
+                      "on-primary-container": "#8690ee",
+                      "on-tertiary-fixed-variant": "#454748",
+                      "tertiary": "#191b1c",
+                      "primary-fixed": "#e0e0ff",
+                      "inverse-surface": "#303036",
+                      "background": "#fbf8ff",
+                      "on-error": "#ffffff",
+                      "on-primary": "#ffffff",
+                      "on-tertiary-fixed": "#191c1d",
+                      "on-error-container": "#93000a",
+                      "primary-fixed-dim": "#bdc2ff",
+                      "on-secondary-fixed-variant": "#00513b",
+                      "surface-container-low": "#f5f2fb",
+                      "surface-tint": "#4c56af",
+                      "on-primary-fixed-variant": "#343d96",
+                      "tertiary-fixed": "#e1e3e4",
+                      "on-secondary": "#ffffff",
+                      "tertiary-container": "#2d3031",
+                      "surface-variant": "#e4e1ea",
+                      "secondary-fixed": "#a6f2d1",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary": "#1b6b51"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "xl": "32px",
+                      "xs": "4px",
+                      "sm": "8px",
+                      "lg": "24px",
+                      "container-margin": "16px",
+                      "md": "16px",
+                      "gutter": "12px"
+              },
+              "fontFamily": {
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "headline-sm": [
+                              "Inter"
+                      ],
+                      "mono-data": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "label-sm": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-sm": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "mono-data": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "letterSpacing": "0.02em",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined[data-weight="fill"] {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md min-h-screen flex flex-col pb-24 md:pb-0">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-surface-dim w-full top-0 sticky border-b border-outline-variant dark:border-outline flex items-center justify-between px-container-margin py-sm w-full z-10 h-16">
+<div class="flex items-center gap-sm">
+<button class="p-xs rounded-full hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">Create GST Invoice</h1>
+</div>
+<button class="text-primary dark:text-primary-fixed font-label-sm text-label-sm font-semibold uppercase hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors active:opacity-80 transition-opacity px-sm py-xs rounded">Save</button>
+</header>
+<main class="flex-1 w-full max-w-3xl mx-auto md:px-container-margin py-md flex flex-col gap-md">
+<!-- Main Form Canvas -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-md shadow-sm">
+<!-- Details Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md mb-lg">
+<div>
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">Invoice Date</label>
+<input class="w-full bg-surface border border-outline-variant rounded-md px-sm py-xs font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none" type="date"/>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">Place of Supply</label>
+<select class="w-full bg-surface border border-outline-variant rounded-md px-sm py-xs font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none">
+<option>27 - Maharashtra</option>
+<option>29 - Karnataka</option>
+<option>07 - Delhi</option>
+</select>
+</div>
+</div>
+<hr class="border-outline-variant my-md"/>
+<!-- Party Details -->
+<section class="mb-lg">
+<h2 class="font-headline-sm text-headline-sm text-primary mb-md">Party Details</h2>
+<div class="flex flex-col gap-sm">
+<label class="block font-label-sm text-label-sm text-on-surface-variant">Customer / Party</label>
+<div class="relative">
+<select class="w-full bg-surface border border-outline-variant rounded-md pl-sm pr-lg py-sm font-body-md text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none appearance-none">
+<option value="">Select a Customer or Add New</option>
+<option value="1">Acme Corp - 27AAAAA0000A1Z5</option>
+<option value="2">Globex Inc - 29BBBBB1111B2Y6</option>
+</select>
+<span class="material-symbols-outlined absolute right-sm top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" data-icon="arrow_drop_down">arrow_drop_down</span>
+</div>
+<div class="mt-sm flex gap-sm">
+<div class="relative flex-1">
+<input class="w-full bg-surface border border-outline-variant rounded-md pl-sm pr-lg py-xs font-mono-data text-mono-data uppercase focus:border-primary focus:ring-1 focus:ring-primary outline-none" maxlength="15" placeholder="Search GSTIN" type="text"/>
+<button class="absolute right-xs top-1/2 -translate-y-1/2 text-secondary font-label-sm text-label-sm px-xs py-1 rounded hover:bg-surface-variant">Verify</button>
+</div>
+</div>
+</div>
+</section>
+<hr class="border-outline-variant my-md"/>
+<!-- Itemized List -->
+<section class="mb-lg">
+<div class="flex justify-between items-center mb-md">
+<h2 class="font-headline-sm text-headline-sm text-primary">Items</h2>
+<button class="text-secondary border border-secondary rounded-md px-sm py-xs font-label-sm text-label-sm flex items-center gap-xs hover:bg-secondary hover:text-on-secondary transition-colors">
+<span class="material-symbols-outlined" data-icon="add" style="font-size: 16px;">add</span> Add Item
+                    </button>
+</div>
+<!-- Item Card -->
+<div class="bg-surface border border-outline-variant rounded-lg p-sm mb-sm relative group">
+<button class="absolute -right-2 -top-2 bg-error text-on-error rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined" data-icon="close" style="font-size: 12px;">close</span>
+</button>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-sm">
+<div class="md:col-span-5">
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">Description</label>
+<input class="w-full border-b border-outline-variant bg-transparent px-xs py-xs font-body-md focus:border-primary outline-none" placeholder="Consulting Services" type="text"/>
+</div>
+<div class="md:col-span-3">
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">HSN/SAC</label>
+<input class="w-full border-b border-outline-variant bg-transparent px-xs py-xs font-mono-data text-mono-data focus:border-primary outline-none" placeholder="9983" type="text"/>
+</div>
+<div class="md:col-span-2">
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">Qty</label>
+<input class="w-full border-b border-outline-variant bg-transparent px-xs py-xs font-mono-data text-mono-data text-right focus:border-primary outline-none" type="number" value="1"/>
+</div>
+<div class="md:col-span-2">
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">Price (₹)</label>
+<input class="w-full border-b border-outline-variant bg-transparent px-xs py-xs font-mono-data text-mono-data text-right focus:border-primary outline-none" type="number" value="50000"/>
+</div>
+</div>
+</div>
+<!-- Item Card 2 -->
+<div class="bg-surface border border-outline-variant rounded-lg p-sm mb-sm relative group">
+<button class="absolute -right-2 -top-2 bg-error text-on-error rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined" data-icon="close" style="font-size: 12px;">close</span>
+</button>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-sm">
+<div class="md:col-span-5">
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">Description</label>
+<input class="w-full border-b border-outline-variant bg-transparent px-xs py-xs font-body-md focus:border-primary outline-none" placeholder="Software License" type="text"/>
+</div>
+<div class="md:col-span-3">
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">HSN/SAC</label>
+<input class="w-full border-b border-outline-variant bg-transparent px-xs py-xs font-mono-data text-mono-data focus:border-primary outline-none" placeholder="9973" type="text"/>
+</div>
+<div class="md:col-span-2">
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">Qty</label>
+<input class="w-full border-b border-outline-variant bg-transparent px-xs py-xs font-mono-data text-mono-data text-right focus:border-primary outline-none" type="number" value="2"/>
+</div>
+<div class="md:col-span-2">
+<label class="block font-label-sm text-label-sm text-on-surface-variant mb-xs">Price (₹)</label>
+<input class="w-full border-b border-outline-variant bg-transparent px-xs py-xs font-mono-data text-mono-data text-right focus:border-primary outline-none" type="number" value="15000"/>
+</div>
+</div>
+</div>
+</section>
+<!-- Tax Calculation -->
+<section class="border-t-2 border-primary pt-md mt-md">
+<div class="flex flex-col gap-xs max-w-sm ml-auto">
+<div class="flex justify-between items-center">
+<span class="font-body-md text-on-surface-variant">Subtotal</span>
+<span class="font-mono-data text-mono-data">₹ 80,000.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-md text-on-surface-variant">CGST (9%)</span>
+<span class="font-mono-data text-mono-data">₹ 7,200.00</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-md text-on-surface-variant">SGST (9%)</span>
+<span class="font-mono-data text-mono-data">₹ 7,200.00</span>
+</div>
+<hr class="border-outline-variant my-xs"/>
+<div class="flex justify-between items-center">
+<span class="font-headline-sm text-headline-sm text-primary">Grand Total</span>
+<span class="font-headline-sm text-headline-sm font-mono-data text-primary">₹ 94,400.00</span>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Bottom Actions (Mobile Sticky) -->
+<div class="fixed bottom-0 left-0 w-full bg-surface border-t border-outline-variant p-md md:static md:bg-transparent md:border-none md:p-0 md:mt-md z-40 max-w-3xl mx-auto md:px-container-margin">
+<button class="w-full bg-primary-container text-on-primary-container hover:opacity-90 font-headline-sm text-headline-sm py-sm rounded-lg shadow-sm transition-all flex justify-center items-center gap-sm">
+<span class="material-symbols-outlined" data-icon="send">send</span>
+            Generate &amp; Share
+        </button>
+</div>
+</body></html>

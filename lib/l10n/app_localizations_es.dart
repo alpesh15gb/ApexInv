@@ -212,6 +212,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get navSettings => 'Configuración';
 
   @override
+  String get navMore => 'Más';
+
+  @override
+  String get moreSectionDocuments => 'Documentos';
+
+  @override
+  String get moreSectionAnalytics => 'Analítica y datos';
+
+  @override
+  String get moreSectionPreferences => 'Preferencias';
+
+  @override
   String get dashboardRoleAdmin => 'Administrador';
 
   @override

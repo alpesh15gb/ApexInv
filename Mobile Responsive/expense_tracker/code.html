@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Expense Tracker - ApexInv</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-container-high": "#e5e8ee",
+                      "on-primary-fixed-variant": "#24467c",
+                      "surface-container": "#ebeef4",
+                      "on-secondary-fixed": "#002110",
+                      "on-secondary-fixed-variant": "#00522e",
+                      "on-secondary": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "inverse-surface": "#2d3135",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary": "#046d3f",
+                      "on-error": "#ffffff",
+                      "tertiary-fixed": "#d3e4f9",
+                      "outline-variant": "#c4c6d1",
+                      "primary-fixed": "#d7e2ff",
+                      "tertiary-fixed-dim": "#b7c8dc",
+                      "surface-variant": "#dfe3e8",
+                      "secondary-fixed": "#9df5bc",
+                      "surface": "#f7f9ff",
+                      "primary": "#00193c",
+                      "tertiary-container": "#20303f",
+                      "primary-fixed-dim": "#abc7ff",
+                      "on-background": "#181c20",
+                      "surface-dim": "#d7dae0",
+                      "on-tertiary": "#ffffff",
+                      "surface-container-low": "#f1f4fa",
+                      "on-primary-fixed": "#001b3f",
+                      "outline": "#747781",
+                      "on-tertiary-fixed-variant": "#384858",
+                      "on-surface": "#181c20",
+                      "error": "#ba1a1a",
+                      "on-secondary-container": "#0e7143",
+                      "inverse-on-surface": "#eef1f7",
+                      "primary-container": "#002d62",
+                      "on-tertiary-container": "#8798aa",
+                      "surface-bright": "#f7f9ff",
+                      "on-primary-container": "#7796d1",
+                      "background": "#f7f9ff",
+                      "secondary-fixed-dim": "#81d9a1",
+                      "on-surface-variant": "#43474f",
+                      "tertiary": "#0a1b2a",
+                      "on-error-container": "#93000a",
+                      "inverse-primary": "#abc7ff",
+                      "surface-tint": "#3e5e95",
+                      "surface-container-highest": "#dfe3e8",
+                      "secondary-container": "#9af2b9",
+                      "on-primary": "#ffffff",
+                      "on-tertiary-fixed": "#0c1d2b"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "lg": "24px",
+                      "unit": "4px",
+                      "xl": "32px",
+                      "margin-tablet": "24px",
+                      "sm": "8px",
+                      "margin-mobile": "16px",
+                      "gutter": "16px",
+                      "md": "16px",
+                      "xs": "4px"
+              },
+              "fontFamily": {
+                      "headline-sm": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "label-md": ["Inter"],
+                      "body-md": ["Inter"],
+                      "title-md": ["Inter"],
+                      "headline-md": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "label-lg": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "headline-lg-mobile": ["Inter"],
+                      "title-lg": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-sm": ["24px", {"lineHeight": "32px", "fontWeight": "400"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "400"}],
+                      "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.5px", "fontWeight": "500"}],
+                      "body-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.25px", "fontWeight": "400"}],
+                      "title-md": ["16px", {"lineHeight": "24px", "letterSpacing": "0.15px", "fontWeight": "500"}],
+                      "headline-md": ["28px", {"lineHeight": "36px", "fontWeight": "400"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "letterSpacing": "0.5px", "fontWeight": "400"}],
+                      "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.1px", "fontWeight": "500"}],
+                      "display-lg": ["57px", {"lineHeight": "64px", "letterSpacing": "-0.25px", "fontWeight": "400"}],
+                      "headline-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "600"}],
+                      "title-lg": ["22px", {"lineHeight": "28px", "fontWeight": "500"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased min-h-screen pb-safe">
+<!-- TopAppBar (from JSON) -->
+<header class="fixed top-0 w-full z-50 bg-surface dark:bg-surface border-b border-outline-variant/12 flex justify-between items-center h-14 px-margin-mobile w-full">
+<button aria-label="Menu" class="p-2 -ml-2 text-primary dark:text-primary-fixed hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors duration-200 active:opacity-70 rounded-full">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h1 class="font-title-lg text-title-lg font-bold text-primary dark:text-primary-fixed">ApexInv</h1>
+<button aria-label="Refresh" class="p-2 -mr-2 text-primary dark:text-primary-fixed hover:bg-surface-container-low dark:hover:bg-surface-container-highest transition-colors duration-200 active:opacity-70 rounded-full">
+<span class="material-symbols-outlined" data-icon="refresh">refresh</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="pt-[72px] pb-[80px] px-margin-mobile md:px-margin-tablet max-w-[840px] mx-auto flex flex-col gap-md">
+<!-- Summary Card -->
+<section class="bg-surface-container-low rounded-xl p-md border border-outline-variant/12 flex justify-between items-center">
+<div>
+<p class="font-label-md text-label-md text-on-surface-variant mb-xs">Total Expenses (Oct)</p>
+<h2 class="font-headline-md text-headline-md text-on-surface">$12,450.00</h2>
+</div>
+<div class="text-right">
+<p class="font-label-md text-label-md text-on-surface-variant mb-xs">Count</p>
+<p class="font-title-md text-title-md text-on-surface">143</p>
+</div>
+</section>
+<!-- Search & Filter Controls -->
+<div class="flex flex-col gap-sm">
+<!-- Search Bar -->
+<div class="relative w-full">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-outline">search</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-2 border border-outline-variant rounded-lg leading-5 bg-surface-container-lowest placeholder-outline focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary font-body-md text-body-md sm:text-sm transition duration-150 ease-in-out" placeholder="Search expenses..." type="text"/>
+</div>
+<!-- Filter Chips (Horizontal Scroll) -->
+<div class="flex overflow-x-auto gap-sm py-1 hide-scrollbar -mx-margin-mobile px-margin-mobile md:mx-0 md:px-0">
+<button class="flex-shrink-0 inline-flex items-center px-3 py-1.5 rounded-full border border-primary bg-primary text-on-primary font-label-md text-label-md">
+                    All
+                </button>
+<button class="flex-shrink-0 inline-flex items-center px-3 py-1.5 rounded-full border border-outline-variant bg-surface text-on-surface-variant font-label-md text-label-md hover:bg-surface-container transition-colors">
+                    Travel
+                </button>
+<button class="flex-shrink-0 inline-flex items-center px-3 py-1.5 rounded-full border border-outline-variant bg-surface text-on-surface-variant font-label-md text-label-md hover:bg-surface-container transition-colors">
+                    Meals
+                </button>
+<button class="flex-shrink-0 inline-flex items-center px-3 py-1.5 rounded-full border border-outline-variant bg-surface text-on-surface-variant font-label-md text-label-md hover:bg-surface-container transition-colors">
+                    Software
+                </button>
+<button class="flex-shrink-0 inline-flex items-center px-3 py-1.5 rounded-full border border-outline-variant bg-surface text-on-surface-variant font-label-md text-label-md hover:bg-surface-container transition-colors">
+                    Office
+                </button>
+</div>
+</div>
+<!-- Expense List -->
+<section class="flex flex-col gap-unit mt-sm">
+<h3 class="font-title-md text-title-md text-on-surface mb-xs">Recent Expenses</h3>
+<!-- Expense Item 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant/12 rounded-lg p-sm flex items-center justify-between relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex items-center gap-sm pl-2">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="flight">flight</span>
+</div>
+<div>
+<p class="font-title-md text-title-md text-on-surface line-clamp-1">Delta Airlines - JFK to LAX</p>
+<p class="font-body-md text-body-md text-on-surface-variant line-clamp-1">Oct 24 • Travel</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-title-md text-title-md text-on-surface">$450.00</p>
+</div>
+</div>
+<!-- Expense Item 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant/12 rounded-lg p-sm flex items-center justify-between relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex items-center gap-sm pl-2">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="restaurant">restaurant</span>
+</div>
+<div>
+<p class="font-title-md text-title-md text-on-surface line-clamp-1">Client Dinner - Nobu</p>
+<p class="font-body-md text-body-md text-on-surface-variant line-clamp-1">Oct 23 • Meals</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-title-md text-title-md text-on-surface">$215.50</p>
+</div>
+</div>
+<!-- Expense Item 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant/12 rounded-lg p-sm flex items-center justify-between relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l-lg"></div>
+<div class="flex items-center gap-sm pl-2">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="cloud">cloud</span>
+</div>
+<div>
+<p class="font-title-md text-title-md text-on-surface line-clamp-1">AWS Cloud Hosting</p>
+<p class="font-body-md text-body-md text-on-surface-variant line-clamp-1">Oct 21 • Software</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-title-md text-title-md text-on-surface">$1,250.00</p>
+</div>
+</div>
+<!-- Expense Item 4 (Pending style) -->
+<div class="bg-surface-container-lowest border border-outline-variant/12 rounded-lg p-sm flex items-center justify-between relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-lg"></div>
+<div class="flex items-center gap-sm pl-2">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary opacity-70">
+<span class="material-symbols-outlined" data-icon="devices">devices</span>
+</div>
+<div>
+<p class="font-title-md text-title-md text-on-surface line-clamp-1">Apple Store - New Monitors</p>
+<p class="font-body-md text-body-md text-on-surface-variant line-clamp-1">Oct 20 • Office</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-title-md text-title-md text-on-surface">$3,400.00</p>
+<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary-container/20 text-primary-container mt-1">Pending</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button (FAB) -->
+<button aria-label="Add Expense" class="fixed bottom-[88px] right-margin-mobile md:right-margin-tablet w-14 h-14 bg-primary text-on-primary rounded-full shadow-md flex items-center justify-center hover:bg-primary/90 transition-transform active:scale-95 z-40">
+<span class="material-symbols-outlined" data-icon="add" style="font-size: 24px;">add</span>
+</button>
+<!-- BottomNavBar (from JSON) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 px-2 pb-safe bg-surface-container dark:bg-surface-container border-t border-outline-variant/12 shadow-sm rounded-t-none md:hidden">
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-md text-label-md mt-1">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+<span class="font-label-md text-label-md mt-1">New</span>
+</button>
+<!-- Semantic Active State: Expenses relate closest to Invoices in this nav context -->
+<button class="flex flex-col items-center justify-center bg-secondary-container dark:bg-primary-container text-on-secondary-container dark:text-on-primary-container rounded-full px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="description" data-weight="fill" style="font-variation-settings: 'FILL' 1;">description</span>
+<span class="font-label-md text-label-md mt-1">Invoices</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-label-md text-label-md mt-1">Customers</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+<span class="font-label-md text-label-md mt-1">More</span>
+</button>
+</nav>
+</body></html>

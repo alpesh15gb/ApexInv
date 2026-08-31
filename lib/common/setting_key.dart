@@ -79,6 +79,9 @@ enum SettingKey {
   showCustomerGstinInPdf, // whether to show the customer's GSTIN/tax id on PDFs/thermal receipts (default true; only shown when non-empty and GST fields are on)
   showTimeInPdf, // whether the invoice creation time is appended to the date on PDFs/thermal receipts (default true)
   pdfTimeFormat, // time format used when showTimeInPdf is on: '24' (HH:mm) | '12' (h:mm a); default '24'
+  cloudSyncAccount, // JSON SyncAccount (email/token/company) for the self-hosted sync server; empty = not linked
+  currentUserId, // id of the last logged-in local user; enables auto-login on app start. Cleared on logout.
+  cloudSyncChoice, // onboarding cloud decision: '' = not asked, 'enabled' = wants cloud sign-in, 'declined' = user opted out of cloud services
 }
 
 extension SettingKeyExtension on SettingKey {
@@ -244,7 +247,12 @@ extension SettingKeyExtension on SettingKey {
         return 'show_time_in_pdf';
       case SettingKey.pdfTimeFormat:
         return 'pdf_time_format';
-
+      case SettingKey.cloudSyncAccount:
+        return 'cloud_sync_account';
+      case SettingKey.currentUserId:
+        return 'current_user_id';
+      case SettingKey.cloudSyncChoice:
+        return 'cloud_sync_choice';
     }
   }
 }

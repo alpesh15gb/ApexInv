@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/utils/formatters.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/common/supported_currencies.dart';
@@ -1287,99 +1288,119 @@ class _CustomerManagementScreenV2State extends ConsumerState<CustomerManagementS
   }
 
   Widget _headerBarV2() {
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(AppLocalizations.of(context)!.customerMgmtTitle,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Theme.of(context).colorScheme.onSurface)),
+        const SizedBox(height: 2),
+        Text(AppLocalizations.of(context)!.customerMgmtSubtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ],
+    );
+    final actions = Wrap(
+      alignment: WrapAlignment.start,
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _showImportDialog,
+          icon: const Icon(Icons.upload_file_outlined, size: 16),
+          label: Text(AppLocalizations.of(context)!.actionImport),
+        ),
+        OutlinedButton.icon(
+          onPressed: _exportToCSV,
+          icon: const Icon(Icons.file_download_outlined, size: 16),
+          label: Text(AppLocalizations.of(context)!.actionExport),
+        ),
+        if (widget.user.isAdmin())
+          PopupMenuButton<String>(
+            tooltip: AppLocalizations.of(context)!.invoiceMgmtMoreActionsTooltip,
+            onSelected: (value) {
+              if (value == 'export_pdf') _exportToPDF();
+              if (value == 'delete_all') _confirmDeleteAll();
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem<String>(
+                value: 'export_pdf',
+                child: Row(
+                  children: [
+                    const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    const SizedBox(width: 8),
+                    Text(AppLocalizations.of(context)!.customerMgmtExportPdfMenuLabel),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'delete_all',
+                child: Row(
+                  children: [
+                    const Icon(Icons.delete_sweep, color: Colors.red, size: 18),
+                    const SizedBox(width: 8),
+                    Text(AppLocalizations.of(context)!.customerMgmtDeleteAllTitle,
+                        style: const TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+            child: _menuButtonLookV2(Icons.more_horiz, AppLocalizations.of(context)!.commonMoreLabel),
+          ),
+        IconButton(
+          onPressed: _isLoading ? null : _loadCustomers,
+          icon: _isLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.refresh),
+          tooltip: AppLocalizations.of(context)!.actionRefresh,
+        ),
+        FilledButton.icon(
+          onPressed: () => setState(() => _showAddPanelV2 = true),
+          icon: const Icon(Icons.add, size: 18),
+          label: Text(AppLocalizations.of(context)!.customerMgmtNewCustomerButton),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+          ),
+        ),
+      ],
+    );
+
+    // Compact: title on its own row, actions wrapping below it — the
+    // side-by-side Row starves the title and stacks the actions vertically.
+    if (context.isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          titleBlock,
+          const SizedBox(height: 12),
+          actions,
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(AppLocalizations.of(context)!.customerMgmtTitle,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: Theme.of(context).colorScheme.onSurface)),
-              const SizedBox(height: 2),
-              Text(AppLocalizations.of(context)!.customerMgmtSubtitle,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            ],
-          ),
-        ),
+        Expanded(child: titleBlock),
         Flexible(
           child: Wrap(
             alignment: WrapAlignment.end,
             spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            OutlinedButton.icon(
-              onPressed: _showImportDialog,
-              icon: const Icon(Icons.upload_file_outlined, size: 16),
-              label: Text(AppLocalizations.of(context)!.actionImport),
-            ),
-            OutlinedButton.icon(
-              onPressed: _exportToCSV,
-              icon: const Icon(Icons.file_download_outlined, size: 16),
-              label: Text(AppLocalizations.of(context)!.actionExport),
-            ),
-            if (widget.user.isAdmin())
-              PopupMenuButton<String>(
-                tooltip: AppLocalizations.of(context)!.invoiceMgmtMoreActionsTooltip,
-                onSelected: (value) {
-                  if (value == 'export_pdf') _exportToPDF();
-                  if (value == 'delete_all') _confirmDeleteAll();
-                },
-                itemBuilder: (ctx) => [
-                  PopupMenuItem<String>(
-                    value: 'export_pdf',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                        const SizedBox(width: 8),
-                        Text(AppLocalizations.of(context)!.customerMgmtExportPdfMenuLabel),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem<String>(
-                    value: 'delete_all',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.delete_sweep, color: Colors.red, size: 18),
-                        const SizedBox(width: 8),
-                        Text(AppLocalizations.of(context)!.customerMgmtDeleteAllTitle,
-                            style: const TextStyle(color: Colors.red)),
-                      ],
-                    ),
-                  ),
-                ],
-                child: _menuButtonLookV2(Icons.more_horiz, AppLocalizations.of(context)!.commonMoreLabel),
-              ),
-            IconButton(
-              onPressed: _isLoading ? null : _loadCustomers,
-              icon: _isLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.refresh),
-              tooltip: AppLocalizations.of(context)!.actionRefresh,
-            ),
-            FilledButton.icon(
-              onPressed: () => setState(() => _showAddPanelV2 = true),
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(AppLocalizations.of(context)!.customerMgmtNewCustomerButton),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
-              ),
-            ),
-          ],
-        ),
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: actions.children.toList(),
+          ),
         ),
       ],
     );

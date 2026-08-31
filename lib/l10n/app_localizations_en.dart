@@ -208,6 +208,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navSettings => 'Settings';
 
   @override
+  String get navMore => 'More';
+
+  @override
+  String get moreSectionDocuments => 'Documents';
+
+  @override
+  String get moreSectionAnalytics => 'Analytics & Data';
+
+  @override
+  String get moreSectionPreferences => 'Preferences';
+
+  @override
   String get dashboardRoleAdmin => 'Admin';
 
   @override

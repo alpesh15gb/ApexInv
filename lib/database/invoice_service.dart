@@ -590,29 +590,73 @@ class InvoiceService {
   }
 
   // ─────────────────────────────────────────────
+  // Stock helpers — keep product stock in step with the invoice lifecycle.
+  // insertInvoice deducts on create; updateInvoice restores+re-deducts on
+  // edit; soft delete restores, restore re-deducts, permanent delete
+  // restores (only if still deducted, i.e. the invoice was active).
+  // [sign] is +1 to restore stock, -1 to deduct again.
+  static Future<void> _adjustStockForInvoice(String invoiceId, int sign) async {
+    final db = await dbHelper.database;
+    final items = await db.query(
+      'invoice_items',
+      where: 'invoice_id = ?',
+      whereArgs: [invoiceId],
+    );
+    for (final item in items) {
+      final productId = item['product_id'] as String?;
+      if (productId == null || productId.isEmpty) continue;
+      final product = await ProductService.getProductById(productId);
+      if (product == null || product.unlimitedStock) continue;
+      final rawQty = item['quantity'];
+      final qty = rawQty is int ? rawQty : ((rawQty as num?) ?? 0).round();
+      if (qty == 0) continue;
+      await ProductService.updateProductStock(
+          product.id, product.stock + sign * qty);
+    }
+  }
+
+  // ─────────────────────────────────────────────
   // Soft Delete
   static Future<void> softDeleteInvoice(String id) async {
     final db = await dbHelper.database;
+    final rows = await db.query('invoices',
+        where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty || rows.first['deleted_at'] != null) return;
     await db.update(
       'invoices',
       {'deleted_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [id],
     );
+    // Invoice left the books — give the reserved stock back.
+    await _adjustStockForInvoice(id, 1);
   }
 
   static Future<void> restoreInvoice(String id) async {
     final db = await dbHelper.database;
+    final rows = await db.query('invoices',
+        where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty || rows.first['deleted_at'] == null) return;
     await db.update(
       'invoices',
       {'deleted_at': null},
       where: 'id = ?',
       whereArgs: [id],
     );
+    // Invoice is active again — reserve the stock once more.
+    await _adjustStockForInvoice(id, -1);
   }
 
   static Future<void> permanentDeleteInvoice(String id) async {
     final db = await dbHelper.database;
+    // Stock is only still reserved if the invoice was never soft-deleted
+    // (soft delete already restored it; restoring again would double-count).
+    final rows = await db.query('invoices',
+        where: 'id = ?', whereArgs: [id], limit: 1);
+    final wasSoftDeleted = rows.isNotEmpty && rows.first['deleted_at'] != null;
+    if (!wasSoftDeleted) {
+      await _adjustStockForInvoice(id, 1);
+    }
     await db.transaction((txn) async {
       await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
       await txn.delete('invoice_payments', where: 'invoice_id = ?', whereArgs: [id]);

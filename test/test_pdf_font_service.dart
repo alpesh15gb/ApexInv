@@ -12,13 +12,24 @@ import 'package:pdf/widgets.dart' as pw;
 
 class TestPdfFontService {
   static Future<pw.ThemeData> loadTheme() async {
+    // Primary fonts (Inter)
     final regular = pw.Font.ttf(await rootBundle.load(PdfFontAssets.regular));
     final bold = pw.Font.ttf(await rootBundle.load(PdfFontAssets.bold));
     final italic = pw.Font.ttf(await rootBundle.load(PdfFontAssets.italic));
     final boldItalic =
         pw.Font.ttf(await rootBundle.load(PdfFontAssets.boldItalic));
+
+    // Fallback fonts
     final sinhalaFallback =
         pw.Font.ttf(await rootBundle.load(PdfFontAssets.sinhalaFallback));
+    final arabic =
+        pw.Font.ttf(await rootBundle.load(PdfFontAssets.arabicFallback));
+    final arabicBold =
+        pw.Font.ttf(await rootBundle.load(PdfFontAssets.arabicFallbackBold));
+    final bengali =
+        pw.Font.ttf(await rootBundle.load(PdfFontAssets.bengaliFallback));
+    final bengaliBold =
+        pw.Font.ttf(await rootBundle.load(PdfFontAssets.bengaliFallbackBold));
     final malayalam =
         pw.Font.ttf(await rootBundle.load(PdfFontAssets.malayalamFallback));
     final malayalamBold = pw.Font.ttf(
@@ -39,6 +50,12 @@ class TestPdfFontService {
         pw.Font.ttf(await rootBundle.load(PdfFontAssets.teluguFallback));
     final teluguBold =
         pw.Font.ttf(await rootBundle.load(PdfFontAssets.teluguFallbackBold));
+    final thai =
+        pw.Font.ttf(await rootBundle.load(PdfFontAssets.thaiFallback));
+    final thaiBold =
+        pw.Font.ttf(await rootBundle.load(PdfFontAssets.thaiFallbackBold));
+    final symbols =
+        pw.Font.ttf(await rootBundle.load(PdfFontAssets.symbolsFallback));
 
     return pw.ThemeData.withFont(
       base: regular,
@@ -46,7 +63,12 @@ class TestPdfFontService {
       italic: italic,
       boldItalic: boldItalic,
       fontFallback: [
+        symbols,
+        arabic,
+        arabicBold,
         sinhalaFallback,
+        bengali,
+        bengaliBold,
         malayalam,
         malayalamBold,
         devanagari,
@@ -57,6 +79,8 @@ class TestPdfFontService {
         kannadaBold,
         telugu,
         teluguBold,
+        thai,
+        thaiBold,
       ],
     );
   }

@@ -5,71 +5,72 @@ import 'package:pdf/widgets.dart' as pw;
 class PdfFontService {
   static Future<pw.ThemeData> loadTheme() async {
     final fonts = await Future.wait([
-      // 0-3: Primary fonts
+      // 0-3: Primary fonts (Inter)
       rootBundle.load(PdfFontAssets.regular),
       rootBundle.load(PdfFontAssets.bold),
       rootBundle.load(PdfFontAssets.italic),
       rootBundle.load(PdfFontAssets.boldItalic),
 
-      // 4-5: Sinhala
+      // 4: Sinhala
       rootBundle.load(PdfFontAssets.sinhalaFallback),
 
-      // 6-7: Arabic
+      // 5-6: Arabic
       rootBundle.load(PdfFontAssets.arabicFallback),
       rootBundle.load(PdfFontAssets.arabicFallbackBold),
 
-      // 8-9: Bengali
+      // 7-8: Bengali
       rootBundle.load(PdfFontAssets.bengaliFallback),
       rootBundle.load(PdfFontAssets.bengaliFallbackBold),
 
-      // 10-11: Devanagari
+      // 9-10: Devanagari
       rootBundle.load(PdfFontAssets.devanagariFallback),
       rootBundle.load(PdfFontAssets.devanagariFallbackBold),
 
-      // 12-13: Malayalam
+      // 11-12: Malayalam
       rootBundle.load(PdfFontAssets.malayalamFallback),
       rootBundle.load(PdfFontAssets.malayalamFallbackBold),
 
-      // 14-15: Tamil
+      // 13-14: Tamil
       rootBundle.load(PdfFontAssets.tamilFallback),
       rootBundle.load(PdfFontAssets.tamilFallbackBold),
 
-      // 16-17: Kannada
+      // 15-16: Kannada
       rootBundle.load(PdfFontAssets.kannadaFallback),
       rootBundle.load(PdfFontAssets.kannadaFallbackBold),
 
-      // 18-19: Telugu
+      // 17-18: Telugu
       rootBundle.load(PdfFontAssets.teluguFallback),
       rootBundle.load(PdfFontAssets.teluguFallbackBold),
 
-      // 20-21: Thai
+      // 19-20: Thai
       rootBundle.load(PdfFontAssets.thaiFallback),
       rootBundle.load(PdfFontAssets.thaiFallbackBold),
 
-      // 22-23: Khmer
+      // 21-22: Khmer
       rootBundle.load(PdfFontAssets.khmerFallback),
       rootBundle.load(PdfFontAssets.khmerFallbackBold),
 
-      // 24-25: Georgian
+      // 23-24: Georgian
       rootBundle.load(PdfFontAssets.georgianFallback),
       rootBundle.load(PdfFontAssets.georgianFallbackBold),
 
-      // 26-27: Armenian
+      // 25-26: Armenian
       rootBundle.load(PdfFontAssets.armenianFallback),
       rootBundle.load(PdfFontAssets.armenianFallbackBold),
-      // 28-29: Myanmar
+
+      // 27-28: Myanmar
       rootBundle.load(PdfFontAssets.myanmarFallback),
       rootBundle.load(PdfFontAssets.myanmarFallbackBold),
-      // 30-31: Tibetan
+
+      // 29-30: Tibetan
       rootBundle.load(PdfFontAssets.tibetanFallback),
       rootBundle.load(PdfFontAssets.tibetanFallbackBold),
-      // 32: Symbols
+
+      // 31: Symbols
       rootBundle.load(PdfFontAssets.symbolsFallback),
-      // 33: Inter
-      rootBundle.load(PdfFontAssets.interRegular),
     ]);
 
-    // Primary fonts
+    // Primary fonts (Inter)
     final regular = pw.Font.ttf(fonts[0]);
     final bold = pw.Font.ttf(fonts[1]);
     final italic = pw.Font.ttf(fonts[2]);
@@ -119,8 +120,6 @@ class PdfFontService {
 
     final symbols = pw.Font.ttf(fonts[31]);
 
-    final inter = pw.Font.ttf(fonts[32]);
-
     return pw.ThemeData.withFont(
       base: regular,
       bold: bold,
@@ -130,7 +129,6 @@ class PdfFontService {
       fontFallback: [
         // Unicode symbols / currency symbols
         symbols,
-        inter,
         // Arabic
         arabic,
         arabicBold,

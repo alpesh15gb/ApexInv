@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/user.dart';
@@ -789,73 +790,90 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
     required IconData icon,
     required Color accent,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: _flatCardDecorationV2(context),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                  const SizedBox(height: 6),
-                  Text(value,
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: TextStyle(
-                          fontSize: 11.5,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                ],
-              ),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _flatCardDecorationV2(context),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                const SizedBox(height: 6),
+                Text(value,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(subtitle,
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ],
             ),
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: accent, size: 20),
+          ),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
-          ],
-        ),
+            child: Icon(icon, color: accent, size: 20),
+          ),
+        ],
       ),
     );
   }
 
   Widget _statCardsRowV2() {
+    final cards = <Widget>[
+      _statCardV2(
+        label: 'Total Users',
+        value: '${_users.length}',
+        subtitle: 'All users',
+        icon: Icons.groups_outlined,
+        accent: Theme.of(context).primaryColor,
+      ),
+      _statCardV2(
+        label: 'Admin Users',
+        value: '$_adminCountV2',
+        subtitle: 'Full access',
+        icon: Icons.admin_panel_settings_outlined,
+        accent: Colors.purple,
+      ),
+      _statCardV2(
+        label: 'Regular Users',
+        value: '$_regularCountV2',
+        subtitle: 'Standard access',
+        icon: Icons.person_outline,
+        accent: Colors.blue,
+      ),
+    ];
+    if (context.isCompact) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          const gap = 12.0;
+          final width = (constraints.maxWidth - gap) / 2;
+          return Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              for (final card in cards) SizedBox(width: width, child: card),
+            ],
+          );
+        },
+      );
+    }
     return Row(
       children: [
-        _statCardV2(
-          label: 'Total Users',
-          value: '${_users.length}',
-          subtitle: 'All users',
-          icon: Icons.groups_outlined,
-          accent: Theme.of(context).primaryColor,
-        ),
-        const SizedBox(width: 12),
-        _statCardV2(
-          label: 'Admin Users',
-          value: '$_adminCountV2',
-          subtitle: 'Full access',
-          icon: Icons.admin_panel_settings_outlined,
-          accent: Colors.purple,
-        ),
-        const SizedBox(width: 12),
-        _statCardV2(
-          label: 'Regular Users',
-          value: '$_regularCountV2',
-          subtitle: 'Standard access',
-          icon: Icons.person_outline,
-          accent: Colors.blue,
-        ),
+        for (var i = 0; i < cards.length; i++) ...[
+          if (i > 0) const SizedBox(width: 12),
+          Expanded(child: cards[i]),
+        ],
       ],
     );
   }

@@ -480,6 +480,30 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get navSettings;
 
+  /// No description provided for @navMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get navMore;
+
+  /// No description provided for @moreSectionDocuments.
+  ///
+  /// In en, this message translates to:
+  /// **'Documents'**
+  String get moreSectionDocuments;
+
+  /// No description provided for @moreSectionAnalytics.
+  ///
+  /// In en, this message translates to:
+  /// **'Analytics & Data'**
+  String get moreSectionAnalytics;
+
+  /// No description provided for @moreSectionPreferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferences'**
+  String get moreSectionPreferences;
+
   /// No description provided for @dashboardRoleAdmin.
   ///
   /// In en, this message translates to:

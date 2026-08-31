@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -5,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:apexbooks/utils/app_logger.dart';
 import 'package:apexbooks/utils/password_utils.dart';
+import 'sync_schema.dart';
 
 const _tag = 'DatabaseHelper';
 
@@ -15,7 +18,20 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 44;
+  final dbVersion = 45;
+
+  /// Emits when the sync engine finishes applying pulled remote rows, so the
+  /// UI layer can refresh its lists. Write-side signaling needs no stream:
+  /// the `_sync_outbox` capture triggers already record every write, and the
+  /// engine's post-write nudge is driven by the outbox pending-count watcher
+  /// in the sync controller.
+  final _pullSignal = StreamController<void>.broadcast();
+  Stream<void> get onPullApplied => _pullSignal.stream;
+
+  /// Emits on the pull signal — used by the engine, not by write paths.
+  void notifyPullApplied() {
+    if (!_pullSignal.isClosed) _pullSignal.add(null);
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -367,6 +383,18 @@ class DatabaseHelper {
         enabled INTEGER DEFAULT 1
       )
     ''');
+
+    // ── Phase 7: Sync foundation (dbplan.md §3.2) ──
+    // Columns + change-capture triggers so every write path (current and
+    // future) lands in _sync_outbox transactionally. The sync engine itself
+    // stays dormant until the user links a cloud account.
+    for (final table in syncTableOrder) {
+      await addSyncColumns(db, table,
+          withCloudId: cloudIdTables.contains(table),
+          withDeletedAt: table == 'customers' || table == 'products');
+    }
+    await installSyncCapture(db);
+    await backfillSyncColumns(db);
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -993,6 +1021,28 @@ class DatabaseHelper {
         ''');
         // Add custom_fields column to invoices
         await db.execute("ALTER TABLE invoices ADD COLUMN custom_fields TEXT DEFAULT ''");
+      });
+    }
+
+    if (oldVersion < 45) {
+      // Sync foundation (dbplan.md §3.2): sync columns on business tables,
+      // outbox + state tables, change-capture triggers, backfills. Purely
+      // additive; the sync engine stays dormant until a cloud account is
+      // linked, so nothing about pre-sync behavior changes.
+      await _runMigrationStep(db, 45, 'add_sync_columns', () async {
+        for (final table in syncTableOrder) {
+          await addSyncColumns(db, table,
+              withCloudId: cloudIdTables.contains(table),
+              withDeletedAt: table == 'customers' || table == 'products');
+        }
+      });
+
+      await _runMigrationStep(db, 45, 'install_sync_capture', () async {
+        await installSyncCapture(db);
+      });
+
+      await _runMigrationStep(db, 45, 'backfill_sync_columns', () async {
+        await backfillSyncColumns(db);
       });
     }
   }

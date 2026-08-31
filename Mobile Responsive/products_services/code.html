@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Products &amp; Services - ApexInv</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-high": "#e5e8ee",
+                        "on-primary-fixed-variant": "#24467c",
+                        "surface-container": "#ebeef4",
+                        "on-secondary-fixed": "#002110",
+                        "on-secondary-fixed-variant": "#00522e",
+                        "on-secondary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "inverse-surface": "#2d3135",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary": "#046d3f",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed": "#d3e4f9",
+                        "outline-variant": "#c4c6d1",
+                        "primary-fixed": "#d7e2ff",
+                        "tertiary-fixed-dim": "#b7c8dc",
+                        "surface-variant": "#dfe3e8",
+                        "secondary-fixed": "#9df5bc",
+                        "surface": "#f7f9ff",
+                        "primary": "#00193c",
+                        "tertiary-container": "#20303f",
+                        "primary-fixed-dim": "#abc7ff",
+                        "on-background": "#181c20",
+                        "surface-dim": "#d7dae0",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-low": "#f1f4fa",
+                        "on-primary-fixed": "#001b3f",
+                        "outline": "#747781",
+                        "on-tertiary-fixed-variant": "#384858",
+                        "on-surface": "#181c20",
+                        "error": "#ba1a1a",
+                        "on-secondary-container": "#0e7143",
+                        "inverse-on-surface": "#eef1f7",
+                        "primary-container": "#002d62",
+                        "on-tertiary-container": "#8798aa",
+                        "surface-bright": "#f7f9ff",
+                        "on-primary-container": "#7796d1",
+                        "background": "#f7f9ff",
+                        "secondary-fixed-dim": "#81d9a1",
+                        "on-surface-variant": "#43474f",
+                        "tertiary": "#0a1b2a",
+                        "on-error-container": "#93000a",
+                        "inverse-primary": "#abc7ff",
+                        "surface-tint": "#3e5e95",
+                        "surface-container-highest": "#dfe3e8",
+                        "secondary-container": "#9af2b9",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-fixed": "#0c1d2b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "unit": "4px",
+                        "xl": "32px",
+                        "margin-tablet": "24px",
+                        "sm": "8px",
+                        "margin-mobile": "16px",
+                        "gutter": "16px",
+                        "md": "16px",
+                        "xs": "4px",
+                        "pb-safe": "env(safe-area-inset-bottom, 20px)"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "title-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-lg": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "headline-lg-mobile": ["Inter"],
+                        "title-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["24px", { "lineHeight": "32px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "400" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.5px", "fontWeight": "500" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0.25px", "fontWeight": "400" }],
+                        "title-md": ["16px", { "lineHeight": "24px", "letterSpacing": "0.15px", "fontWeight": "500" }],
+                        "headline-md": ["28px", { "lineHeight": "36px", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0.5px", "fontWeight": "400" }],
+                        "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.1px", "fontWeight": "500" }],
+                        "display-lg": ["57px", { "lineHeight": "64px", "letterSpacing": "-0.25px", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "34px", "fontWeight": "600" }],
+                        "title-lg": ["22px", { "lineHeight": "28px", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen pt-14 pb-16 antialiased">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface dark:bg-surface border-b border-outline-variant/12 flex justify-between items-center h-14 px-margin-mobile transition-colors duration-200">
+<button class="text-primary dark:text-primary-fixed hover:bg-surface-container-low dark:hover:bg-surface-container-highest p-2 rounded-full transition-colors duration-200 active:opacity-70 flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h1 class="font-title-lg text-title-lg font-bold text-primary dark:text-primary-fixed">ApexInv</h1>
+<button class="text-primary dark:text-primary-fixed hover:bg-surface-container-low dark:hover:bg-surface-container-highest p-2 rounded-full transition-colors duration-200 active:opacity-70 flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="refresh">refresh</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="px-margin-mobile py-md flex flex-col gap-md max-w-screen-md mx-auto">
+<!-- Page Title & Search -->
+<div class="flex flex-col gap-sm">
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Products &amp; Services</h2>
+<div class="relative w-full">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-outline">search</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-2 border border-outline-variant/50 rounded bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary font-body-md text-body-md transition-shadow" placeholder="Search by name, SKU..." type="text"/>
+</div>
+</div>
+<!-- Filter Chips -->
+<div class="flex gap-sm overflow-x-auto pb-2 scrollbar-hide -mx-margin-mobile px-margin-mobile">
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-primary-container text-on-primary-container font-label-lg text-label-lg border border-transparent shadow-sm">All</button>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-lg text-label-lg border border-outline-variant/30 hover:bg-surface-container-high transition-colors">Products</button>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-surface-container text-on-surface-variant font-label-lg text-label-lg border border-outline-variant/30 hover:bg-surface-container-high transition-colors">Services</button>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-error-container/30 text-error font-label-lg text-label-lg border border-error/30 hover:bg-error-container/50 transition-colors">Low Stock</button>
+</div>
+<!-- Product Grid (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<!-- Product Card 1: Normal Product -->
+<div class="bg-surface-container-lowest rounded-xl p-md flex flex-col gap-sm border border-outline-variant/12 shadow-[0_1px_3px_rgba(0,0,0,0.05)] relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="flex justify-between items-start pl-xs">
+<div class="flex flex-col">
+<span class="font-title-md text-title-md text-on-surface">Ergonomic Office Chair</span>
+<span class="font-body-md text-body-md text-on-surface-variant">SKU: CHR-001</span>
+</div>
+<span class="font-title-md text-title-md text-primary">$249.99</span>
+</div>
+<div class="flex justify-between items-end mt-auto pl-xs pt-sm border-t border-outline-variant/10">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">inventory_2</span>
+<span class="font-label-lg text-label-lg">45 pcs</span>
+</div>
+<button class="text-primary hover:bg-surface-container p-1.5 rounded transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</div>
+</div>
+<!-- Product Card 2: Low Stock Warning -->
+<div class="bg-surface-container-lowest rounded-xl p-md flex flex-col gap-sm border border-error/20 shadow-[0_1px_3px_rgba(0,0,0,0.05)] relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-error"></div>
+<div class="flex justify-between items-start pl-xs">
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-title-md text-title-md text-on-surface">Standing Desk Pro</span>
+<span class="bg-error-container text-on-error-container text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Low</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface-variant">SKU: DSK-042</span>
+</div>
+<span class="font-title-md text-title-md text-primary">$499.00</span>
+</div>
+<div class="flex justify-between items-end mt-auto pl-xs pt-sm border-t border-outline-variant/10">
+<div class="flex items-center gap-xs text-error font-medium">
+<span class="material-symbols-outlined text-[18px]">warning</span>
+<span class="font-label-lg text-label-lg">3 pcs</span>
+</div>
+<button class="text-primary hover:bg-surface-container p-1.5 rounded transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</div>
+</div>
+<!-- Service Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl p-md flex flex-col gap-sm border border-outline-variant/12 shadow-[0_1px_3px_rgba(0,0,0,0.05)] relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary"></div>
+<div class="flex justify-between items-start pl-xs">
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-title-md text-title-md text-on-surface">IT Consultation</span>
+<span class="bg-secondary-container text-on-secondary-container text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Service</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface-variant">SKU: SRV-101</span>
+</div>
+<span class="font-title-md text-title-md text-primary">$150/hr</span>
+</div>
+<div class="flex justify-between items-end mt-auto pl-xs pt-sm border-t border-outline-variant/10">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">schedule</span>
+<span class="font-label-lg text-label-lg">Hourly Rate</span>
+</div>
+<button class="text-primary hover:bg-surface-container p-1.5 rounded transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</div>
+</div>
+<!-- Product Card 3: Normal Product -->
+<div class="bg-surface-container-lowest rounded-xl p-md flex flex-col gap-sm border border-outline-variant/12 shadow-[0_1px_3px_rgba(0,0,0,0.05)] relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="flex justify-between items-start pl-xs">
+<div class="flex flex-col">
+<span class="font-title-md text-title-md text-on-surface">Wireless Mouse v2</span>
+<span class="font-body-md text-body-md text-on-surface-variant">SKU: MS-002</span>
+</div>
+<span class="font-title-md text-title-md text-primary">$59.99</span>
+</div>
+<div class="flex justify-between items-end mt-auto pl-xs pt-sm border-t border-outline-variant/10">
+<div class="flex items-center gap-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">inventory_2</span>
+<span class="font-label-lg text-label-lg">120 pcs</span>
+</div>
+<button class="text-primary hover:bg-surface-container p-1.5 rounded transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Floating Action Button (FAB) -->
+<button class="fixed right-margin-mobile bottom-[calc(env(safe-area-inset-bottom,20px)+80px)] w-14 h-14 bg-primary-container text-on-primary-container rounded-2xl flex items-center justify-center shadow-[0_4px_8px_rgba(0,0,0,0.15)] hover:bg-[#00387a] transition-all duration-200 active:scale-95 z-40">
+<span class="material-symbols-outlined text-[24px]">add</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 px-2 pb-safe bg-surface-container dark:bg-surface-container border-t border-outline-variant/12 shadow-sm rounded-t-none">
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-md text-label-md mt-1">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+<span class="font-label-md text-label-md mt-1">New</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-label-md text-label-md mt-1">Invoices</span>
+</button>
+<!-- Products & Services isn't an exact match in the nav labels ["Home", "New", "Invoices", "Customers", "More"], 
+             but it's a primary ecosystem screen likely under "More" or conceptually part of the main app navigation. 
+             Setting 'More' as active to demonstrate semantic matching when an exact label isn't present for a secondary core feature. -->
+<button class="flex flex-col items-center justify-center bg-secondary-container dark:bg-primary-container text-on-secondary-container dark:text-on-primary-container rounded-full px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+<span class="font-label-md text-label-md mt-1">More</span>
+</button>
+</nav>
+</body></html>

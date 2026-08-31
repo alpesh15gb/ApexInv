@@ -43,7 +43,6 @@ Future<void> main() async {
     boldItalic: font(PdfFontAssets.boldItalic),
     fontFallback: [
       font(PdfFontAssets.symbolsFallback),
-      font(PdfFontAssets.interRegular),
       font(PdfFontAssets.arabicFallback),
       font(PdfFontAssets.arabicFallbackBold),
       font(PdfFontAssets.sinhalaFallback),
@@ -159,8 +158,6 @@ Map<String, Uint8List> _loadFontBytes() {
     PdfFontAssets.myanmarFallbackBold,
     // Unicode symbols
     PdfFontAssets.symbolsFallback,
-    // Inter
-    PdfFontAssets.interRegular,
   ];
 
   return {

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>ApexInv - More</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#006493",
+                        "on-primary": "#ffffff",
+                        "primary-container": "#cae6ff",
+                        "on-primary-container": "#001e30",
+                        secondary: "#50606e",
+                        "on-secondary": "#ffffff",
+                        "secondary-container": "#d3e5f5",
+                        "on-secondary-container": "#0c1d29",
+                        tertiary: "#65587b",
+                        "on-tertiary": "#ffffff",
+                        "tertiary-container": "#ebdcf9",
+                        "on-tertiary-container": "#201634",
+                        error: "#ba1a1a",
+                        "on-error": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-error-container": "#410002",
+                        background: "#fcfcff",
+                        "on-background": "#1a1c1e",
+                        surface: "#fcfcff",
+                        "on-surface": "#1a1c1e",
+                        "surface-variant": "#dde3ea",
+                        "on-surface-variant": "#41474d",
+                        outline: "#72777d",
+                        "outline-variant": "#c1c7ce",
+                        shadow: "#000000",
+                        scrim: "#000000",
+                        inverseSurface: "#2e3133",
+                        inverseOnSurface: "#f0f0f4",
+                        inversePrimary: "#8dcdff",
+                        primaryFixed: "#cae6ff",
+                        onPrimaryFixed: "#001e30",
+                        primaryFixedDim: "#8dcdff",
+                        onPrimaryFixedVariant: "#004b70",
+                        secondaryFixed: "#d3e5f5",
+                        onSecondaryFixed: "#0c1d29",
+                        secondaryFixedDim: "#b7c9d9",
+                        onSecondaryFixedVariant: "#384956",
+                        tertiaryFixed: "#ebdcf9",
+                        onTertiaryFixed: "#201634",
+                        tertiaryFixedDim: "#cfc0e0",
+                        onTertiaryFixedVariant: "#4d4162",
+                        surfaceDim: "#d8dadd",
+                        surfaceBright: "#f8f9fc",
+                        surfaceContainerLowest: "#ffffff",
+                        surfaceContainerLow: "#f2f3f6",
+                        surfaceContainer: "#eceef1",
+                        surfaceContainerHigh: "#e7e8eb",
+                        surfaceContainerHighest: "#e1e2e5"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "none": "0",
+                        "sm": "0.125rem",
+                        "md": "0.375rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "3xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Public Sans", "sans-serif"],
+                        "display": ["Public Sans", "sans-serif"],
+                        "body": ["Public Sans", "sans-serif"],
+                        "label": ["Public Sans", "sans-serif"],
+                        "title": ["Public Sans", "sans-serif"]
+                    },
+                    fontSize: {
+                        "display-lg": ["3.571rem", { lineHeight: "4rem", letterSpacing: "-0.016em", fontWeight: "400" }],
+                        "display-md": ["3.214rem", { lineHeight: "3.714rem", letterSpacing: "0em", fontWeight: "400" }],
+                        "display-sm": ["2.571rem", { lineHeight: "3.143rem", letterSpacing: "0em", fontWeight: "400" }],
+                        "headline-lg": ["2.286rem", { lineHeight: "2.857rem", letterSpacing: "0em", fontWeight: "400" }],
+                        "headline-md": ["2rem", { lineHeight: "2.571rem", letterSpacing: "0em", fontWeight: "400" }],
+                        "headline-sm": ["1.714rem", { lineHeight: "2.286rem", letterSpacing: "0em", fontWeight: "400" }],
+                        "title-lg": ["1.571rem", { lineHeight: "2rem", letterSpacing: "0em", fontWeight: "400" }],
+                        "title-md": ["1.143rem", { lineHeight: "1.714rem", letterSpacing: "0.011em", fontWeight: "500" }],
+                        "title-sm": ["1rem", { lineHeight: "1.429rem", letterSpacing: "0.007em", fontWeight: "500" }],
+                        "body-lg": ["1.143rem", { lineHeight: "1.714rem", letterSpacing: "0.036em", fontWeight: "400" }],
+                        "body-md": ["1rem", { lineHeight: "1.429rem", letterSpacing: "0.018em", fontWeight: "400" }],
+                        "body-sm": ["0.857rem", { lineHeight: "1.143rem", letterSpacing: "0.029em", fontWeight: "400" }],
+                        "label-lg": ["1rem", { lineHeight: "1.429rem", letterSpacing: "0.007em", fontWeight: "500" }],
+                        "label-md": ["0.857rem", { lineHeight: "1.143rem", letterSpacing: "0.036em", fontWeight: "500" }],
+                        "label-sm": ["0.786rem", { lineHeight: "1.143rem", letterSpacing: "0.036em", fontWeight: "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            -webkit-tap-highlight-color: transparent;
+        }
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .pt-safe {
+            padding-top: env(safe-area-inset-top);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body min-h-screen pt-14 pb-20 pt-safe">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface dark:bg-surface border-b border-outline-variant/12 flex justify-between items-center h-14 px-4 pt-safe transition-colors duration-200">
+<button aria-label="Menu" class="p-2 rounded-full hover:bg-surface-container-low active:opacity-70 text-on-surface-variant transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<div class="font-title-lg text-title-lg font-bold text-primary dark:text-primary-fixed truncate">
+            ApexInv
+        </div>
+<button aria-label="Refresh" class="p-2 rounded-full hover:bg-surface-container-low active:opacity-70 text-on-surface-variant transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="refresh">refresh</span>
+</button>
+</header>
+<!-- Main Content -->
+<main class="w-full max-w-2xl mx-auto px-4 py-6 space-y-6">
+<h1 class="font-headline-md text-headline-md font-semibold text-on-surface mb-6">More Options</h1>
+<!-- Group: Documents -->
+<section class="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-sm border border-outline-variant/20">
+<h2 class="px-6 py-4 font-label-lg text-label-lg font-semibold text-primary uppercase tracking-wider bg-surface-container-low/50">Documents</h2>
+<div class="divide-y divide-outline-variant/10">
+<a class="flex items-center px-6 py-4 hover:bg-surface-container-low active:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined text-on-surface-variant mr-4 group-hover:text-primary transition-colors">request_quote</span>
+<span class="flex-1 font-body-lg text-body-lg text-on-surface">Quotations</span>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-on-surface transition-colors">chevron_right</span>
+</a>
+<a class="flex items-center px-6 py-4 hover:bg-surface-container-low active:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined text-on-surface-variant mr-4 group-hover:text-primary transition-colors">receipt_long</span>
+<span class="flex-1 font-body-lg text-body-lg text-on-surface">Receipts</span>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-on-surface transition-colors">chevron_right</span>
+</a>
+<a class="flex items-center px-6 py-4 hover:bg-surface-container-low active:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined text-on-surface-variant mr-4 group-hover:text-primary transition-colors">payments</span>
+<span class="flex-1 font-body-lg text-body-lg text-on-surface">Expenses</span>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-on-surface transition-colors">chevron_right</span>
+</a>
+<a class="flex items-center px-6 py-4 hover:bg-surface-container-low active:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined text-on-surface-variant mr-4 group-hover:text-primary transition-colors">shopping_cart</span>
+<span class="flex-1 font-body-lg text-body-lg text-on-surface">Purchase Orders</span>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-on-surface transition-colors">chevron_right</span>
+</a>
+</div>
+</section>
+<!-- Group: Analytics & Inventory -->
+<section class="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-sm border border-outline-variant/20">
+<h2 class="px-6 py-4 font-label-lg text-label-lg font-semibold text-primary uppercase tracking-wider bg-surface-container-low/50">Analytics &amp; Data</h2>
+<div class="divide-y divide-outline-variant/10">
+<a class="flex items-center px-6 py-4 hover:bg-surface-container-low active:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined text-on-surface-variant mr-4 group-hover:text-primary transition-colors">bar_chart</span>
+<span class="flex-1 font-body-lg text-body-lg text-on-surface">Reports</span>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-on-surface transition-colors">chevron_right</span>
+</a>
+<a class="flex items-center px-6 py-4 hover:bg-surface-container-low active:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined text-on-surface-variant mr-4 group-hover:text-primary transition-colors">inventory_2</span>
+<span class="flex-1 font-body-lg text-body-lg text-on-surface">Products &amp; Services</span>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-on-surface transition-colors">chevron_right</span>
+</a>
+</div>
+</section>
+<!-- Group: Account & Settings -->
+<section class="bg-surface-container-lowest rounded-3xl overflow-hidden shadow-sm border border-outline-variant/20 mb-8">
+<h2 class="px-6 py-4 font-label-lg text-label-lg font-semibold text-primary uppercase tracking-wider bg-surface-container-low/50">Preferences</h2>
+<div class="divide-y divide-outline-variant/10">
+<a class="flex items-center px-6 py-4 hover:bg-surface-container-low active:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined text-on-surface-variant mr-4 group-hover:text-primary transition-colors">settings</span>
+<span class="flex-1 font-body-lg text-body-lg text-on-surface">Settings</span>
+<span class="material-symbols-outlined text-outline-variant group-hover:text-on-surface transition-colors">chevron_right</span>
+</a>
+<a class="flex items-center px-6 py-4 hover:bg-error-container/20 active:bg-error-container/40 transition-colors group" href="#">
+<span class="material-symbols-outlined text-error mr-4">logout</span>
+<span class="flex-1 font-body-lg text-body-lg text-error font-medium">Logout</span>
+</a>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 px-2 pb-safe bg-surface-container dark:bg-surface-container border-t border-outline-variant/12 shadow-sm rounded-t-none md:hidden">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95 rounded-xl group w-16" href="#">
+<span class="material-symbols-outlined mb-1 group-hover:text-on-surface" data-icon="home">home</span>
+<span class="font-label-sm text-[10px] tracking-wide group-hover:text-on-surface">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95 rounded-xl group w-16" href="#">
+<span class="material-symbols-outlined mb-1 group-hover:text-on-surface" data-icon="add_circle">add_circle</span>
+<span class="font-label-sm text-[10px] tracking-wide group-hover:text-on-surface">New</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95 rounded-xl group w-16" href="#">
+<span class="material-symbols-outlined mb-1 group-hover:text-on-surface" data-icon="description">description</span>
+<span class="font-label-sm text-[10px] tracking-wide group-hover:text-on-surface">Invoices</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95 rounded-xl group w-16" href="#">
+<span class="material-symbols-outlined mb-1 group-hover:text-on-surface" data-icon="group">group</span>
+<span class="font-label-sm text-[10px] tracking-wide group-hover:text-on-surface">Customers</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-primary-container text-on-secondary-container dark:text-on-primary-container rounded-full px-4 py-1 hover:bg-surface-container-high transition-all duration-200 active:scale-95 w-16 h-14" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="more_horiz" data-weight="fill" style="font-variation-settings: 'FILL' 1;">more_horiz</span>
+<span class="font-label-sm text-[10px] tracking-wide font-bold">More</span>
+</a>
+</nav>
+</body></html>

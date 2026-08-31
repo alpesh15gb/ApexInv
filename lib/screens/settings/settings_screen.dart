@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
@@ -7,6 +8,7 @@ import 'package:apexbooks/providers/app_config_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/screens/settings/accessibility_screen.dart';
 import 'package:apexbooks/screens/settings/backup_management_screen.dart';
+import 'package:apexbooks/screens/settings/cloud_sync_screen.dart';
 // import 'package:apexbooks/screens/settings/invoice_settings_screen.dart';
 import 'package:apexbooks/screens/settings/invoice_settings_screen_v2.dart';
 // import 'package:apexbooks/screens/settings/pdf_settings_screen.dart';
@@ -30,6 +32,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsDestination {
+  final IconData icon;
+  final String label;
+  final bool showUpdateDot;
+  const _SettingsDestination(this.icon, this.label, {this.showUpdateDot = false});
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
@@ -160,6 +169,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Info itself shifts one further out.
     final int accessibilityPosition = customizeIndex + 1;
     final int softwareInfoPosition = customizeIndex + 2;
+    // Cloud Sync rides just after Customize (desktop edition only — the
+    // cloud edition's data is already server-side).
+    final int cloudSyncPosition = cfg.isCloud ? -1 : softwareInfoPosition + 1;
     // When kIsCloud, Backup (1) and Users (2) tabs are hidden. If the edition
     // also supplies an extraSettingsTab (e.g. cloud's Team Management), it
     // takes rail slot 1 and maps to canonical case 7; everything after it
@@ -174,6 +186,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       idx = 9;
     } else if (_selectedIndex == softwareInfoPosition) {
       idx = 5;
+    } else if (_selectedIndex == cloudSyncPosition) {
+      idx = 10;
     } else if (hasExtraTab && _selectedIndex == 1) {
       idx = 7;
     } else if (!cfg.isCloud) {
@@ -221,10 +235,97 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         return const ProductColumnsSettingsScreen();
       case 9:
         return const AccessibilityScreen();
+      case 10:
+        return const CloudSyncScreen();
       default:
         return _buildDummySection(
             AppLocalizations.of(context)!.invoiceSettingsAppBarTitle);
     }
+  }
+
+  /// Section list shared by the desktop NavigationRail and the mobile chip
+  /// bar. Index here == rail index == `_selectedIndex`.
+  List<_SettingsDestination> _destinations(
+      AppEditionConfig cfg, AppLocalizations l10n) {
+    final showUpdateDot = cfg.enableUpdateCheck && _updateInfo?.hasUpdate == true;
+    return [
+      _SettingsDestination(
+          Icons.business, l10n.settingsNavCompanyInfoLabel),
+      if (cfg.extraSettingsTab != null)
+        _SettingsDestination(
+            cfg.extraSettingsTabIcon ?? Icons.group,
+            cfg.extraSettingsTabLabel ?? l10n.settingsNavTeamLabel),
+      if (!cfg.isCloud)
+        _SettingsDestination(Icons.backup, l10n.settingsNavBackupLabel),
+      if (!cfg.isCloud)
+        _SettingsDestination(Icons.people, l10n.settingsNavUsersLabel),
+      _SettingsDestination(Icons.settings, l10n.pdfSettingsTitle),
+      _SettingsDestination(
+          Icons.file_present, l10n.invoiceSettingsAppBarTitle),
+      _SettingsDestination(Icons.view_column_outlined,
+          l10n.settingsNavProductDetailsLabel),
+      _SettingsDestination(Icons.tune_rounded, l10n.settingsNavCustomizeLabel),
+      _SettingsDestination(Icons.accessibility_new_rounded,
+          l10n.settingsNavAccessibilityLabel),
+      if (!cfg.isCloud)
+        const _SettingsDestination(Icons.cloud_sync_outlined, 'Cloud Sync'),
+      _SettingsDestination(Icons.info_outline, l10n.settingsNavSoftwareInfoLabel,
+          showUpdateDot: showUpdateDot),
+    ];
+  }
+
+  /// Horizontal scrolling section chips for compact/medium windows —
+  /// replaces the NavigationRail so content gets the full width.
+  Widget _buildMobileSectionBar(List<_SettingsDestination> destinations) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        border: Border(
+          bottom:
+              BorderSide(color: theme.colorScheme.outlineVariant, width: 1),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: SizedBox(
+          height: 52,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            itemCount: destinations.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final selected = _selectedIndex == i;
+              final d = destinations[i];
+              return ChoiceChip(
+                selected: selected,
+                showCheckmark: false,
+                label: Text(d.label),
+                avatar: Icon(
+                  d.icon,
+                  size: 16,
+                  color: selected
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+                labelStyle: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  color: selected
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+                selectedColor: theme.primaryColor,
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                onSelected: (_) => setState(() => _selectedIndex = i),
+              );
+            },
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -236,84 +337,58 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            labelType: NavigationRailLabelType.all,
-            onDestinationSelected: (int index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
-            destinations: [
-              NavigationRailDestination(
-                icon: const Icon(Icons.business),
-                label: Text(l10n.settingsNavCompanyInfoLabel),
-              ),
-              if (cfg.extraSettingsTab != null)
-                NavigationRailDestination(
-                  icon: Icon(cfg.extraSettingsTabIcon ?? Icons.group),
-                  label: Text(
-                      cfg.extraSettingsTabLabel ?? l10n.settingsNavTeamLabel),
-                ),
-              if (!cfg.isCloud)
-                NavigationRailDestination(
-                  icon: const Icon(Icons.backup),
-                  label: Text(l10n.settingsNavBackupLabel),
-                ),
-              if (!cfg.isCloud)
-                NavigationRailDestination(
-                  icon: const Icon(Icons.people),
-                  label: Text(l10n.settingsNavUsersLabel),
-                ),
-              NavigationRailDestination(
-                icon: const Icon(Icons.settings),
-                label: Text(l10n.pdfSettingsTitle),
-              ),
-              NavigationRailDestination(
-                icon: const Icon(Icons.file_present),
-                label: Text(l10n.invoiceSettingsAppBarTitle),
-              ),
-              NavigationRailDestination(
-                icon: const Icon(Icons.view_column_outlined),
-                label: Text(l10n.settingsNavProductDetailsLabel),
-              ),
-              NavigationRailDestination(
-                icon: const Icon(Icons.tune_rounded),
-                label: Text(l10n.settingsNavCustomizeLabel),
-              ),
-              NavigationRailDestination(
-                icon: const Icon(Icons.accessibility_new_rounded),
-                label: Text(l10n.settingsNavAccessibilityLabel),
-              ),
-              NavigationRailDestination(
-                icon: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    const Icon(Icons.info_outline),
-                    if (cfg.enableUpdateCheck && _updateInfo?.hasUpdate == true)
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.orange,
-                            shape: BoxShape.circle,
-                          ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final destinations = _destinations(cfg, l10n);
+          if (constraints.maxWidth >= Breakpoints.expandedMin) {
+            return Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  labelType: NavigationRailLabelType.all,
+                  onDestinationSelected: (int index) {
+                    setState(() {
+                      _selectedIndex = index;
+                    });
+                  },
+                  destinations: [
+                    for (final d in destinations)
+                      NavigationRailDestination(
+                        icon: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(d.icon),
+                            if (d.showUpdateDot)
+                              Positioned(
+                                right: -4,
+                                top: -4,
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.orange,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
+                        label: Text(d.label),
                       ),
                   ],
                 ),
-                label: Text(l10n.settingsNavSoftwareInfoLabel),
-              ),
+                const VerticalDivider(thickness: 1, width: 1),
+                Expanded(child: _buildContent(cfg)),
+              ],
+            );
+          }
+          return Column(
+            children: [
+              _buildMobileSectionBar(destinations),
+              Expanded(child: _buildContent(cfg)),
             ],
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
-          Expanded(child: _buildContent(cfg)),
-        ],
+          );
+        },
       ),
     );
   }

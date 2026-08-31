@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Expense &amp; Purchase Tracker - TaxCompliance Pro</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary": "#000666",
+                      "inverse-on-surface": "#f2eff8",
+                      "on-surface-variant": "#454652",
+                      "on-surface": "#1b1b21",
+                      "error": "#ba1a1a",
+                      "inverse-primary": "#bdc2ff",
+                      "surface-container": "#efecf5",
+                      "on-background": "#1b1b21",
+                      "on-secondary-fixed": "#002116",
+                      "surface-container-high": "#eae7ef",
+                      "tertiary-fixed-dim": "#c5c7c8",
+                      "secondary-fixed-dim": "#8bd6b6",
+                      "on-tertiary": "#ffffff",
+                      "surface-dim": "#dbd9e1",
+                      "outline": "#767683",
+                      "on-tertiary-container": "#969899",
+                      "surface": "#fbf8ff",
+                      "primary-container": "#1a237e",
+                      "on-secondary-container": "#237157",
+                      "secondary-container": "#a6f2d1",
+                      "surface-bright": "#fbf8ff",
+                      "on-primary-fixed": "#000767",
+                      "surface-container-highest": "#e4e1ea",
+                      "outline-variant": "#c6c5d4",
+                      "error-container": "#ffdad6",
+                      "on-primary-container": "#8690ee",
+                      "on-tertiary-fixed-variant": "#454748",
+                      "tertiary": "#191b1c",
+                      "primary-fixed": "#e0e0ff",
+                      "inverse-surface": "#303036",
+                      "background": "#fbf8ff",
+                      "on-error": "#ffffff",
+                      "on-primary": "#ffffff",
+                      "on-tertiary-fixed": "#191c1d",
+                      "on-error-container": "#93000a",
+                      "primary-fixed-dim": "#bdc2ff",
+                      "on-secondary-fixed-variant": "#00513b",
+                      "surface-container-low": "#f5f2fb",
+                      "surface-tint": "#4c56af",
+                      "on-primary-fixed-variant": "#343d96",
+                      "tertiary-fixed": "#e1e3e4",
+                      "on-secondary": "#ffffff",
+                      "tertiary-container": "#2d3031",
+                      "surface-variant": "#e4e1ea",
+                      "secondary-fixed": "#a6f2d1",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary": "#1b6b51"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "xl": "32px",
+                      "xs": "4px",
+                      "sm": "8px",
+                      "lg": "24px",
+                      "container-margin": "16px",
+                      "md": "16px",
+                      "gutter": "12px"
+              },
+              "fontFamily": {
+                      "headline-md": ["Inter"],
+                      "headline-sm": ["Inter"],
+                      "mono-data": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "body-md": ["Inter"],
+                      "headline-lg": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "mono-data": ["14px", {"lineHeight": "20px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen pb-24 md:pb-0 flex flex-col md:flex-row">
+<!-- Desktop Navigation Drawer (Hidden on Mobile) -->
+<nav class="hidden md:flex flex-col h-screen w-80 rounded-r-xl bg-surface dark:bg-surface-container shadow-lg dark:shadow-none py-lg sticky top-0 border-r border-outline-variant">
+<!-- Drawer Header -->
+<div class="px-container-margin mb-8 flex items-center space-x-4 left_align">
+<img class="w-12 h-12 rounded-full object-cover" data-alt="A professional corporate logo design for 'Acme Solutions' in a circular avatar format, set against a pristine white background. The logo features sharp, modern geometric lines typical of high-end financial software branding, utilizing a refined color palette of deep navy blue and crisp white to convey reliability and precision. Bright, flat studio lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBSDjNzO2jDnvS3CWbZ7454a6x_JgKmmwRKk-cxnxfFyATlV5UEo1U8Zfd-kCl2mj5Gb5aVPpxFHQ3cynmOA3rrNLXGH-RspjIOryNHG-IqlbrvAHNAQL_iJS7sroLI6Q3MdwHeCBHmscqd16YA4tqxs7mqx-0O-2Qx7l8yPtnOZTQ0MSsMj7ogBzdO47SJ95By7uQsDGlukRLeqMRKoZ8Z6DSqDbbGHjAXi7r681i0flJ6mf9OZ2dHsA"/>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-primary">Acme Solutions</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">GSTIN: 27AAAAA0000A1Z5</p>
+<span class="inline-block mt-1 font-label-sm text-label-sm bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded">Premium Plan</span>
+</div>
+</div>
+<!-- Drawer Items -->
+<div class="flex flex-col space-y-2 flex-grow overflow-y-auto">
+<a class="flex items-center space-x-3 text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full mx-2 px-4 py-3 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">business</span>
+<span class="font-body-md text-body-md">Business Profile</span>
+</a>
+<a class="flex items-center space-x-3 text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full mx-2 px-4 py-3 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">GST Settings</span>
+</a>
+<a class="flex items-center space-x-3 bg-primary-container dark:bg-primary text-on-primary-container dark:text-on-primary font-bold rounded-full mx-2 px-4 py-3 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">account_balance_wallet</span>
+<span class="font-body-md text-body-md">Ledger Reports</span>
+</a>
+<a class="flex items-center space-x-3 text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full mx-2 px-4 py-3 transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">person_add</span>
+<span class="font-body-md text-body-md">User Management</span>
+</a>
+<a class="flex items-center space-x-3 text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full mx-2 px-4 py-3 transition-all duration-200 ease-in-out mt-auto" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-body-md text-body-md">Help &amp; Support</span>
+</a>
+<a class="flex items-center space-x-3 text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full mx-2 px-4 py-3 transition-all duration-200 ease-in-out mb-4" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-body-md text-body-md">Logout</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-grow flex flex-col">
+<!-- TopAppBar (Mobile & Desktop Header) -->
+<header class="w-full top-0 sticky z-40 bg-surface dark:bg-surface-dim border-b border-outline-variant dark:border-outline flex items-center justify-between px-container-margin py-sm">
+<div class="flex items-center space-x-4">
+<img class="w-8 h-8 rounded-full md:hidden object-cover" data-alt="A small, professional corporate logo thumbnail for 'Acme Solutions', featuring sharp, modern geometric lines in navy blue on a crisp white background. Bright, even studio lighting optimized for high-end financial app UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmWHSsyMYXUnrPB51ekwivCxj7hYX74GxYFx6ZamaZAC_QL2XZbOe_dB-U2hPf1q1ubh2TbdY-Z6WO9ok7jTaXy9GdiRa1KAVknNSvwBNTCsBsFkObK4mJFMuOFz6P9RNeRhotOTdeXjub4tSerNNdn-KE5IJky9-jby6yF9jeTDTiPi_ivJEJatZc_-ZYjxbLC3SlKHBrDSReLExhIaMTSKLMeLg2vuOIO_4Jk18U4fwtziMkhpq0wg"/>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">TaxCompliance Pro</h1>
+</div>
+<button class="text-primary dark:text-primary-fixed hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors rounded-full p-2 active:opacity-80 transition-opacity">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<!-- Canvas -->
+<div class="p-container-margin md:p-xl max-w-7xl mx-auto w-full flex-grow space-y-lg">
+<!-- Page Header & Action -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-background">Expense Tracker</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Manage purchases and track Input Tax Credit (ITC).</p>
+</div>
+<button class="bg-primary-container text-white px-6 py-3 rounded flex items-center space-x-2 hover:bg-primary transition-colors shadow-sm">
+<span class="material-symbols-outlined">add</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wide">Add Expense</span>
+</button>
+</div>
+<!-- Summary Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-gutter">
+<!-- Total ITC Card -->
+<div class="bg-surface-container-low border border-outline-variant rounded-xl p-md flex flex-col justify-between h-32 relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-secondary-container/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex justify-between items-center z-10">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Total ITC Available</h3>
+<span class="material-symbols-outlined text-secondary">verified_user</span>
+</div>
+<div class="z-10">
+<span class="font-headline-lg text-headline-lg text-primary">₹ 45,250</span>
+<p class="font-body-sm text-xs text-on-surface-variant mt-1">For Current Month (Oct 2023)</p>
+</div>
+</div>
+<!-- Total Expenses Card -->
+<div class="bg-surface-container-low border border-outline-variant rounded-xl p-md flex flex-col justify-between h-32">
+<div class="flex justify-between items-center">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Total Expenses</h3>
+<span class="material-symbols-outlined text-outline">payments</span>
+</div>
+<div>
+<span class="font-headline-lg text-headline-lg text-on-background">₹ 2,45,000</span>
+<p class="font-body-sm text-xs text-on-surface-variant mt-1">Excluding GST</p>
+</div>
+</div>
+<!-- Pending ITC Card -->
+<div class="bg-surface-container-low border border-outline-variant rounded-xl p-md flex flex-col justify-between h-32">
+<div class="flex justify-between items-center">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Pending Reconciliation</h3>
+<span class="material-symbols-outlined text-error">warning</span>
+</div>
+<div>
+<span class="font-headline-lg text-headline-lg text-error">₹ 12,400</span>
+<p class="font-body-sm text-xs text-on-surface-variant mt-1">Action Required</p>
+</div>
+</div>
+</div>
+<!-- Filters & Search -->
+<div class="flex flex-col sm:flex-row gap-4 bg-surface-container-lowest p-sm border border-outline-variant rounded-lg">
+<div class="relative flex-grow">
+<span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-outline">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border-none focus:ring-0 font-body-md text-body-md text-on-background placeholder-on-surface-variant" placeholder="Search by Vendor, Invoice No..." type="text"/>
+</div>
+<div class="w-px bg-outline-variant hidden sm:block"></div>
+<div class="flex gap-2">
+<select class="bg-surface-container-lowest border-none focus:ring-0 font-body-md text-body-md text-on-background cursor-pointer">
+<option>Current Month</option>
+<option>Last Month</option>
+<option>Q2 2023</option>
+</select>
+<div class="w-px bg-outline-variant"></div>
+<select class="bg-surface-container-lowest border-none focus:ring-0 font-body-md text-body-md text-on-background cursor-pointer">
+<option>All Categories</option>
+<option>Rent</option>
+<option>Utilities</option>
+<option>IT Equipment</option>
+</select>
+</div>
+</div>
+<!-- Ledger Table -->
+<div class="bg-surface border border-outline-variant rounded-xl overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-outline-variant bg-surface-container-low">
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Date &amp; Invoice</th>
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Vendor &amp; Category</th>
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider text-right">Taxable Value</th>
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider text-right">GST Paid</th>
+<th class="p-md font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider text-center">ITC Status</th>
+<th class="p-md w-10"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant font-mono-data text-mono-data text-on-background">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="p-md">
+<div class="font-body-md text-body-md text-on-background">12 Oct 2023</div>
+<div class="text-xs text-on-surface-variant">INV-2023-089</div>
+</td>
+<td class="p-md">
+<div class="font-body-md text-body-md font-medium text-on-background">TechWorkspace Pvt Ltd</div>
+<div class="text-xs text-on-surface-variant">Rent</div>
+</td>
+<td class="p-md text-right">₹ 1,00,000</td>
+<td class="p-md text-right">
+<div>₹ 18,000</div>
+<div class="text-xs text-on-surface-variant">18% IGST</div>
+</td>
+<td class="p-md text-center">
+<span class="inline-flex items-center px-2 py-1 rounded bg-secondary-container/50 text-on-secondary-container text-xs font-semibold">
+<span class="material-symbols-outlined text-[14px] mr-1">check_circle</span> Captured
+                                    </span>
+</td>
+<td class="p-md text-right">
+<button class="text-outline hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="p-md">
+<div class="font-body-md text-body-md text-on-background">10 Oct 2023</div>
+<div class="text-xs text-on-surface-variant">UTL-1029</div>
+</td>
+<td class="p-md">
+<div class="font-body-md text-body-md font-medium text-on-background">State Power Corp</div>
+<div class="text-xs text-on-surface-variant">Utilities</div>
+</td>
+<td class="p-md text-right">₹ 15,000</td>
+<td class="p-md text-right">
+<div class="text-on-surface-variant">-</div>
+</td>
+<td class="p-md text-center">
+<span class="inline-flex items-center px-2 py-1 rounded bg-surface-variant text-on-surface-variant text-xs font-semibold">
+                                        Non-GST
+                                    </span>
+</td>
+<td class="p-md text-right">
+<button class="text-outline hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="p-md">
+<div class="font-body-md text-body-md text-on-background">05 Oct 2023</div>
+<div class="text-xs text-on-surface-variant">DEL-Mac-001</div>
+</td>
+<td class="p-md">
+<div class="font-body-md text-body-md font-medium text-on-background">Global IT Suppliers</div>
+<div class="text-xs text-on-surface-variant">Purchases (Capital)</div>
+</td>
+<td class="p-md text-right">₹ 1,30,000</td>
+<td class="p-md text-right">
+<div>₹ 23,400</div>
+<div class="text-xs text-on-surface-variant">CGST+SGST</div>
+</td>
+<td class="p-md text-center">
+<span class="inline-flex items-center px-2 py-1 rounded bg-error-container/50 text-on-error-container text-xs font-semibold border border-error/20">
+<span class="material-symbols-outlined text-[14px] mr-1">sync_problem</span> Pending GSTR-2B
+                                    </span>
+</td>
+<td class="p-md text-right">
+<button class="text-outline hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main>
+<!-- Mobile BottomNavBar (Hidden on Desktop) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface dark:bg-surface-dim border-t border-outline-variant dark:border-outline flex justify-around items-center h-16 px-2 pb-safe">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container dark:hover:bg-surface-container-high scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container dark:hover:bg-surface-container-high scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-label-sm text-label-sm">Invoices</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-on-secondary-fixed-variant text-on-secondary-container dark:text-secondary-fixed rounded-full px-4 py-1 scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">payments</span>
+<span class="font-label-sm text-label-sm">Expenses</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container dark:hover:bg-surface-container-high scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">assignment_turned_in</span>
+<span class="font-label-sm text-label-sm">Returns</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-container dark:hover:bg-surface-container-high scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-sm text-label-sm">Parties</span>
+</a>
+</nav>
+</body></html>

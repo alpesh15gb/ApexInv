@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/common/app_config.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
@@ -43,6 +44,7 @@ import 'package:apexbooks/screens/reports_screen.dart';
 import 'package:apexbooks/screens/expense_management_screen.dart';
 import 'package:apexbooks/screens/purchase_order_screen.dart';
 import 'package:apexbooks/screens/import_screen.dart';
+import 'package:apexbooks/screens/more_menu_screen.dart';
 
 // invoice.type is a raw internal value ('Invoice'/'Quotation'/'Receipt') used
 // for comparisons throughout this file — only the displayed label is localized.
@@ -69,6 +71,12 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  static const int _moreTabIndex = 100;
+
+  /// Tab indices surfaced by the compact-shell bottom navigation bar
+  /// (Home / New / Invoices / Customers / More).
+  static const List<int> _mobileTabTargets = [0, 1, 2, 5, _moreTabIndex];
+
   int _selectedIndex = 0;
   bool _sidebarExpanded = true;
   late User _currentUser;
@@ -89,7 +97,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     super.initState();
     _currentUser = widget.loggedInUser;
     _loadCreateInvoiceLayout();
-    SessionManager.initialize(_onSessionTimeout);
     if (ref.read(appEditionConfigProvider).enableUpdateCheck) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
     }
@@ -121,31 +128,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   void dispose() {
-    SessionManager.dispose();
     _shortcutsFocusNode.dispose();
     super.dispose();
   }
 
   void _logoutAndResetSession() async {
+    // Forget the persisted auto-login user, then drop to the login screen.
+    await ref
+        .read(settingsRepositoryProvider)
+        .setSetting(SettingKey.currentUserId, '');
     await ref.read(authRepositoryProvider).logoutAndSessionReset();
     if (!mounted) return;
     Navigator.pushReplacement(
         context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-  }
-
-  void _onSessionTimeout() {
-    if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content:
-            Text(AppLocalizations.of(context)!.dashboardSessionExpiredMessage),
-        duration: const Duration(seconds: 4),
-      ),
-    );
   }
 
   Future<void> _refreshUser() async {
@@ -241,6 +236,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return SettingsScreen(
           currentUser: _currentUser,
           openAccessibilityToken: _accessibilityJumpToken,
+        );
+      case _moreTabIndex:
+        return MoreMenuScreen(
+          user: _currentUser,
+          hasUpdate: _hasUpdate,
+          onSelectTab: _selectTab,
+          onLogout: _logoutAndResetSession,
         );
       default:
         return Center(
@@ -364,38 +366,104 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: SessionManager.onUserActivity,
-      onPanDown: (_) => SessionManager.onUserActivity(),
-      behavior: HitTestBehavior.translucent,
-      child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.keyQ, control: true): () =>
-              _selectTab(1),
-        },
-        child: Focus(
-          focusNode: _shortcutsFocusNode,
-          child: Scaffold(
-            body: Row(
-              children: [
-                _buildSidebar(),
-                Expanded(
-                  child: Stack(
-                    children: [
-                      buildScreen(),
-                      if (_selectedIndex == 1)
-                        Positioned(
-                            bottom: 16,
-                            right: 16,
-                            child: _buildCreateInvoiceLayoutToggle()),
-                    ],
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyQ, control: true): () =>
+            _selectTab(1),
+      },
+      child: Focus(
+        focusNode: _shortcutsFocusNode,
+        child: Scaffold(
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final screen = Stack(
+                children: [
+                  buildScreen(),
+                  if (_selectedIndex == 1)
+                    Positioned(
+                        bottom: 16,
+                        right: 16,
+                        child: _buildCreateInvoiceLayoutToggle()),
+                ],
+              );
+              if (constraints.maxWidth >= Breakpoints.expandedMin) {
+                return Row(
+                  children: [
+                    _buildSidebar(),
+                    Expanded(child: screen),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  Expanded(
+                    child: SafeArea(top: true, bottom: false, child: screen),
                   ),
-                ),
-              ],
-            ),
+                  _buildBottomNavigationBar(),
+                ],
+              );
+            },
           ),
         ),
       ),
+    );
+  }
+
+  int get _mobileNavIndex {
+    final index = _mobileTabTargets.indexOf(_selectedIndex);
+    // Destinations living inside "More" (quotations, receipts, reports, ...)
+    // keep the More tab highlighted.
+    return index < 0 ? _mobileTabTargets.length - 1 : index;
+  }
+
+  Widget _buildBottomNavigationBar() {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final updateBadge = Badge(
+      smallSize: 8,
+      isLabelVisible: _hasUpdate,
+      child: const Icon(Icons.more_horiz),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Divider(
+            color: theme.colorScheme.outlineVariant, height: 1, thickness: 1),
+        NavigationBar(
+          height: 72,
+          backgroundColor: theme.colorScheme.surfaceContainer,
+          indicatorColor: theme.primaryColor.withValues(alpha: 0.12),
+          selectedIndex: _mobileNavIndex,
+          onDestinationSelected: (i) => _selectTab(_mobileTabTargets[i]),
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.dashboard_outlined),
+              selectedIcon: const Icon(Icons.dashboard),
+              label: l10n.navDashboard,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.receipt_outlined),
+              selectedIcon: const Icon(Icons.receipt),
+              label: l10n.navNewInvoice,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.receipt_long_outlined),
+              selectedIcon: const Icon(Icons.receipt_long),
+              label: l10n.navInvoices,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.people_outline),
+              selectedIcon: const Icon(Icons.people),
+              label: l10n.navCustomers,
+            ),
+            NavigationDestination(
+              icon: updateBadge,
+              selectedIcon: updateBadge,
+              label: l10n.navMore,
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1406,7 +1474,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
 
   Widget _buildDefaultLayout() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(context.isCompact ? 16 : 28),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: AppLayout.maxWidthNormal),
@@ -1422,17 +1490,15 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
 
               const SizedBox(height: 28),
 
-              // ── Stats Row ────────────────────────────────────
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+              // ── Stats ────────────────────────────────────────
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cards = <Widget>[
                     _buildStatCard(
                         AppLocalizations.of(context)!.navCustomers,
                         totalCustomers.toString(),
                         const Color(0xFF1565C0),
                         Icons.people_outline),
-                    const SizedBox(width: 16),
                     _buildStatCard(
                       AppLocalizations.of(context)!.navProducts,
                       totalProducts.toString(),
@@ -1445,13 +1511,11 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
                           : null,
                       subtitleColor: Colors.red[600],
                     ),
-                    const SizedBox(width: 16),
                     _buildStatCard(
                         AppLocalizations.of(context)!.navInvoices,
                         totalInvoices.toString(),
                         const Color(0xFFE65100),
                         Icons.receipt_long_outlined),
-                    const SizedBox(width: 16),
                     _buildStatCard(
                       AppLocalizations.of(context)!
                           .dashboardRevenueCollectedLabel,
@@ -1459,7 +1523,6 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
                       const Color(0xFF6A1B9A),
                       Icons.account_balance_wallet_outlined,
                     ),
-                    const SizedBox(width: 16),
                     _buildStatCard(
                       AppLocalizations.of(context)!.dashboardOutstandingLabel,
                       '$_currencySymbol ${totalOutstanding.toStringAsFixed(2)}',
@@ -1472,8 +1535,31 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
                           : null,
                       subtitleColor: Colors.red[700],
                     ),
-                  ],
-                ),
+                  ];
+                  if (constraints.maxWidth < Breakpoints.compactMax) {
+                    const gap = 12.0;
+                    final cardWidth = (constraints.maxWidth - gap) / 2;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final card in cards)
+                          SizedBox(width: cardWidth, child: card),
+                      ],
+                    );
+                  }
+                  return IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < cards.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 16),
+                          Expanded(child: cards[i]),
+                        ],
+                      ],
+                    ),
+                  );
+                },
               ),
 
               // ── Due Soon ─────────────────────────────────────
@@ -1962,53 +2048,94 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                AppLocalizations.of(context)!
-                    .dashboardWelcomeBackMessage(widget.user.username),
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: -0.3,
+      child: context.isCompact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  AppLocalizations.of(context)!
+                      .dashboardWelcomeBackMessage(widget.user.username),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                AppLocalizations.of(context)!.dashboardBusinessGlanceSubtitle,
-                style: TextStyle(
-                    fontSize: 13, color: Colors.white.withValues(alpha: 0.72)),
-              ),
-            ],
-          ),
-          const Spacer(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                DateFormat('EEEE').format(DateTime.now()),
-                style: TextStyle(
-                    fontSize: 12, color: Colors.white.withValues(alpha: 0.72)),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                DateFormat('MMM d, yyyy').format(DateTime.now()),
-                style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white),
-              ),
-            ],
-          ),
-        ],
-      ),
+                const SizedBox(height: 4),
+                Text(
+                  AppLocalizations.of(context)!.dashboardBusinessGlanceSubtitle,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      color: Colors.white.withValues(alpha: 0.72)),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Text(
+                      DateFormat('EEEE, MMM d, yyyy').format(DateTime.now()),
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.85)),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      AppLocalizations.of(context)!
+                          .dashboardWelcomeBackMessage(widget.user.username),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      AppLocalizations.of(context)!
+                          .dashboardBusinessGlanceSubtitle,
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withValues(alpha: 0.72)),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      DateFormat('EEEE').format(DateTime.now()),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.72)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormat('MMM d, yyyy').format(DateTime.now()),
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white),
+                    ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 
@@ -2573,9 +2700,8 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
 
   Widget _buildStatCard(String title, String value, Color color, IconData icon,
       {String? subtitle, Color? subtitleColor}) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(18),
+    return Container(
+      padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceContainer,
           borderRadius: BorderRadius.circular(14),
@@ -2652,7 +2778,6 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
             ),
           ],
         ),
-      ),
     );
   }
 

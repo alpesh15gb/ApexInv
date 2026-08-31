@@ -20,6 +20,7 @@ import 'package:apexbooks/models/product.dart';
 import 'package:apexbooks/models/additional_cost.dart';
 import 'package:apexbooks/services/invoice_pdf_services.dart';
 import 'package:apexbooks/services/pdf_service.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 
 class InvoiceFormGuard {
@@ -811,7 +812,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             ],
           ),
           content: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.3,
+            width: _dialogWidth(context),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1327,7 +1328,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             ],
           ),
           content: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.3,
+            width: _dialogWidth(context),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1679,7 +1680,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             ],
           ),
           content: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.3,
+            width: _dialogWidth(context),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -3737,76 +3738,90 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
           ),
           if (_customerDetailsExpanded) ...[
           const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: nameController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldCustomerNameRequiredLabel),
-                ),
+          _responsiveFieldGrid([
+            TextField(
+              controller: nameController,
+              onChanged: (_) => setState(() {}),
+              decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldCustomerNameRequiredLabel),
+            ),
+            TextField(
+              controller: businessNameController,
+              onChanged: (_) => setState(() {}),
+              decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldBusinessNameLabel),
+            ),
+            TextField(
+              controller: phoneController,
+              onChanged: (_) => setState(() {}),
+              decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldPhoneLabel),
+            ),
+            if (_showGstFields)
+              TextField(
+                controller: gstinController,
+                onChanged: (_) => setState(() {}),
+                decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldGstinVatLabel),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: businessNameController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldBusinessNameLabel),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: phoneController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldPhoneLabel),
-                ),
-              ),
-              if (_showGstFields) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: gstinController,
-                    onChanged: (_) => setState(() {}),
-                    decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldGstinVatLabel),
-                  ),
-                ),
-              ],
-            ],
-          ),
+          ]),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: emailController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldEmailLabel),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: addressController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldAddressLabel,
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.open_in_full, size: 18),
-                        tooltip: AppLocalizations.of(context)!.tooltipEditInLargerView,
-                        onPressed: () => _editLongTextDialogV2(
-                          title: AppLocalizations.of(context)!.fieldAddressLabel,
-                          controller: addressController,
-                        ),
-                      )),
-                ),
-              ),
-            ],
-          ),
+          _responsiveFieldGrid([
+            TextField(
+              controller: emailController,
+              onChanged: (_) => setState(() {}),
+              decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldEmailLabel),
+            ),
+            TextField(
+              controller: addressController,
+              onChanged: (_) => setState(() {}),
+              decoration: _flatFieldDecorationV2(AppLocalizations.of(context)!.fieldAddressLabel,
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.open_in_full, size: 18),
+                    tooltip: AppLocalizations.of(context)!.tooltipEditInLargerView,
+                    onPressed: () => _editLongTextDialogV2(
+                      title: AppLocalizations.of(context)!.fieldAddressLabel,
+                      controller: addressController,
+                    ),
+                  )),
+            ),
+          ]),
           ],
         ],
       ),
     );
+  }
+
+  /// Lays out form fields in a single Row on wide windows and a 2-column
+  /// grid on compact phones, so 3-4 fields never crush below readable width.
+  Widget _responsiveFieldGrid(List<Widget> fields) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= Breakpoints.compactMax) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < fields.length; i++) ...[
+                if (i > 0) const SizedBox(width: 12),
+                Expanded(child: fields[i]),
+              ],
+            ],
+          );
+        }
+        const gap = 12.0;
+        final width = (constraints.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final field in fields) SizedBox(width: width, child: field),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Dialog content width that reads well on desktop (capped 560) and still
+  /// fits a phone (90% of the window, minus dialog insets).
+  double _dialogWidth(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    return width >= 640 ? 560 : (width * 0.9).clamp(280.0, 560.0).toDouble();
   }
 
   void _showCustomerPickerDialogV2() {
@@ -3815,9 +3830,8 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       builder: (dialogContext) => Dialog(
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: SizedBox(
-          width: 420,
-          height: 520,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 520),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: StatefulBuilder(
@@ -4724,7 +4738,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
 
   Future<void> _editNotesDialogV2() async {
     final controller = TextEditingController(text: notesController.text);
-    double dialogWidth = 480;
+    double dialogWidth = (MediaQuery.sizeOf(context).width - 80).clamp(_notesDialogMinWidth, 480.0).toDouble();
     double dialogHeight = 320;
     final result = await showDialog<String>(
       context: context,
@@ -4803,7 +4817,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     int? maxLength,
   }) async {
     final dialogController = TextEditingController(text: controller.text);
-    double dialogWidth = 480;
+    double dialogWidth = (MediaQuery.sizeOf(context).width - 80).clamp(_notesDialogMinWidth, 480.0).toDouble();
     double dialogHeight = 320;
     final result = await showDialog<String>(
       context: context,

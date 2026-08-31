@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:apexbooks/backup/backup_manager.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/backup_info.dart';
@@ -187,35 +188,29 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 900),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 32, vertical: 16),
-                      child: Row(
-                        spacing: 16,
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: context.isCompact ? 16 : 32,
+                          vertical: 16),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final buttons = <Widget>[
+                            ElevatedButton.icon(
                               onPressed: () =>
                                   _createBackup(BackupType.database),
                               icon: const Icon(Icons.backup),
                               label: Text(l10n.backupCreateDbButton),
                             ),
-                          ),
-                          Expanded(
-                            child: ElevatedButton.icon(
+                            ElevatedButton.icon(
                               onPressed: () => _createBackup(BackupType.json),
                               icon: const Icon(Icons.download),
                               label: Text(l10n.backupExportJsonButton),
                             ),
-                          ),
-                          Expanded(
-                            child: ElevatedButton.icon(
+                            ElevatedButton.icon(
                               onPressed: _importBackup,
                               icon: const Icon(Icons.upload),
                               label: Text(l10n.backupImportButton),
                             ),
-                          ),
-                          Expanded(
-                            child: ElevatedButton.icon(
+                            ElevatedButton.icon(
                               onPressed: () {
                                 Navigator.push(
                                   context,
@@ -227,8 +222,26 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
                               icon: const Icon(Icons.file_download),
                               label: const Text('Import from Vyapar'),
                             ),
-                          ),
-                        ],
+                          ];
+                          if (constraints.maxWidth < Breakpoints.compactMax) {
+                            const gap = 12.0;
+                            final width = (constraints.maxWidth - gap) / 2;
+                            return Wrap(
+                              spacing: gap,
+                              runSpacing: gap,
+                              children: [
+                                for (final b in buttons)
+                                  SizedBox(width: width, child: b),
+                              ],
+                            );
+                          }
+                          return Row(
+                            spacing: 16,
+                            children: [
+                              for (final b in buttons) Expanded(child: b),
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ),

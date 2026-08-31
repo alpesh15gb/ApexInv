@@ -34,7 +34,8 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
       setState(() => _backups = backups);
     } catch (e) {
       if (!mounted) return;
-      _showErrorDialog(AppLocalizations.of(context)!.backupLoadErrorMessage(e.toString()));
+      _showErrorDialog(
+          AppLocalizations.of(context)!.backupLoadErrorMessage(e.toString()));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

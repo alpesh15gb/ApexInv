@@ -3,7 +3,9 @@ import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/screens/more_menu_screen.dart';
 import 'package:apexbooks/widgets/adaptive/adaptive_table.dart';
+import 'package:apexbooks/widgets/adaptive/adaptive_field_grid.dart';
 import 'package:apexbooks/widgets/adaptive/app_dialog.dart';
+import 'package:apexbooks/widgets/adaptive/sticky_action_bar.dart';
 import 'package:apexbooks/widgets/adaptive/entity_card.dart';
 import 'package:apexbooks/widgets/adaptive/status_chip.dart';
 import 'package:flutter/material.dart';
@@ -170,16 +172,15 @@ void main() {
     expect(find.text('250'), findsOneWidget);
   });
 
-  testWidgets('MoreMenuScreen routes destinations and logout',
-      (tester) async {
+  testWidgets('MoreMenuScreen routes destinations and logout', (tester) async {
     final selected = <int>[];
     var loggedOut = false;
     await tester.pumpWidget(_wrap(const SizedBox.shrink()));
     _setSurface(tester, const Size(400, 800));
     await tester.pumpWidget(_wrap(
       MoreMenuScreen(
-        user: User(
-            id: '1', username: 'Tester', password: 'x', userType: 'admin'),
+        user:
+            User(id: '1', username: 'Tester', password: 'x', userType: 'admin'),
         hasUpdate: true,
         onSelectTab: selected.add,
         onLogout: () => loggedOut = true,
@@ -201,4 +202,73 @@ void main() {
     expect(selected, [3, 8]);
     expect(loggedOut, isTrue);
   });
+
+  testWidgets(
+      'AdaptiveFieldGrid: single row on wide, 2-col grid on compact, '
+      '1-col below 340', (tester) async {
+    Widget grid() => AdaptiveFieldGrid(fields: [
+          const TextField(decoration: InputDecoration(labelText: 'A')),
+          const TextField(decoration: InputDecoration(labelText: 'B')),
+          const TextField(decoration: InputDecoration(labelText: 'C')),
+        ]);
+
+    // Wide (medium test surface 800x600): one Row, all three fields share it.
+    await tester.pumpWidget(_wrap(Scaffold(body: SingleChildScrollView(child: grid()))));
+    final rowA = tester.getTopLeft(find.byType(TextField).at(0));
+    final rowB = tester.getTopLeft(find.byType(TextField).at(1));
+    expect(rowB.dy, rowA.dy, reason: 'wide: fields side by side');
+
+    // Compact 400px: two columns — first two share a row, third wraps.
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(400, 800);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_wrap(Scaffold(body: SingleChildScrollView(child: grid()))));
+    await tester.pump();
+    final colA = tester.getTopLeft(find.byType(TextField).at(0));
+    final colB = tester.getTopLeft(find.byType(TextField).at(1));
+    final colC = tester.getTopLeft(find.byType(TextField).at(2));
+    expect(colB.dy, colA.dy, reason: 'compact 400: 2 columns');
+    expect(colC.dy, greaterThan(colA.dy),
+        reason: 'compact 400: third field wraps to row 2');
+
+    // Extremely narrow 320px: one field per row.
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(320, 800);
+    await tester.pumpWidget(_wrap(Scaffold(body: SingleChildScrollView(child: grid()))));
+    await tester.pump();
+    final nA = tester.getTopLeft(find.byType(TextField).at(0));
+    final nB = tester.getTopLeft(find.byType(TextField).at(1));
+    final nC = tester.getTopLeft(find.byType(TextField).at(2));
+    expect(nB.dy, greaterThan(nA.dy), reason: '320: stacked');
+    expect(nC.dy, greaterThan(nB.dy), reason: '320: stacked');
+  });
+
+  testWidgets('StickyActionBar renders child without overflow at 320px',
+      (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(320, 800);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_wrap(
+      Scaffold(
+        body: Column(
+          children: [
+            const Spacer(),
+            StickyActionBar(
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.save),
+                  label: const Text('Save settings'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Save settings'), findsOneWidget);
+  });
 }
+

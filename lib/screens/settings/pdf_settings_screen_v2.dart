@@ -6,6 +6,7 @@ import 'package:apexbooks/database/settings_service.dart';
 import 'package:apexbooks/providers/repositories.dart';
 
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/widgets/template_list_tile.dart';
@@ -206,8 +207,11 @@ class _PdfSettingsScreenV2State extends ConsumerState<PdfSettingsScreenV2> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text(l10n.pdfSettingsPickThemeColorDialogTitle),
-          content: SizedBox(
-            width: 300,
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth:
+                  (MediaQuery.sizeOf(context).width - 80).clamp(240.0, 300.0),
+            ),
             child: ColorPicker(
               color: picked,
               onColorChanged: (c) => setDialogState(() => picked = c),
@@ -477,7 +481,10 @@ class _PdfSettingsScreenV2State extends ConsumerState<PdfSettingsScreenV2> {
     final isActive = _savedTemplate == _previewedTemplate;
 
     return Container(
-      width: 320,
+      // Full width on compact phones; fixed 320 column only on desktop.
+      width: MediaQuery.sizeOf(context).width < Breakpoints.expandedMin
+          ? null
+          : 320,
       padding: const EdgeInsets.all(16),
       decoration: _flatCardDecorationV2(context),
       child: SingleChildScrollView(
@@ -641,16 +648,25 @@ class _PdfSettingsScreenV2State extends ConsumerState<PdfSettingsScreenV2> {
                   if (isNarrow) {
                     // Below the 3-column breakpoint, stack templates+settings
                     // above the preview and let the whole thing scroll,
-                    // rather than force three squeezed columns.
+                    // rather than force three squeezed columns. Box heights
+                    // scale with the viewport so short phones don't trap
+                    // most of the panel behind its internal scroll.
+                    final vh = MediaQuery.sizeOf(context).height;
                     return SingleChildScrollView(
                       padding: const EdgeInsets.all(12),
                       child: Column(
                         children: [
-                          SizedBox(height: 400, child: _templatesColumnV2()),
+                          SizedBox(
+                              height: (vh * 0.38).clamp(280.0, 400.0),
+                              child: _templatesColumnV2()),
                           const SizedBox(height: 12),
-                          SizedBox(height: 520, child: _settingsColumnV2()),
+                          SizedBox(
+                              height: (vh * 0.5).clamp(360.0, 520.0),
+                              child: _settingsColumnV2()),
                           const SizedBox(height: 12),
-                          SizedBox(height: 520, child: _previewColumnV2()),
+                          SizedBox(
+                              height: (vh * 0.5).clamp(360.0, 520.0),
+                              child: _previewColumnV2()),
                         ],
                       ),
                     );

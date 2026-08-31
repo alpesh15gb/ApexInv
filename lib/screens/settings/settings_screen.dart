@@ -38,7 +38,8 @@ class _SettingsDestination {
   final IconData icon;
   final String label;
   final bool showUpdateDot;
-  const _SettingsDestination(this.icon, this.label, {this.showUpdateDot = false});
+  const _SettingsDestination(this.icon, this.label,
+      {this.showUpdateDot = false});
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
@@ -247,29 +248,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// bar. Index here == rail index == `_selectedIndex`.
   List<_SettingsDestination> _destinations(
       AppEditionConfig cfg, AppLocalizations l10n) {
-    final showUpdateDot = cfg.enableUpdateCheck && _updateInfo?.hasUpdate == true;
+    final showUpdateDot =
+        cfg.enableUpdateCheck && _updateInfo?.hasUpdate == true;
     return [
-      _SettingsDestination(
-          Icons.business, l10n.settingsNavCompanyInfoLabel),
+      _SettingsDestination(Icons.business, l10n.settingsNavCompanyInfoLabel),
       if (cfg.extraSettingsTab != null)
-        _SettingsDestination(
-            cfg.extraSettingsTabIcon ?? Icons.group,
+        _SettingsDestination(cfg.extraSettingsTabIcon ?? Icons.group,
             cfg.extraSettingsTabLabel ?? l10n.settingsNavTeamLabel),
       if (!cfg.isCloud)
         _SettingsDestination(Icons.backup, l10n.settingsNavBackupLabel),
       if (!cfg.isCloud)
         _SettingsDestination(Icons.people, l10n.settingsNavUsersLabel),
       _SettingsDestination(Icons.settings, l10n.pdfSettingsTitle),
+      _SettingsDestination(Icons.file_present, l10n.invoiceSettingsAppBarTitle),
       _SettingsDestination(
-          Icons.file_present, l10n.invoiceSettingsAppBarTitle),
-      _SettingsDestination(Icons.view_column_outlined,
-          l10n.settingsNavProductDetailsLabel),
+          Icons.view_column_outlined, l10n.settingsNavProductDetailsLabel),
       _SettingsDestination(Icons.tune_rounded, l10n.settingsNavCustomizeLabel),
-      _SettingsDestination(Icons.accessibility_new_rounded,
-          l10n.settingsNavAccessibilityLabel),
+      _SettingsDestination(
+          Icons.accessibility_new_rounded, l10n.settingsNavAccessibilityLabel),
       if (!cfg.isCloud)
         const _SettingsDestination(Icons.cloud_sync_outlined, 'Cloud Sync'),
-      _SettingsDestination(Icons.info_outline, l10n.settingsNavSoftwareInfoLabel,
+      _SettingsDestination(
+          Icons.info_outline, l10n.settingsNavSoftwareInfoLabel,
           showUpdateDot: showUpdateDot),
     ];
   }
@@ -282,8 +282,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainer,
         border: Border(
-          bottom:
-              BorderSide(color: theme.colorScheme.outlineVariant, width: 1),
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant, width: 1),
         ),
       ),
       child: SafeArea(

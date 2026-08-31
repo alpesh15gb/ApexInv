@@ -12,7 +12,8 @@ class UserManagementScreenV2 extends ConsumerStatefulWidget {
   const UserManagementScreenV2({super.key, required this.currentUser});
 
   @override
-  ConsumerState<UserManagementScreenV2> createState() => _UserManagementScreenV2State();
+  ConsumerState<UserManagementScreenV2> createState() =>
+      _UserManagementScreenV2State();
 }
 
 class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
@@ -61,7 +62,9 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
           _isLoading = false;
         });
       } else {
-        final fresh = await ref.read(authRepositoryProvider).getUserById(widget.currentUser.id);
+        final fresh = await ref
+            .read(authRepositoryProvider)
+            .getUserById(widget.currentUser.id);
         final user = fresh ?? widget.currentUser;
         setState(() {
           _users = [user];
@@ -74,7 +77,9 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
     } catch (e) {
       setState(() => _isLoading = false);
       if (!mounted) return;
-      _showSnackBar(AppLocalizations.of(context)!.userMgmtLoadErrorMessage(e.toString()), Colors.red);
+      _showSnackBar(
+          AppLocalizations.of(context)!.userMgmtLoadErrorMessage(e.toString()),
+          Colors.red);
     }
   }
 
@@ -86,8 +91,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
       } else {
         _filteredUsers = _users
             .where((user) =>
-        user.username.toLowerCase().contains(query) ||
-            user.userType.toLowerCase().contains(query))
+                user.username.toLowerCase().contains(query) ||
+                user.userType.toLowerCase().contains(query))
             .toList();
       }
     });
@@ -113,7 +118,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
         } else {
           await ref.read(authRepositoryProvider).updateUser(user);
           if (!mounted) return;
-          _showSnackBar(l10n.userMgmtUpdatedMessage, Theme.of(context).primaryColor);
+          _showSnackBar(
+              l10n.userMgmtUpdatedMessage, Theme.of(context).primaryColor);
         }
 
         _resetForm();
@@ -189,8 +195,10 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                   ],
                 ),
               ),
-              content: SizedBox(
-                width: 400,
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxWidth: (MediaQuery.sizeOf(context).width - 80)
+                        .clamp(280.0, 400.0)),
                 child: Form(
                   key: formKey,
                   child: SingleChildScrollView(
@@ -240,14 +248,18 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                               },
                             ),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                              borderRadius:
+                                  BorderRadius.circular(AppBorderRadius.xsmall),
                             ),
                             filled: true,
-                            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return l10n.userMgmtCurrentPasswordRequiredMessage;
+                              return l10n
+                                  .userMgmtCurrentPasswordRequiredMessage;
                             }
                             return null;
                           },
@@ -272,10 +284,13 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                               },
                             ),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                              borderRadius:
+                                  BorderRadius.circular(AppBorderRadius.xsmall),
                             ),
                             filled: true,
-                            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -303,19 +318,23 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                               onPressed: () {
                                 setState(() {
                                   obscureConfirmPassword =
-                                  !obscureConfirmPassword;
+                                      !obscureConfirmPassword;
                                 });
                               },
                             ),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                              borderRadius:
+                                  BorderRadius.circular(AppBorderRadius.xsmall),
                             ),
                             filled: true,
-                            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return l10n.userMgmtConfirmPasswordRequiredMessage;
+                              return l10n
+                                  .userMgmtConfirmPasswordRequiredMessage;
                             }
                             if (value != newPasswordController.text) {
                               return l10n.userMgmtPasswordsDoNotMatchMessage;
@@ -334,7 +353,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 12),
                   ),
-                  child: Text(l10n.actionCancel, style: const TextStyle(fontSize: 15)),
+                  child: Text(l10n.actionCancel,
+                      style: const TextStyle(fontSize: 15)),
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
@@ -346,7 +366,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                      borderRadius:
+                          BorderRadius.circular(AppBorderRadius.xsmall),
                     ),
                   ),
                   icon: const Icon(Icons.check_circle_outline),
@@ -355,9 +376,11 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
                       final user = _users.firstWhere((u) => u.id == userId);
-                      if (user.password == PasswordUtils.hash(oldPasswordController.text)) {
-                        await ref.read(authRepositoryProvider).updatePassword(
-                            userId, newPasswordController.text);
+                      if (user.password ==
+                          PasswordUtils.hash(oldPasswordController.text)) {
+                        await ref
+                            .read(authRepositoryProvider)
+                            .updatePassword(userId, newPasswordController.text);
                         if (!context.mounted) return;
                         Navigator.of(context).pop();
                         _showSnackBar(
@@ -366,7 +389,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                       } else {
                         if (!context.mounted) return;
                         _showSnackBar(
-                            l10n.userMgmtCurrentPasswordIncorrectMessage, Colors.red);
+                            l10n.userMgmtCurrentPasswordIncorrectMessage,
+                            Colors.red);
                       }
                     }
                   },
@@ -404,10 +428,11 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child:
-                  const Icon(Icons.warning, color: Colors.white, size: 24),
+                      const Icon(Icons.warning, color: Colors.white, size: 24),
                 ),
                 const SizedBox(width: 12),
-                Text(l10n.userMgmtDeleteUserTitle, style: const TextStyle(fontSize: 20)),
+                Text(l10n.userMgmtDeleteUserTitle,
+                    style: const TextStyle(fontSize: 20)),
               ],
             ),
           ),
@@ -416,7 +441,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
             children: [
               Text(
                 l10n.userMgmtDeleteUserConfirmLabel,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                style:
+                    TextStyle(color: Theme.of(context).colorScheme.onSurface),
               ),
               const SizedBox(height: 8),
               Container(
@@ -455,9 +481,10 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
             TextButton(
               style: TextButton.styleFrom(
                 padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
-              child: Text(l10n.actionCancel, style: const TextStyle(fontSize: 15)),
+              child:
+                  Text(l10n.actionCancel, style: const TextStyle(fontSize: 15)),
               onPressed: () {
                 Navigator.of(context).pop();
               },
@@ -467,15 +494,18 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
                 padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
                 ),
               ),
               icon: const Icon(Icons.delete_forever),
-              label: Text(l10n.actionDelete, style: const TextStyle(fontSize: 15)),
+              label:
+                  Text(l10n.actionDelete, style: const TextStyle(fontSize: 15)),
               onPressed: () async {
-                await ref.read(authRepositoryProvider).deleteUserSafely(user.id);
+                await ref
+                    .read(authRepositoryProvider)
+                    .deleteUserSafely(user.id);
                 if (!context.mounted) return;
                 Navigator.of(context).pop();
                 _showSnackBar(l10n.userMgmtDeletedMessage, Colors.orange);
@@ -497,8 +527,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
               color == Colors.green
                   ? Icons.check_circle
                   : color == Colors.red
-                  ? Icons.error
-                  : Icons.info,
+                      ? Icons.error
+                      : Icons.info,
               color: Colors.white,
             ),
             const SizedBox(width: 12),
@@ -652,12 +682,14 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundColor: (user.userType == 'admin' ? Colors.purple : Colors.blue)
-                  .withValues(alpha: 0.12),
+              backgroundColor:
+                  (user.userType == 'admin' ? Colors.purple : Colors.blue)
+                      .withValues(alpha: 0.12),
               child: Text(
                 user.username.isNotEmpty ? user.username[0].toUpperCase() : '?',
                 style: TextStyle(
-                    color: user.userType == 'admin' ? Colors.purple : Colors.blue,
+                    color:
+                        user.userType == 'admin' ? Colors.purple : Colors.blue,
                     fontWeight: FontWeight.bold),
               ),
             ),
@@ -665,7 +697,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
             Expanded(
               child: Text(user.username,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -676,7 +709,9 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
             _buildUserTypeChip(user.userType),
             if (user.id == widget.currentUser.id) ...[
               const SizedBox(height: 10),
-              Text(AppLocalizations.of(context)!.userMgmtThisIsYourAccountMessage,
+              Text(
+                  AppLocalizations.of(context)!
+                      .userMgmtThisIsYourAccountMessage,
                   style: TextStyle(
                       fontSize: 12.5,
                       color: Theme.of(context).colorScheme.onSurfaceVariant)),
@@ -696,7 +731,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
   Future<void> _bulkDeleteSelectedV2() async {
     final l10n = AppLocalizations.of(context)!;
     final includesSelf = _selectedIdsV2.contains(widget.currentUser.id);
-    final ids = _selectedIdsV2.where((id) => id != widget.currentUser.id).toList();
+    final ids =
+        _selectedIdsV2.where((id) => id != widget.currentUser.id).toList();
     if (ids.isEmpty) {
       if (includesSelf) {
         _showSnackBar(l10n.userMgmtCantDeleteOwnAccountMessage, Colors.red);
@@ -748,23 +784,22 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
       await _loadUsers();
     } catch (e) {
       setState(() => _isLoading = false);
-      _showSnackBar(l10n.userMgmtBulkDeleteErrorMessage(e.toString()), Colors.red);
+      _showSnackBar(
+          l10n.userMgmtBulkDeleteErrorMessage(e.toString()), Colors.red);
     }
   }
 
   BoxDecoration _flatCardDecorationV2(BuildContext context) => BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
-        border:
-            Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       );
 
   Widget _menuButtonLookV2(IconData icon, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        border:
-            Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
       ),
       child: Row(
@@ -774,7 +809,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
           const SizedBox(width: 6),
           Text(label,
               style: TextStyle(
-                  fontSize: 13.5, color: Theme.of(context).colorScheme.onSurface)),
+                  fontSize: 13.5,
+                  color: Theme.of(context).colorScheme.onSurface)),
           const SizedBox(width: 4),
           Icon(Icons.arrow_drop_down,
               size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -806,7 +842,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                         color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 const SizedBox(height: 6),
                 Text(value,
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 2),
                 Text(subtitle,
                     style: TextStyle(
@@ -925,10 +962,11 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                   icon: const Icon(Icons.add, size: 18),
                   label: Text(l10n.userMgmtAddUserButton),
                   style: FilledButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 14),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+                        borderRadius:
+                            BorderRadius.circular(AppBorderRadius.xsmall)),
                   ),
                 ),
             ],
@@ -959,12 +997,12 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                   : null,
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                  borderSide:
-                      BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
+                  borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant)),
               enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                  borderSide:
-                      BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
+                  borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant)),
             ),
           ),
         ),
@@ -979,7 +1017,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
             });
           },
           itemBuilder: (ctx) => [
-            PopupMenuItem(value: 'all', child: Text(l10n.userMgmtAllRolesLabel)),
+            PopupMenuItem(
+                value: 'all', child: Text(l10n.userMgmtAllRolesLabel)),
             PopupMenuItem(value: 'admin', child: Text(l10n.dashboardRoleAdmin)),
             PopupMenuItem(value: 'user', child: Text(l10n.dashboardRoleUser)),
           ],
@@ -987,7 +1026,9 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
               Icons.filter_list,
               l10n.userMgmtRoleColonLabel(_roleFilterV2 == 'all'
                   ? l10n.userMgmtAllLabel
-                  : (_roleFilterV2 == 'admin' ? l10n.dashboardRoleAdmin : l10n.dashboardRoleUser))),
+                  : (_roleFilterV2 == 'admin'
+                      ? l10n.dashboardRoleAdmin
+                      : l10n.dashboardRoleUser))),
         ),
       ],
     );
@@ -1006,7 +1047,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant, width: 1.4),
+          bottom: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant, width: 1.4),
         ),
       ),
       child: Row(
@@ -1028,11 +1070,18 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                 },
               ),
             ),
-          Expanded(flex: 3, child: Text(AppLocalizations.of(context)!.userMgmtColUser, style: style)),
-          Expanded(flex: 2, child: Text(AppLocalizations.of(context)!.userMgmtColRole, style: style)),
+          Expanded(
+              flex: 3,
+              child: Text(AppLocalizations.of(context)!.userMgmtColUser,
+                  style: style)),
+          Expanded(
+              flex: 2,
+              child: Text(AppLocalizations.of(context)!.userMgmtColRole,
+                  style: style)),
           SizedBox(
               width: 164,
-              child: Text(AppLocalizations.of(context)!.customerMgmtColActions, style: style)),
+              child: Text(AppLocalizations.of(context)!.customerMgmtColActions,
+                  style: style)),
         ],
       ),
     );
@@ -1047,7 +1096,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+          bottom:
+              BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
         ),
       ),
       child: Row(
@@ -1081,8 +1131,11 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                     radius: 16,
                     backgroundColor: avatarColor.withValues(alpha: 0.12),
                     child: Text(
-                      user.username.isNotEmpty ? user.username[0].toUpperCase() : '?',
-                      style: TextStyle(color: avatarColor, fontWeight: FontWeight.bold),
+                      user.username.isNotEmpty
+                          ? user.username[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                          color: avatarColor, fontWeight: FontWeight.bold),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1095,13 +1148,17 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                       if (isYou)
                         Container(
                           margin: const EdgeInsets.only(top: 2),
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).primaryColor.withValues(alpha: 0.12),
+                            color: Theme.of(context)
+                                .primaryColor
+                                .withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(AppLocalizations.of(context)!.userMgmtYouBadgeLabel,
+                          child: Text(
+                              AppLocalizations.of(context)!
+                                  .userMgmtYouBadgeLabel,
                               style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w700,
@@ -1142,7 +1199,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                 _buildActionButton(
                   icon: Icons.lock_reset,
                   color: Colors.orange,
-                  tooltip: AppLocalizations.of(context)!.userMgmtChangePasswordTitle,
+                  tooltip:
+                      AppLocalizations.of(context)!.userMgmtChangePasswordTitle,
                   onPressed: () =>
                       _showChangePasswordDialog(user.id, user.username),
                 ),
@@ -1187,81 +1245,89 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-          Row(
-            children: [
-              if (widget.currentUser.isAdmin())
-                PopupMenuButton<String>(
-                  enabled: _selectedIdsV2.isNotEmpty,
-                  tooltip: l10n.userMgmtBulkActionsTooltip,
-                  onSelected: (value) {
-                    if (value == 'delete') _bulkDeleteSelectedV2();
-                  },
-                  itemBuilder: (ctx) => [
-                    PopupMenuItem(
-                      value: 'delete',
-                      enabled: _selectedIdsV2.isNotEmpty,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                          const SizedBox(width: 8),
-                          Text(l10n.userMgmtDeleteSelectedMenuLabel,
-                              style: const TextStyle(color: Colors.red)),
-                        ],
+            Row(
+              children: [
+                if (widget.currentUser.isAdmin())
+                  PopupMenuButton<String>(
+                    enabled: _selectedIdsV2.isNotEmpty,
+                    tooltip: l10n.userMgmtBulkActionsTooltip,
+                    onSelected: (value) {
+                      if (value == 'delete') _bulkDeleteSelectedV2();
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem(
+                        value: 'delete',
+                        enabled: _selectedIdsV2.isNotEmpty,
+                        child: Row(
+                          children: [
+                            const Icon(Icons.delete_outline,
+                                color: Colors.red, size: 18),
+                            const SizedBox(width: 8),
+                            Text(l10n.userMgmtDeleteSelectedMenuLabel,
+                                style: const TextStyle(color: Colors.red)),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                  child: _menuButtonLookV2(
-                      Icons.checklist,
-                      '${l10n.userMgmtBulkActionsLabel}'
-                      '${_selectedIdsV2.isNotEmpty ? ' (${_selectedIdsV2.length})' : ''}'),
+                    ],
+                    child: _menuButtonLookV2(
+                        Icons.checklist,
+                        '${l10n.userMgmtBulkActionsLabel}'
+                        '${_selectedIdsV2.isNotEmpty ? ' (${_selectedIdsV2.length})' : ''}'),
+                  ),
+                const SizedBox(width: 12),
+                Text(
+                    l10n.userMgmtShowingRangeLabel(
+                        total == 0 ? 0 : _currentPageV2 * _pageSizeV2 + 1,
+                        (_currentPageV2 * _pageSizeV2 + _pageSizeV2)
+                            .clamp(0, total),
+                        total),
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ],
+            ),
+            const SizedBox(width: 24),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: _currentPageV2 > 0
+                      ? () => setState(() => _currentPageV2--)
+                      : null,
+                  icon: const Icon(Icons.chevron_left),
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  visualDensity: VisualDensity.compact,
                 ),
-              const SizedBox(width: 12),
-              Text(
-                  l10n.userMgmtShowingRangeLabel(
-                      total == 0 ? 0 : _currentPageV2 * _pageSizeV2 + 1,
-                      (_currentPageV2 * _pageSizeV2 + _pageSizeV2).clamp(0, total),
-                      total),
-                  style: TextStyle(
-                      fontSize: 12.5, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            ],
-          ),
-          const SizedBox(width: 24),
-          Row(
-            children: [
-              IconButton(
-                onPressed: _currentPageV2 > 0
-                    ? () => setState(() => _currentPageV2--)
-                    : null,
-                icon: const Icon(Icons.chevron_left),
-                iconSize: 20,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                visualDensity: VisualDensity.compact,
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
-                  borderRadius: BorderRadius.circular(8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('${_currentPageV2 + 1}',
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
-                child: Text('${_currentPageV2 + 1}',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 4),
-              Text(l10n.customerMgmtOfTotalPagesLabel(totalPages),
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              IconButton(
-                onPressed: _currentPageV2 < totalPages - 1
-                    ? () => setState(() => _currentPageV2++)
-                    : null,
-                icon: const Icon(Icons.chevron_right),
-                iconSize: 20,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
+                const SizedBox(width: 4),
+                Text(l10n.customerMgmtOfTotalPagesLabel(totalPages),
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                IconButton(
+                  onPressed: _currentPageV2 < totalPages - 1
+                      ? () => setState(() => _currentPageV2++)
+                      : null,
+                  icon: const Icon(Icons.chevron_right),
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -1284,7 +1350,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
           _tableHeaderRowV2(),
           _isLoading && _users.isEmpty
               ? const SizedBox(
-                  height: 240, child: Center(child: CircularProgressIndicator()))
+                  height: 240,
+                  child: Center(child: CircularProgressIndicator()))
               : pageItems.isEmpty
                   ? SizedBox(
                       height: 240,
@@ -1294,11 +1361,17 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                           children: [
                             Icon(Icons.person_search_outlined,
                                 size: 48,
-                                color: Theme.of(context).colorScheme.outlineVariant),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant),
                             const SizedBox(height: 12),
-                            Text(AppLocalizations.of(context)!.userMgmtNoUsersFoundMessage,
+                            Text(
+                                AppLocalizations.of(context)!
+                                    .userMgmtNoUsersFoundMessage,
                                 style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant)),
                           ],
                         ),
                       ),
@@ -1307,7 +1380,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: pageItems.length,
-                      itemBuilder: (context, index) => _tableRowV2(pageItems[index]),
+                      itemBuilder: (context, index) =>
+                          _tableRowV2(pageItems[index]),
                     ),
           _paginationV2(),
         ],
@@ -1335,8 +1409,12 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
             padding: const EdgeInsets.fromLTRB(18, 16, 10, 16),
             child: Row(
               children: [
-                Text(isAdding ? l10n.userMgmtAddNewUserTitle : l10n.userMgmtEditUserTitle,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                Text(
+                    isAdding
+                        ? l10n.userMgmtAddNewUserTitle
+                        : l10n.userMgmtEditUserTitle,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w800)),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.close, size: 20),
@@ -1362,7 +1440,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                         labelText: l10n.userMgmtUsernameRequiredLabel,
                         hintText: l10n.userMgmtEnterUsernameHint,
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall)),
                       ),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
@@ -1383,20 +1462,22 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                           labelText: l10n.userMgmtPasswordRequiredLabel,
                           hintText: l10n.userMgmtEnterPasswordHint,
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+                              borderRadius: BorderRadius.circular(
+                                  AppBorderRadius.xsmall)),
                           suffixIcon: IconButton(
                             icon: Icon(_obscurePassword
                                 ? Icons.visibility_off
                                 : Icons.visibility),
-                            onPressed: () =>
-                                setState(() => _obscurePassword = !_obscurePassword),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
                           ),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
                             return l10n.userMgmtPasswordRequiredMessage;
                           }
-                          if (value.length < 6) return l10n.userMgmtMinimum6CharsMessage;
+                          if (value.length < 6)
+                            return l10n.userMgmtMinimum6CharsMessage;
                           return null;
                         },
                       ),
@@ -1409,15 +1490,20 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                       decoration: InputDecoration(
                         labelText: l10n.userMgmtRoleRequiredLabel,
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall)),
                       ),
                       items: [
-                        DropdownMenuItem(value: 'admin', child: Text(l10n.dashboardRoleAdmin)),
-                        DropdownMenuItem(value: 'user', child: Text(l10n.dashboardRoleUser)),
+                        DropdownMenuItem(
+                            value: 'admin',
+                            child: Text(l10n.dashboardRoleAdmin)),
+                        DropdownMenuItem(
+                            value: 'user', child: Text(l10n.dashboardRoleUser)),
                       ],
                       onChanged: (value) => _userTypeController.text = value!,
-                      validator: (value) =>
-                          value == null ? l10n.userMgmtRoleRequiredMessage : null,
+                      validator: (value) => value == null
+                          ? l10n.userMgmtRoleRequiredMessage
+                          : null,
                     ),
                   ],
                 ),
@@ -1428,7 +1514,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               border: Border(
-                top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                top: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant),
               ),
             ),
             child: Row(
@@ -1447,7 +1534,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                   flex: 2,
                   child: FilledButton.icon(
                     onPressed: _isLoading ? null : _saveUserV2,
-                    style: FilledButton.styleFrom(backgroundColor: primaryColor),
+                    style:
+                        FilledButton.styleFrom(backgroundColor: primaryColor),
                     icon: _isLoading
                         ? const SizedBox(
                             width: 16,
@@ -1455,7 +1543,9 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                             child: CircularProgressIndicator(
                                 strokeWidth: 2, color: Colors.white))
                         : Icon(isAdding ? Icons.add : Icons.check, size: 18),
-                    label: Text(isAdding ? l10n.userMgmtSaveUserButton : l10n.productMgmtSaveChangesButton),
+                    label: Text(isAdding
+                        ? l10n.userMgmtSaveUserButton
+                        : l10n.productMgmtSaveChangesButton),
                   ),
                 ),
               ],
@@ -1487,9 +1577,13 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                     radius: 24,
                     backgroundColor: Colors.blue.withValues(alpha: 0.12),
                     child: Text(
-                      user.username.isNotEmpty ? user.username[0].toUpperCase() : '?',
+                      user.username.isNotEmpty
+                          ? user.username[0].toUpperCase()
+                          : '?',
                       style: const TextStyle(
-                          color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 18),
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -1515,7 +1609,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                   decoration: InputDecoration(
                     labelText: l10n.userMgmtUsernameRequiredLabel,
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+                        borderRadius:
+                            BorderRadius.circular(AppBorderRadius.xsmall)),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -1622,7 +1717,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                   Positioned.fill(
                     child: GestureDetector(
                       onTap: () => setState(() => _showAddPanelV2 = false),
-                      child: Container(color: Colors.black.withValues(alpha: 0.3)),
+                      child:
+                          Container(color: Colors.black.withValues(alpha: 0.3)),
                     ),
                   ),
                   Positioned(
@@ -1641,4 +1737,3 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
     );
   }
 }
-

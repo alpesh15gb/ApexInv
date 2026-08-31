@@ -415,7 +415,10 @@ class _InvoiceSettingsScreenV2State
     required int maxLength,
   }) async {
     final dialogController = TextEditingController(text: controller.text);
-    double dialogWidth = 480;
+    // Start at 480 on desktop; clamp to the window on phones so the
+    // resizable editor never opens wider than the screen allows.
+    double dialogWidth =
+        (MediaQuery.sizeOf(context).width - 80).clamp(320.0, 480.0).toDouble();
     double dialogHeight = 320;
     final result = await showDialog<String>(
       context: context,
@@ -1019,7 +1022,10 @@ class _InvoiceSettingsScreenV2State
                 ),
                 const SizedBox(height: 8),
               ],
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   OutlinedButton.icon(
                     onPressed: _pickSignature,
@@ -1029,9 +1035,7 @@ class _InvoiceSettingsScreenV2State
                             ? l10n.invoiceSettingsChangeSignatureButton
                             : l10n.invoiceSettingsUploadSignatureButton),
                   ),
-                  if (_signatureBase64 != null &&
-                      _signatureBase64!.isNotEmpty) ...[
-                    const SizedBox(width: 8),
+                  if (_signatureBase64 != null && _signatureBase64!.isNotEmpty)
                     TextButton.icon(
                       onPressed: _clearSignature,
                       icon: const Icon(Icons.delete_outline,
@@ -1039,7 +1043,6 @@ class _InvoiceSettingsScreenV2State
                       label: Text(l10n.tooltipRemove,
                           style: const TextStyle(color: Colors.red)),
                     ),
-                  ],
                 ],
               ),
               const SizedBox(height: 12),
@@ -1123,7 +1126,10 @@ class _InvoiceSettingsScreenV2State
                 ),
                 const SizedBox(height: 8),
               ],
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   OutlinedButton.icon(
                     onPressed: _pickWatermark,
@@ -1133,9 +1139,7 @@ class _InvoiceSettingsScreenV2State
                             ? l10n.invoiceSettingsChangeWatermarkButton
                             : l10n.invoiceSettingsUploadWatermarkButton),
                   ),
-                  if (_watermarkBase64 != null &&
-                      _watermarkBase64!.isNotEmpty) ...[
-                    const SizedBox(width: 8),
+                  if (_watermarkBase64 != null && _watermarkBase64!.isNotEmpty)
                     TextButton.icon(
                       onPressed: _clearWatermark,
                       icon: const Icon(Icons.delete_outline,
@@ -1143,7 +1147,6 @@ class _InvoiceSettingsScreenV2State
                       label: Text(l10n.tooltipRemove,
                           style: const TextStyle(color: Colors.red)),
                     ),
-                  ],
                 ],
               ),
               if (_watermarkBase64 != null && _watermarkBase64!.isNotEmpty) ...[

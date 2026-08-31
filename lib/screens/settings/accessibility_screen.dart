@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/providers/repositories.dart';
@@ -39,6 +40,42 @@ class _AccessibilityScreenState extends ConsumerState<AccessibilityScreen> {
         .setSetting(SettingKey.createInvoiceLayout, value);
     if (!mounted) return;
     setState(() => _createInvoiceLayout = value);
+  }
+
+  Widget _layoutText(AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+            _createInvoiceLayout == 'v1'
+                ? l10n.accessibilityClassicLayoutLabel
+                : l10n.accessibilityNewLayoutLabel,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 2),
+        Text(l10n.accessibilityLayoutDescription,
+            style: TextStyle(
+                fontSize: AppFontSize.xsmall,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ],
+    );
+  }
+
+  Widget _layoutToggle(AppLocalizations l10n) {
+    return SegmentedButton<String>(
+      segments: [
+        ButtonSegment(
+            value: 'v2',
+            icon: const Icon(Icons.auto_awesome, size: 16),
+            label: Text(l10n.dashboardLayoutNew)),
+        ButtonSegment(
+            value: 'v1',
+            icon: const Icon(Icons.history, size: 16),
+            label: Text(l10n.dashboardLayoutClassic)),
+      ],
+      selected: {_createInvoiceLayout},
+      onSelectionChanged: (selection) =>
+          _setCreateInvoiceLayout(selection.first),
+    );
   }
 
   @override
@@ -88,46 +125,27 @@ class _AccessibilityScreenState extends ConsumerState<AccessibilityScreen> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
+                    // Compact: stack the toggle under the text so neither
+                    // the description nor the SegmentedButton collapses.
+                    child: context.isCompact
+                        ? Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                  _createInvoiceLayout == 'v1'
-                                      ? l10n.accessibilityClassicLayoutLabel
-                                      : l10n.accessibilityNewLayoutLabel,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 2),
-                              Text(l10n.accessibilityLayoutDescription,
-                                  style: TextStyle(
-                                      fontSize: AppFontSize.xsmall,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant)),
+                              _layoutText(l10n),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: _layoutToggle(l10n),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(child: _layoutText(l10n)),
+                              const SizedBox(width: 16),
+                              _layoutToggle(l10n),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        SegmentedButton<String>(
-                          segments: [
-                            ButtonSegment(
-                                value: 'v2',
-                                icon: const Icon(Icons.auto_awesome, size: 16),
-                                label: Text(l10n.dashboardLayoutNew)),
-                            ButtonSegment(
-                                value: 'v1',
-                                icon: const Icon(Icons.history, size: 16),
-                                label: Text(l10n.dashboardLayoutClassic)),
-                          ],
-                          selected: {_createInvoiceLayout},
-                          onSelectionChanged: (selection) =>
-                              _setCreateInvoiceLayout(selection.first),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
                 const SizedBox(height: 24),

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/database/report_service.dart';
@@ -791,15 +792,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             ),
         ],
       ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildSidebar(primary),
-          VerticalDivider(
-              width: 1,
-              thickness: 1,
-              color: Theme.of(context).colorScheme.outlineVariant),
-          Expanded(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final content = Expanded(
             child: Container(
               color: Theme.of(context).brightness == Brightness.dark
                   ? Theme.of(context).scaffoldBackgroundColor
@@ -808,9 +803,161 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                   ? const Center(child: CircularProgressIndicator())
                   : _buildContent(),
             ),
-          ),
-        ],
+          );
+          if (constraints.maxWidth < Breakpoints.expandedMin) {
+            // Compact/medium: the 192px desktop sidebar would eat half the
+            // screen — move it into a bottom sheet behind a toolbar row.
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: AppLocalizations.of(context)!.navReports,
+                        icon: const Icon(Icons.menu_open_rounded),
+                        onPressed: () => _showReportsSidebarSheet(primary),
+                      ),
+                      Expanded(
+                        child: Text(
+                          _navLabel(_selectedIndex),
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 14.5),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _showReportsSidebarSheet(primary),
+                        icon: const Icon(Icons.tune, size: 16),
+                        label: Text(_presetLabel(_preset)),
+                      ),
+                    ],
+                  ),
+                ),
+                content,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildSidebar(primary),
+              VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Theme.of(context).colorScheme.outlineVariant),
+              content,
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  /// Bottom-sheet version of the desktop sidebar for narrow windows: same
+  /// nav/currency/period items, full width, scrollable.
+  Future<void> _showReportsSidebarSheet(Color primary) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.8,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        AppLocalizations.of(sheetContext)!.navReports,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(sheetContext),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
+                      for (int i = 0; i < _navIcons.length; i++)
+                        _navItem(i, primary),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        child: Divider(
+                            height: 1,
+                            color: Theme.of(sheetContext)
+                                .colorScheme
+                                .outlineVariant),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: Text(
+                            AppLocalizations.of(sheetContext)!
+                                .reportsCurrencySectionLabel,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(sheetContext)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                letterSpacing: 0.8)),
+                      ),
+                      _currencyScopeItem(_CurrencyScope.selected, primary),
+                      _currencyScopeItem(_CurrencyScope.all, primary),
+                      if (_selectedIndex != 6 && _selectedIndex != 7) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          child: Divider(
+                              height: 1,
+                              color: Theme.of(sheetContext)
+                                  .colorScheme
+                                  .outlineVariant),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                          child: Text(
+                              AppLocalizations.of(sheetContext)!
+                                  .reportsPeriodSectionLabel,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(sheetContext)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                  letterSpacing: 0.8)),
+                        ),
+                        for (final p in _DatePreset.values)
+                          _periodItem(p, primary),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -2298,16 +2445,32 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
           child: _statementSummaryCards(statement),
         ),
-        _statementTableHeader(),
-        if (statement.lines.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 20),
-            child: _emptyState(
-                AppLocalizations.of(context)!.reportsNoTransactionsMessage),
-          )
-        else
-          ...statement.lines.asMap().entries.map(
-              (entry) => _statementRow(statement, entry.key + 1, entry.value)),
+        // Genuine 8-column ledger: horizontal scroll is the right tool here
+        // (vs. compressing it) — a statement table is expected to scroll on
+        // phones, the same way a bank statement does.
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: ConstrainedBox(
+            constraints:
+                BoxConstraints(minWidth: MediaQuery.sizeOf(context).width - 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _statementTableHeader(),
+                if (statement.lines.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: _emptyState(AppLocalizations.of(context)!
+                        .reportsNoTransactionsMessage),
+                  )
+                else
+                  ...statement.lines.asMap().entries.map((entry) =>
+                      _statementRow(statement, entry.key + 1, entry.value)),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }

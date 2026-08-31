@@ -379,7 +379,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               final screen = Stack(
                 children: [
                   buildScreen(),
-                  if (_selectedIndex == 1)
+                  // Floating v1/v2 layout toggle: desktop only. On compact it
+                  // overlaps the Create Invoice bottom action bar (the same
+                  // toggle lives in Settings → Accessibility).
+                  if (_selectedIndex == 1 &&
+                      constraints.maxWidth >= Breakpoints.expandedMin)
                     Positioned(
                         bottom: 16,
                         right: 16,
@@ -609,10 +613,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         AppLocalizations.of(context)!.navProducts),
                     _buildNavItem(7, Icons.bar_chart_outlined, Icons.bar_chart,
                         AppLocalizations.of(context)!.navReports),
-                    _buildNavItem(8, Icons.receipt_long_outlined, Icons.receipt_long,
-                        'Expenses'),
-                    _buildNavItem(9, Icons.shopping_cart_outlined, Icons.shopping_cart,
-                        'Purchase Orders'),
+                    _buildNavItem(8, Icons.receipt_long_outlined,
+                        Icons.receipt_long, 'Expenses'),
+                    _buildNavItem(9, Icons.shopping_cart_outlined,
+                        Icons.shopping_cart, 'Purchase Orders'),
                     _buildNavItem(10, Icons.settings_outlined, Icons.settings,
                         AppLocalizations.of(context)!.navSettings,
                         showDot: _hasUpdate),
@@ -1669,357 +1673,136 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  if (invoice.dueDate == null)
-                                    Container(
-                                      width: 38,
-                                      height: 38,
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                          colors: [
-                                            Theme.of(context).primaryColor,
-                                            Theme.of(context)
-                                                .primaryColor
-                                                .withValues(alpha: 0.7),
-                                          ],
-                                        ),
-                                        borderRadius: BorderRadius.circular(
-                                            AppBorderRadius.xsmall),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          '${index + 1}',
-                                          style: const TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  if (invoice.dueDate != null)
-                                    () {
-                                      final isOverdue =
-                                          InvoiceCalculator.isOverdue(
-                                        dueDate: invoice.dueDate,
-                                        outstanding: invoice.outstandingBalance,
-                                      );
-                                      return Container(
-                                        width: 38,
-                                        height: 38,
-                                        decoration: BoxDecoration(
-                                          gradient: isOverdue
-                                              ? DashboardScreenColors
-                                                  .invoiceNumberOverDueLinearGradient
-                                              : LinearGradient(
-                                                  begin: Alignment.topLeft,
-                                                  end: Alignment.bottomRight,
-                                                  colors: [
-                                                    Theme.of(context)
-                                                        .primaryColor,
-                                                    Theme.of(context)
-                                                        .primaryColor
-                                                        .withValues(alpha: 0.7),
-                                                  ],
-                                                ),
-                                          borderRadius: BorderRadius.circular(
-                                              AppBorderRadius.xsmall),
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            '${index + 1}',
-                                            style: const TextStyle(
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    }(),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 4,
-                                          crossAxisAlignment:
-                                              WrapCrossAlignment.center,
-                                          children: [
-                                            Text(
-                                              '${invoice.type} #${invoice.invoiceNumber ?? invoice.id}',
-                                              style: const TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: invoice.type == 'Invoice'
-                                                    ? Colors.indigo
-                                                        .withValues(alpha: 0.1)
-                                                    : Colors.orange
-                                                        .withValues(alpha: 0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(6),
-                                                border: Border.all(
-                                                  color:
-                                                      invoice.type == 'Invoice'
-                                                          ? Colors.indigo
-                                                              .withValues(
-                                                                  alpha: 0.35)
-                                                          : Colors.orange
-                                                              .withValues(
-                                                                  alpha: 0.35),
-                                                ),
-                                              ),
-                                              child: Text(
-                                                _invoiceTypeLabel(
-                                                    context, invoice.type),
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color:
-                                                      invoice.type == 'Invoice'
-                                                          ? Colors.indigo[700]
-                                                          : Colors.orange[800],
-                                                  letterSpacing: 0.5,
-                                                ),
-                                              ),
-                                            ),
-                                            if (invoice.type == 'Invoice')
-                                              _buildPaymentStatusChip(
-                                                  invoice.paymentStatus),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Wrap(
-                                          spacing: 6,
-                                          runSpacing: 4,
-                                          crossAxisAlignment:
-                                              WrapCrossAlignment.center,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Icon(Icons.person_outline,
-                                                    size: 16,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurfaceVariant),
-                                                const SizedBox(width: 6),
-                                                Flexible(
-                                                    child: Text(
-                                                  invoice.customer.name
-                                                      .limit(15),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                      fontSize: 15,
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurface),
-                                                )),
-                                              ],
-                                            ),
-                                            Row(
-                                              children: [
-                                                Icon(Icons.calendar_today,
-                                                    size: 16,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurfaceVariant),
-                                                const SizedBox(width: 6),
-                                                Flexible(
-                                                    child: Text(
-                                                  invoice.date
-                                                      .toString()
-                                                      .split(' ')[0],
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                      fontSize: 15,
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurface),
-                                                )),
-                                              ],
-                                            ),
-                                            if (invoice.dueDate != null)
-                                              () {
-                                                final isOverdue =
-                                                    InvoiceCalculator.isOverdue(
-                                                  dueDate: invoice.dueDate,
-                                                  outstanding: invoice
-                                                      .outstandingBalance,
-                                                );
-                                                final color = isOverdue
-                                                    ? Colors.red[700]!
-                                                    : Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurfaceVariant;
-                                                return ConstrainedBox(
-                                                  constraints:
-                                                      const BoxConstraints(
-                                                          maxWidth: 260),
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Icon(Icons.event_outlined,
-                                                          size: 16,
-                                                          color: color),
-                                                      const SizedBox(width: 6),
-                                                      Flexible(
-                                                        child: Text(
-                                                          AppLocalizations.of(
-                                                                  context)!
-                                                              .dashboardDueDateLabel(
-                                                                  AppFormatters
-                                                                      .formatShortDate(
-                                                                          invoice
-                                                                              .dueDate)),
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style: TextStyle(
-                                                            fontSize: 15,
-                                                            color: color,
-                                                            fontWeight:
-                                                                isOverdue
-                                                                    ? FontWeight
-                                                                        .w600
-                                                                    : FontWeight
-                                                                        .normal,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              }(),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
+                              child: LayoutBuilder(
+                                builder: (context, rowConstraints) {
+                                  final badge =
+                                      _recentInvoiceBadge(invoice, index);
+                                  if (rowConstraints.maxWidth <
+                                      Breakpoints.compactMax) {
+                                    return _compactRecentInvoiceCard(
+                                        invoice, index, badge);
+                                  }
+                                  return Row(
                                     children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 16, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: Colors.purple
-                                              .withValues(alpha: 0.1),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          '${invoice.currencySymbol} ${invoice.total.toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.purple,
-                                          ),
-                                        ),
+                                      badge,
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: _recentInvoiceDetails(invoice),
                                       ),
-                                      const SizedBox(height: 8),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 6,
-                                        alignment: WrapAlignment.end,
+                                      const SizedBox(width: 16),
+                                      Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
                                         children: [
-                                          _buildActionButton(
-                                              Icons.visibility_outlined,
-                                              Colors.green,
-                                              AppLocalizations.of(context)!
-                                                  .actionView,
-                                              () => InvoicePdfServices
-                                                  .showInvoiceDetails(
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 16, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.purple
+                                                  .withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              '${invoice.currencySymbol} ${invoice.total.toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.purple,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 6,
+                                            alignment: WrapAlignment.end,
+                                            children: [
+                                              _buildActionButton(
+                                                  Icons.visibility_outlined,
+                                                  Colors.green,
+                                                  AppLocalizations.of(context)!
+                                                      .actionView,
+                                                  () => InvoicePdfServices
+                                                      .showInvoiceDetails(
+                                                          context, invoice)),
+                                              _buildActionButton(
+                                                  Icons.edit_outlined,
+                                                  Colors.blue,
+                                                  AppLocalizations.of(context)!
+                                                      .actionEdit,
+                                                  () => widget
+                                                      .onEditInvoice(invoice)),
+                                              _buildActionButton(
+                                                  Icons.copy_all_outlined,
+                                                  Colors.teal,
+                                                  AppLocalizations.of(context)!
+                                                      .actionDuplicate,
+                                                  () => _showCloneDialog(
+                                                      invoice)),
+                                              _buildActionButton(
+                                                  Icons.picture_as_pdf_outlined,
+                                                  Colors.orange,
+                                                  AppLocalizations.of(context)!
+                                                      .actionPdfPreview,
+                                                  () => InvoicePdfServices
+                                                      .previewPDF(
+                                                          context, invoice)),
+                                              _buildActionButton(
+                                                  Icons.download_outlined,
+                                                  Colors.deepPurple,
+                                                  AppLocalizations.of(context)!
+                                                      .actionDownloadPdf,
+                                                  () => PDFService.downloadPDF(
                                                       context, invoice)),
-                                          _buildActionButton(
-                                              Icons.edit_outlined,
-                                              Colors.blue,
-                                              AppLocalizations.of(context)!
-                                                  .actionEdit,
-                                              () => widget
-                                                  .onEditInvoice(invoice)),
-                                          _buildActionButton(
-                                              Icons.copy_all_outlined,
-                                              Colors.teal,
-                                              AppLocalizations.of(context)!
-                                                  .actionDuplicate,
-                                              () => _showCloneDialog(invoice)),
-                                          _buildActionButton(
-                                              Icons.picture_as_pdf_outlined,
-                                              Colors.orange,
-                                              AppLocalizations.of(context)!
-                                                  .actionPdfPreview,
-                                              () =>
-                                                  InvoicePdfServices.previewPDF(
-                                                      context, invoice)),
-                                          _buildActionButton(
-                                              Icons.download_outlined,
-                                              Colors.deepPurple,
-                                              AppLocalizations.of(context)!
-                                                  .actionDownloadPdf,
-                                              () => PDFService.downloadPDF(
-                                                  context, invoice)),
-                                          _buildActionButton(
-                                              Icons.print_outlined,
-                                              Colors.blueGrey,
-                                              AppLocalizations.of(context)!
-                                                  .actionPrint,
-                                              () => InvoicePdfServices
-                                                  .generatePDF(
-                                                      context, invoice)),
-                                          _buildActionButton(
-                                              Icons.payments_outlined,
-                                              Colors.purple,
-                                              AppLocalizations.of(context)!
-                                                  .actionPayment,
-                                              invoice.type == 'Invoice'
-                                                  ? () => showDialog(
-                                                        context: context,
-                                                        barrierDismissible:
-                                                            false,
-                                                        builder: (_) =>
-                                                            ApplyPaymentDialog(
-                                                          invoice: invoice,
-                                                          onPaymentRecorded:
-                                                              () {
-                                                            if (!mounted)
-                                                              return;
-                                                            setState(() {});
-                                                          },
-                                                        ),
-                                                      )
-                                                  : null),
-                                          _buildActionButton(
-                                              Icons.delete_outline,
-                                              Colors.red,
-                                              AppLocalizations.of(context)!
-                                                  .actionDelete,
-                                              widget.user.isAdmin()
-                                                  ? () =>
-                                                      _showDeleteDialog(invoice)
-                                                  : null),
+                                              _buildActionButton(
+                                                  Icons.print_outlined,
+                                                  Colors.blueGrey,
+                                                  AppLocalizations.of(context)!
+                                                      .actionPrint,
+                                                  () => InvoicePdfServices
+                                                      .generatePDF(
+                                                          context, invoice)),
+                                              _buildActionButton(
+                                                  Icons.payments_outlined,
+                                                  Colors.purple,
+                                                  AppLocalizations.of(context)!
+                                                      .actionPayment,
+                                                  invoice.type == 'Invoice'
+                                                      ? () => showDialog(
+                                                            context: context,
+                                                            barrierDismissible:
+                                                                false,
+                                                            builder: (_) =>
+                                                                ApplyPaymentDialog(
+                                                              invoice: invoice,
+                                                              onPaymentRecorded:
+                                                                  () {
+                                                                if (!mounted)
+                                                                  return;
+                                                                setState(() {});
+                                                              },
+                                                            ),
+                                                          )
+                                                      : null),
+                                              _buildActionButton(
+                                                  Icons.delete_outline,
+                                                  Colors.red,
+                                                  AppLocalizations.of(context)!
+                                                      .actionDelete,
+                                                  widget.user.isAdmin()
+                                                      ? () => _showDeleteDialog(
+                                                          invoice)
+                                                      : null),
+                                            ],
+                                          ),
                                         ],
                                       ),
                                     ],
-                                  ),
-                                ],
+                                  );
+                                },
                               ),
                             ),
                           ),
@@ -2030,6 +1813,296 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Numbered badge for a recent-invoice row — overdue-tinted when the
+  /// invoice has a past due date.
+  Widget _recentInvoiceBadge(Invoice invoice, int index) {
+    final isOverdue = invoice.dueDate != null &&
+        InvoiceCalculator.isOverdue(
+          dueDate: invoice.dueDate,
+          outstanding: invoice.outstandingBalance,
+        );
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        gradient: isOverdue
+            ? DashboardScreenColors.invoiceNumberOverDueLinearGradient
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Theme.of(context).primaryColor,
+                  Theme.of(context).primaryColor.withValues(alpha: 0.7),
+                ],
+              ),
+        borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+      ),
+      child: Center(
+        child: Text(
+          '${index + 1}',
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Title / chips / customer-and-date meta shared by the compact card and
+  /// the desktop row of the Recent Invoices list.
+  Widget _recentInvoiceDetails(Invoice invoice) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              '${invoice.type} #${invoice.invoiceNumber ?? invoice.id}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: invoice.type == 'Invoice'
+                    ? Colors.indigo.withValues(alpha: 0.1)
+                    : Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: invoice.type == 'Invoice'
+                      ? Colors.indigo.withValues(alpha: 0.35)
+                      : Colors.orange.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Text(
+                _invoiceTypeLabel(context, invoice.type),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: invoice.type == 'Invoice'
+                      ? Colors.indigo[700]
+                      : Colors.orange[800],
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            if (invoice.type == 'Invoice')
+              _buildPaymentStatusChip(invoice.paymentStatus),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.person_outline,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Flexible(
+                    child: Text(
+                  invoice.customer.name.limit(15),
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.onSurface),
+                )),
+              ],
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.calendar_today,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Flexible(
+                    child: Text(
+                  invoice.date.toString().split(' ')[0],
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.onSurface),
+                )),
+              ],
+            ),
+            if (invoice.dueDate != null)
+              () {
+                final isOverdue = InvoiceCalculator.isOverdue(
+                  dueDate: invoice.dueDate,
+                  outstanding: invoice.outstandingBalance,
+                );
+                final color = isOverdue
+                    ? Colors.red[700]!
+                    : Theme.of(context).colorScheme.onSurfaceVariant;
+                return ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.event_outlined, size: 16, color: color),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          AppLocalizations.of(context)!.dashboardDueDateLabel(
+                              AppFormatters.formatShortDate(invoice.dueDate)),
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: color,
+                            fontWeight:
+                                isOverdue ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }(),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Compact-phone recent-invoice card: badge + details + amount on the top
+  /// row, primary actions and an overflow menu below — the desktop row's
+  /// trailing 8-button block cannot survive 320-430px.
+  Widget _compactRecentInvoiceCard(Invoice invoice, int index, Widget badge) {
+    final l10n = AppLocalizations.of(context)!;
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            badge,
+            const SizedBox(width: 12),
+            Expanded(child: _recentInvoiceDetails(invoice)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.purple.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '${invoice.currencySymbol} ${invoice.total.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.purple,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            _buildActionButton(
+                Icons.visibility_outlined,
+                Colors.green,
+                l10n.actionView,
+                () => InvoicePdfServices.showInvoiceDetails(context, invoice)),
+            const SizedBox(width: 6),
+            _buildActionButton(Icons.edit_outlined, Colors.blue,
+                l10n.actionEdit, () => widget.onEditInvoice(invoice)),
+            const SizedBox(width: 6),
+            _buildActionButton(Icons.copy_all_outlined, Colors.teal,
+                l10n.actionDuplicate, () => _showCloneDialog(invoice)),
+            const Spacer(),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 20),
+              tooltip: l10n.invoiceMgmtMoreActionsTooltip,
+              onSelected: (action) {
+                switch (action) {
+                  case 'pdf':
+                    InvoicePdfServices.previewPDF(context, invoice);
+                  case 'download':
+                    PDFService.downloadPDF(context, invoice);
+                  case 'print':
+                    InvoicePdfServices.generatePDF(context, invoice);
+                  case 'payment':
+                    if (invoice.type == 'Invoice') {
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) => ApplyPaymentDialog(
+                          invoice: invoice,
+                          onPaymentRecorded: () {
+                            if (!mounted) return;
+                            setState(() {});
+                          },
+                        ),
+                      );
+                    }
+                  case 'delete':
+                    if (widget.user.isAdmin()) _showDeleteDialog(invoice);
+                }
+              },
+              itemBuilder: (ctx) => [
+                PopupMenuItem(
+                    value: 'pdf',
+                    child: Row(children: [
+                      const Icon(Icons.picture_as_pdf_outlined,
+                          size: 18, color: Colors.orange),
+                      const SizedBox(width: 10),
+                      Text(l10n.actionPdfPreview),
+                    ])),
+                PopupMenuItem(
+                    value: 'download',
+                    child: Row(children: [
+                      const Icon(Icons.download_outlined,
+                          size: 18, color: Colors.deepPurple),
+                      const SizedBox(width: 10),
+                      Text(l10n.actionDownloadPdf),
+                    ])),
+                PopupMenuItem(
+                    value: 'print',
+                    child: Row(children: [
+                      const Icon(Icons.print_outlined,
+                          size: 18, color: Colors.blueGrey),
+                      const SizedBox(width: 10),
+                      Text(l10n.actionPrint),
+                    ])),
+                if (invoice.type == 'Invoice')
+                  PopupMenuItem(
+                      value: 'payment',
+                      child: Row(children: [
+                        const Icon(Icons.payments_outlined,
+                            size: 18, color: Colors.purple),
+                        const SizedBox(width: 10),
+                        Text(l10n.actionPayment),
+                      ])),
+                if (widget.user.isAdmin())
+                  PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [
+                        Icon(Icons.delete_outline,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.error),
+                        const SizedBox(width: 10),
+                        Text(l10n.actionDelete,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error)),
+                      ])),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -2217,103 +2290,167 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               child: Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                child: Row(
-                  children: [
-                    // Due badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: badgeColor.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        badgeLabel,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: badgeColor),
-                      ),
+                child: LayoutBuilder(builder: (context, rowConstraints) {
+                  final dueBadge = Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border:
+                          Border.all(color: badgeColor.withValues(alpha: 0.4)),
                     ),
-                    const SizedBox(width: 16),
-                    // Invoice ID
-                    Text(
-                      '#${invoice.invoiceNumber ?? invoice.id}',
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold),
+                    child: Text(
+                      badgeLabel,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: badgeColor),
                     ),
-                    const SizedBox(width: 16),
-                    // Customer
-                    Icon(Icons.person_outline,
-                        size: 15,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              invoice.customer.name,
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  color:
-                                      Theme.of(context).colorScheme.onSurface),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          CustomerInfoButton(customer: invoice.customer),
-                        ],
-                      ),
+                  );
+                  final amountPill = Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    const SizedBox(width: 16),
-                    // Outstanding amount
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '$_currencySymbol ${invoice.outstandingBalance.toStringAsFixed(2)}',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: badgeColor),
-                      ),
+                    child: Text(
+                      '$_currencySymbol ${invoice.outstandingBalance.toStringAsFixed(2)}',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: badgeColor),
                     ),
-                    const SizedBox(width: 12),
-                    // Actions
-                    _buildActionButton(
-                        Icons.visibility_outlined,
-                        Colors.green,
-                        AppLocalizations.of(context)!.actionView,
-                        () => InvoicePdfServices.showInvoiceDetails(
-                            context, invoice)),
-                    const SizedBox(width: 6),
-                    _buildActionButton(
-                        Icons.picture_as_pdf_outlined,
-                        Colors.orange,
-                        AppLocalizations.of(context)!.actionPdfPreview,
-                        () => InvoicePdfServices.previewPDF(context, invoice)),
-                    const SizedBox(width: 6),
-                    _buildActionButton(
-                        Icons.payments_outlined,
-                        Colors.purple,
-                        AppLocalizations.of(context)!.actionRecordPayment,
-                        () => showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (_) => ApplyPaymentDialog(
-                                invoice: invoice,
-                                onPaymentRecorded: _loadDashboardData,
+                  );
+                  final customerRow = Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.person_outline,
+                          size: 15,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          invoice.customer.name,
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSurface),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      CustomerInfoButton(customer: invoice.customer),
+                    ],
+                  );
+                  if (rowConstraints.maxWidth < Breakpoints.compactMax) {
+                    // Two-line compact layout: badge + id + amount, then
+                    // customer, then actions — the single-line desktop row
+                    // needs ~400px minimum.
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            dueBadge,
+                            const SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                '#${invoice.invoiceNumber ?? invoice.id}',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold),
                               ),
-                            )),
-                  ],
-                ),
+                            ),
+                            const SizedBox(width: 8),
+                            amountPill,
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        customerRow,
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            _buildActionButton(
+                                Icons.visibility_outlined,
+                                Colors.green,
+                                AppLocalizations.of(context)!.actionView,
+                                () => InvoicePdfServices.showInvoiceDetails(
+                                    context, invoice)),
+                            const SizedBox(width: 6),
+                            _buildActionButton(
+                                Icons.picture_as_pdf_outlined,
+                                Colors.orange,
+                                AppLocalizations.of(context)!.actionPdfPreview,
+                                () => InvoicePdfServices.previewPDF(
+                                    context, invoice)),
+                            const SizedBox(width: 6),
+                            _buildActionButton(
+                                Icons.payments_outlined,
+                                Colors.purple,
+                                AppLocalizations.of(context)!
+                                    .actionRecordPayment,
+                                () => showDialog(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (_) => ApplyPaymentDialog(
+                                        invoice: invoice,
+                                        onPaymentRecorded: _loadDashboardData,
+                                      ),
+                                    )),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      // Due badge
+                      dueBadge,
+                      const SizedBox(width: 16),
+                      // Invoice ID
+                      Text(
+                        '#${invoice.invoiceNumber ?? invoice.id}',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 16),
+                      // Customer
+                      customerRow,
+                      const SizedBox(width: 16),
+                      // Outstanding amount
+                      amountPill,
+                      const SizedBox(width: 12),
+                      // Actions
+                      _buildActionButton(
+                          Icons.visibility_outlined,
+                          Colors.green,
+                          AppLocalizations.of(context)!.actionView,
+                          () => InvoicePdfServices.showInvoiceDetails(
+                              context, invoice)),
+                      const SizedBox(width: 6),
+                      _buildActionButton(
+                          Icons.picture_as_pdf_outlined,
+                          Colors.orange,
+                          AppLocalizations.of(context)!.actionPdfPreview,
+                          () =>
+                              InvoicePdfServices.previewPDF(context, invoice)),
+                      const SizedBox(width: 6),
+                      _buildActionButton(
+                          Icons.payments_outlined,
+                          Colors.purple,
+                          AppLocalizations.of(context)!.actionRecordPayment,
+                          () => showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (_) => ApplyPaymentDialog(
+                                  invoice: invoice,
+                                  onPaymentRecorded: _loadDashboardData,
+                                ),
+                              )),
+                    ],
+                  );
+                }),
               ),
             ),
           );
@@ -2394,105 +2531,166 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               child: Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                child: Row(
-                  children: [
-                    // Days overdue badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: Colors.red.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        AppLocalizations.of(context)!
-                            .dashboardDaysOverdueLabel(daysOverdue),
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.red[800]),
-                      ),
+                child: LayoutBuilder(builder: (context, rowConstraints) {
+                  final daysBadge = Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border:
+                          Border.all(color: Colors.red.withValues(alpha: 0.4)),
                     ),
-                    const SizedBox(width: 16),
-                    // Invoice ID
-                    Text(
-                      '#${invoice.invoiceNumber ?? invoice.id}',
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold),
+                    child: Text(
+                      AppLocalizations.of(context)!
+                          .dashboardDaysOverdueLabel(daysOverdue),
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.red[800]),
                     ),
-                    const SizedBox(width: 16),
-                    // Customer
-                    Icon(Icons.person_outline,
-                        size: 15,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              invoice.customer.name,
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  color:
-                                      Theme.of(context).colorScheme.onSurface),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          CustomerInfoButton(customer: invoice.customer),
-                        ],
-                      ),
+                  );
+                  final amountPill = Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    const SizedBox(width: 16),
-                    // Outstanding amount
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '$_currencySymbol ${invoice.outstandingBalance.toStringAsFixed(2)}',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red[800]),
-                      ),
+                    child: Text(
+                      '$_currencySymbol ${invoice.outstandingBalance.toStringAsFixed(2)}',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red[800]),
                     ),
-                    const SizedBox(width: 12),
-                    // Actions
-                    _buildActionButton(
-                        Icons.visibility_outlined,
-                        Colors.green,
-                        AppLocalizations.of(context)!.actionView,
-                        () => InvoicePdfServices.showInvoiceDetails(
-                            context, invoice)),
-                    const SizedBox(width: 6),
-                    _buildActionButton(
-                        Icons.picture_as_pdf_outlined,
-                        Colors.orange,
-                        AppLocalizations.of(context)!.actionPdfPreview,
-                        () => InvoicePdfServices.previewPDF(context, invoice)),
-                    const SizedBox(width: 6),
-                    _buildActionButton(
-                      Icons.payments_outlined,
-                      Colors.purple,
-                      AppLocalizations.of(context)!.actionRecordPayment,
-                      () => showDialog(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (_) => ApplyPaymentDialog(
-                          invoice: invoice,
-                          onPaymentRecorded: _loadDashboardData,
+                  );
+                  final customerRow = Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.person_outline,
+                          size: 15,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          invoice.customer.name,
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: Theme.of(context).colorScheme.onSurface),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                      CustomerInfoButton(customer: invoice.customer),
+                    ],
+                  );
+                  if (rowConstraints.maxWidth < Breakpoints.compactMax) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            daysBadge,
+                            const SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                '#${invoice.invoiceNumber ?? invoice.id}',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            amountPill,
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        customerRow,
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            _buildActionButton(
+                                Icons.visibility_outlined,
+                                Colors.green,
+                                AppLocalizations.of(context)!.actionView,
+                                () => InvoicePdfServices.showInvoiceDetails(
+                                    context, invoice)),
+                            const SizedBox(width: 6),
+                            _buildActionButton(
+                                Icons.picture_as_pdf_outlined,
+                                Colors.orange,
+                                AppLocalizations.of(context)!.actionPdfPreview,
+                                () => InvoicePdfServices.previewPDF(
+                                    context, invoice)),
+                            const SizedBox(width: 6),
+                            _buildActionButton(
+                              Icons.payments_outlined,
+                              Colors.purple,
+                              AppLocalizations.of(context)!.actionRecordPayment,
+                              () => showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (_) => ApplyPaymentDialog(
+                                  invoice: invoice,
+                                  onPaymentRecorded: _loadDashboardData,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      // Days overdue badge
+                      daysBadge,
+                      const SizedBox(width: 16),
+                      // Invoice ID
+                      Text(
+                        '#${invoice.invoiceNumber ?? invoice.id}',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(width: 16),
+                      // Customer
+                      customerRow,
+                      const SizedBox(width: 16),
+                      // Outstanding amount
+                      amountPill,
+                      const SizedBox(width: 12),
+                      // Actions
+                      _buildActionButton(
+                          Icons.visibility_outlined,
+                          Colors.green,
+                          AppLocalizations.of(context)!.actionView,
+                          () => InvoicePdfServices.showInvoiceDetails(
+                              context, invoice)),
+                      const SizedBox(width: 6),
+                      _buildActionButton(
+                          Icons.picture_as_pdf_outlined,
+                          Colors.orange,
+                          AppLocalizations.of(context)!.actionPdfPreview,
+                          () =>
+                              InvoicePdfServices.previewPDF(context, invoice)),
+                      const SizedBox(width: 6),
+                      _buildActionButton(
+                        Icons.payments_outlined,
+                        Colors.purple,
+                        AppLocalizations.of(context)!.actionRecordPayment,
+                        () => showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (_) => ApplyPaymentDialog(
+                            invoice: invoice,
+                            onPaymentRecorded: _loadDashboardData,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
               ),
             ),
           );
@@ -2702,82 +2900,81 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
       {String? subtitle, Color? subtitleColor}) {
     return Container(
       padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(9),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 19),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
+            child: Icon(icon, color: color, size: 19),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    if (subtitle?.isNotEmpty ?? false) ...[
+                      const SizedBox(width: 4),
+                      Icon(Icons.warning_amber_rounded,
+                          size: 11, color: subtitleColor ?? Colors.red),
+                      const SizedBox(width: 2),
+                      Flexible(
                         child: Text(
-                          title,
+                          subtitle!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                              fontWeight: FontWeight.w500),
+                              fontSize: 10,
+                              color: subtitleColor ?? Colors.red,
+                              fontWeight: FontWeight.w600),
                         ),
                       ),
-                      if (subtitle?.isNotEmpty ?? false) ...[
-                        const SizedBox(width: 4),
-                        Icon(Icons.warning_amber_rounded,
-                            size: 11, color: subtitleColor ?? Colors.red),
-                        const SizedBox(width: 2),
-                        Flexible(
-                          child: Text(
-                            subtitle!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 10,
-                                color: subtitleColor ?? Colors.red,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3044,87 +3241,129 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               _buildGreetingBanner(),
               const SizedBox(height: 20),
               // KPI row
-              Row(
-                children: [
+              LayoutBuilder(builder: (context, kpiConstraints) {
+                final kpiCards = <Widget>[
                   _buildKpiCard(
                       AppLocalizations.of(context)!
                           .dashboardRevenueCollectedLabel,
                       '$_currencySymbol ${_fmtAmt(totalRevenue)}',
                       Icons.account_balance_wallet_outlined,
                       const Color(0xFF6A1B9A)),
-                  const SizedBox(width: 10),
                   _buildKpiCard(
                       AppLocalizations.of(context)!.dashboardOutstandingLabel,
                       '$_currencySymbol ${_fmtAmt(totalOutstanding)}',
                       Icons.hourglass_top_outlined,
                       const Color(0xFFC62828)),
-                  const SizedBox(width: 10),
                   _buildKpiCard(
                       AppLocalizations.of(context)!.dashboardTotalInvoicesLabel,
                       totalInvoices.toString(),
                       Icons.receipt_long_outlined,
                       const Color(0xFFE65100)),
-                  const SizedBox(width: 10),
                   _buildKpiCard(
                       AppLocalizations.of(context)!.navCustomers,
                       totalCustomers.toString(),
                       Icons.people_outline,
                       const Color(0xFF1565C0)),
-                  const SizedBox(width: 10),
                   _buildKpiCard(
                       AppLocalizations.of(context)!.navProducts,
                       totalProducts.toString(),
                       Icons.inventory_2_outlined,
                       const Color(0xFF2E7D32)),
-                ],
-              ),
+                ];
+                return _responsiveKpiBlock(kpiCards, kpiConstraints.maxWidth);
+              }),
               const SizedBox(height: 20),
-              // Charts row
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(flex: 3, child: _buildRevenueBarChart(primary)),
-                    const SizedBox(width: 16),
-                    Expanded(flex: 2, child: _buildRevenueDonut()),
-                  ],
-                ),
-              ),
+              // Charts row — stacked on compact so neither chart is crushed.
+              LayoutBuilder(builder: (context, chartConstraints) {
+                final chartRow = IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(flex: 3, child: _buildRevenueBarChart(primary)),
+                      const SizedBox(width: 16),
+                      Expanded(flex: 2, child: _buildRevenueDonut()),
+                    ],
+                  ),
+                );
+                if (chartConstraints.maxWidth < Breakpoints.compactMax) {
+                  return Column(
+                    children: [
+                      _buildRevenueBarChart(primary),
+                      const SizedBox(height: 16),
+                      _buildRevenueDonut(),
+                    ],
+                  );
+                }
+                return chartRow;
+              }),
               const SizedBox(height: 20),
               // Bottom row
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                      flex: 3, child: _buildCompactRecentInvoices(limit: 7)),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      children: [
-                        if (dueSoonInvoices.isNotEmpty) ...[
-                          _buildDueSoonCard(),
-                          const SizedBox(height: 14),
-                        ],
-                        if (overdueInvoices.isNotEmpty) ...[
-                          _buildOverdueCompactCard(),
-                          const SizedBox(height: 14),
-                        ],
-                        if (outOfStockProducts.isNotEmpty) ...[
-                          _buildOutOfStockCard(),
-                          const SizedBox(height: 14),
-                        ],
-                        _buildQuickActionsCard(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              LayoutBuilder(builder: (context, bottomConstraints) {
+                final rightColumn = Column(
+                  children: [
+                    if (dueSoonInvoices.isNotEmpty) ...[
+                      _buildDueSoonCard(),
+                      const SizedBox(height: 14),
+                    ],
+                    if (overdueInvoices.isNotEmpty) ...[
+                      _buildOverdueCompactCard(),
+                      const SizedBox(height: 14),
+                    ],
+                    if (outOfStockProducts.isNotEmpty) ...[
+                      _buildOutOfStockCard(),
+                      const SizedBox(height: 14),
+                    ],
+                    _buildQuickActionsCard(),
+                  ],
+                );
+                if (bottomConstraints.maxWidth < Breakpoints.compactMax) {
+                  return Column(
+                    children: [
+                      _buildCompactRecentInvoices(limit: 7),
+                      const SizedBox(height: 14),
+                      rightColumn,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                        flex: 3, child: _buildCompactRecentInvoices(limit: 7)),
+                    const SizedBox(width: 16),
+                    Expanded(flex: 2, child: rightColumn),
+                  ],
+                );
+              }),
               const SizedBox(height: 24),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// KPI block shared by the dashboard layouts: 2-column wrap on compact
+  /// widths, equal-width row on wide windows.
+  Widget _responsiveKpiBlock(List<Widget> cards, double availableWidth) {
+    if (availableWidth < Breakpoints.compactMax) {
+      const gap = 12.0;
+      final cardWidth = (availableWidth - gap) / 2;
+      return Wrap(
+        spacing: gap,
+        runSpacing: gap,
+        children: [
+          for (final card in cards) SizedBox(width: cardWidth, child: card),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        for (var i = 0; i < cards.length; i++) ...[
+          if (i > 0) const SizedBox(width: 10),
+          Expanded(child: cards[i]),
+        ],
+      ],
     );
   }
 
@@ -3146,86 +3385,89 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               _buildGreetingBanner(),
               const SizedBox(height: 20),
               // Mini KPI strip
-              Row(
-                children: [
+              LayoutBuilder(builder: (context, kpiConstraints) {
+                final kpiCards = <Widget>[
                   _buildKpiCard(
                       AppLocalizations.of(context)!
                           .dashboardRevenueCollectedLabel,
                       '$_currencySymbol ${_fmtAmt(totalRevenue)}',
                       Icons.account_balance_wallet_outlined,
                       const Color(0xFF6A1B9A)),
-                  const SizedBox(width: 12),
                   _buildKpiCard(
                       AppLocalizations.of(context)!.dashboardOutstandingLabel,
                       '$_currencySymbol ${_fmtAmt(totalOutstanding)}',
                       Icons.hourglass_top_outlined,
                       const Color(0xFFC62828)),
-                  const SizedBox(width: 12),
                   _buildKpiCard(
                       AppLocalizations.of(context)!.navInvoices,
                       totalInvoices.toString(),
                       Icons.receipt_long_outlined,
                       const Color(0xFFE65100)),
-                  const SizedBox(width: 12),
                   _buildKpiCard(
                       AppLocalizations.of(context)!.navCustomers,
                       totalCustomers.toString(),
                       Icons.people_outline,
                       const Color(0xFF1565C0)),
-                  const SizedBox(width: 12),
                   _buildKpiCard(
                     AppLocalizations.of(context)!.navProducts,
                     totalProducts.toString(),
                     Icons.inventory_2_outlined,
                     const Color(0xFF2E7D32),
                   ),
-                ],
-              ),
+                ];
+                return _responsiveKpiBlock(kpiCards, kpiConstraints.maxWidth);
+              }),
               const SizedBox(height: 20),
-              // Two-column body
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Left: recent invoices + top customers + top products
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      children: [
-                        _buildCompactRecentInvoices(limit: 10),
-                        if (_topCustomers.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          _buildTopCustomersCard(),
-                        ],
-                        if (_topProducts.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          _buildTopProductsCard(),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 20),
-                  // Right sidebar
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      children: [
-                        _buildQuickActionsCard(),
-                        const SizedBox(height: 14),
-                        if (overdueInvoices.isNotEmpty) ...[
-                          _buildOverdueCompactCard(),
-                          const SizedBox(height: 14),
-                        ],
-                        if (dueSoonInvoices.isNotEmpty) ...[
-                          _buildDueSoonCard(),
-                          const SizedBox(height: 14),
-                        ],
-                        if (outOfStockProducts.isNotEmpty)
-                          _buildOutOfStockCard(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              // Two-column body — stacks on compact phones.
+              LayoutBuilder(builder: (context, bodyConstraints) {
+                final mainColumn = Column(
+                  children: [
+                    _buildCompactRecentInvoices(limit: 10),
+                    if (_topCustomers.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _buildTopCustomersCard(),
+                    ],
+                    if (_topProducts.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _buildTopProductsCard(),
+                    ],
+                  ],
+                );
+                final sidebarColumn = Column(
+                  children: [
+                    _buildQuickActionsCard(),
+                    const SizedBox(height: 14),
+                    if (overdueInvoices.isNotEmpty) ...[
+                      _buildOverdueCompactCard(),
+                      const SizedBox(height: 14),
+                    ],
+                    if (dueSoonInvoices.isNotEmpty) ...[
+                      _buildDueSoonCard(),
+                      const SizedBox(height: 14),
+                    ],
+                    if (outOfStockProducts.isNotEmpty) _buildOutOfStockCard(),
+                  ],
+                );
+                if (bodyConstraints.maxWidth < Breakpoints.compactMax) {
+                  return Column(
+                    children: [
+                      mainColumn,
+                      const SizedBox(height: 14),
+                      sidebarColumn,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left: recent invoices + top customers + top products
+                    Expanded(flex: 3, child: mainColumn),
+                    const SizedBox(width: 20),
+                    // Right sidebar
+                    Expanded(flex: 2, child: sidebarColumn),
+                  ],
+                );
+              }),
               const SizedBox(height: 24),
             ],
           ),
@@ -3238,57 +3480,55 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
 
   Widget _buildKpiCard(String title, String value, IconData icon, Color color,
       {bool alert = false}) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(14),
-          border: alert
-              ? Border.all(color: color.withValues(alpha: 0.35), width: 1.5)
-              : null,
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 3)),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(9),
-              decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10)),
-              child: Icon(icon, color: color, size: 19),
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(14),
+        border: alert
+            ? Border.all(color: color.withValues(alpha: 0.35), width: 1.5)
+            : null,
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color, size: 19),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 3),
+                Text(value,
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 3),
-                  Text(value,
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -4171,128 +4411,138 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               _buildGreetingBanner(),
               const SizedBox(height: 20),
               // ── Top row: Hero chart + 2×2 KPI grid ──────────────────────────
-              SizedBox(
-                height: 290,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Hero: Revenue bar chart
-                    Expanded(
-                      flex: 3,
-                      child: _buildRevenueBarChart(primary),
-                    ),
-                    const SizedBox(width: 14),
-                    // 2×2 KPI tiles
-                    Expanded(
-                      flex: 2,
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                _buildKpiCard(
-                                  AppLocalizations.of(context)!
-                                      .dashboardRevenueCollectedLabel,
-                                  '$_currencySymbol ${_fmtAmt(totalRevenue)}',
-                                  Icons.account_balance_wallet_outlined,
-                                  const Color(0xFF6A1B9A),
-                                ),
-                                const SizedBox(width: 14),
-                                _buildKpiCard(
-                                  AppLocalizations.of(context)!.navInvoices,
-                                  totalInvoices.toString(),
-                                  Icons.receipt_long_outlined,
-                                  const Color(0xFFE65100),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: Row(
-                              children: [
-                                _buildKpiCard(
-                                  AppLocalizations.of(context)!
-                                      .dashboardOutstandingLabel,
-                                  '$_currencySymbol ${_fmtAmt(totalOutstanding)}',
-                                  Icons.hourglass_top_outlined,
-                                  const Color(0xFFC62828),
-                                ),
-                                const SizedBox(width: 14),
-                                _buildKpiCard(
-                                  AppLocalizations.of(context)!
-                                      .dashboardOverdueSectionTitle,
-                                  overdueInvoices.length.toString(),
-                                  Icons.warning_amber_outlined,
-                                  const Color(0xFFB71C1C),
-                                  alert: overdueInvoices.isNotEmpty,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: Row(
-                              children: [
-                                _buildKpiCard(
-                                    AppLocalizations.of(context)!.navCustomers,
-                                    totalCustomers.toString(),
-                                    Icons.people_outline,
-                                    const Color(0xFF1565C0)),
-                                const SizedBox(width: 14),
-                                _buildKpiCard(
-                                  AppLocalizations.of(context)!.navProducts,
-                                  totalProducts.toString(),
-                                  Icons.inventory_2_outlined,
-                                  const Color(0xFF2E7D32),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+              // Compact phones: chart and KPI cards stack full-width instead
+              // of sharing a fixed-290px hero row that crushes both.
+              LayoutBuilder(builder: (context, heroConstraints) {
+                final kpiTiles = <Widget>[
+                  _buildKpiCard(
+                    AppLocalizations.of(context)!
+                        .dashboardRevenueCollectedLabel,
+                    '$_currencySymbol ${_fmtAmt(totalRevenue)}',
+                    Icons.account_balance_wallet_outlined,
+                    const Color(0xFF6A1B9A),
+                  ),
+                  _buildKpiCard(
+                    AppLocalizations.of(context)!.navInvoices,
+                    totalInvoices.toString(),
+                    Icons.receipt_long_outlined,
+                    const Color(0xFFE65100),
+                  ),
+                  _buildKpiCard(
+                    AppLocalizations.of(context)!.dashboardOutstandingLabel,
+                    '$_currencySymbol ${_fmtAmt(totalOutstanding)}',
+                    Icons.hourglass_top_outlined,
+                    const Color(0xFFC62828),
+                  ),
+                  _buildKpiCard(
+                    AppLocalizations.of(context)!.dashboardOverdueSectionTitle,
+                    overdueInvoices.length.toString(),
+                    Icons.warning_amber_outlined,
+                    const Color(0xFFB71C1C),
+                    alert: overdueInvoices.isNotEmpty,
+                  ),
+                  _buildKpiCard(
+                      AppLocalizations.of(context)!.navCustomers,
+                      totalCustomers.toString(),
+                      Icons.people_outline,
+                      const Color(0xFF1565C0)),
+                  _buildKpiCard(
+                    AppLocalizations.of(context)!.navProducts,
+                    totalProducts.toString(),
+                    Icons.inventory_2_outlined,
+                    const Color(0xFF2E7D32),
+                  ),
+                ];
+                if (heroConstraints.maxWidth < Breakpoints.compactMax) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildRevenueBarChart(primary),
+                      const SizedBox(height: 14),
+                      _responsiveKpiBlock(kpiTiles, heroConstraints.maxWidth),
+                    ],
+                  );
+                }
+                return SizedBox(
+                  height: 290,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Hero: Revenue bar chart
+                      Expanded(
+                        flex: 3,
+                        child: _buildRevenueBarChart(primary),
                       ),
-                    ),
-                  ],
-                ),
-              ),
+                      const SizedBox(width: 14),
+                      // 2×3 KPI tiles
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          children: [
+                            for (var row = 0; row < 3; row++)
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Expanded(child: kpiTiles[row * 2]),
+                                    const SizedBox(width: 14),
+                                    Expanded(child: kpiTiles[row * 2 + 1]),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
               const SizedBox(height: 14),
               // ── Bottom row: Wide invoice table + narrow sidebar ───────────────
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      children: [
-                        _buildCompactRecentInvoices(limit: 8),
-                        if (_topProducts.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          _buildTopProductsCard(),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      children: [
-                        _buildQuickActionsCard(),
-                        if (overdueInvoices.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          _buildOverdueCompactCard(),
-                        ],
-                        if (dueSoonInvoices.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          _buildDueSoonCard(),
-                        ],
-                        if (outOfStockProducts.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          _buildOutOfStockCard(),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              LayoutBuilder(builder: (context, bottomConstraints) {
+                final mainColumn = Column(
+                  children: [
+                    _buildCompactRecentInvoices(limit: 8),
+                    if (_topProducts.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _buildTopProductsCard(),
+                    ],
+                  ],
+                );
+                final sidebarColumn = Column(
+                  children: [
+                    _buildQuickActionsCard(),
+                    if (overdueInvoices.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _buildOverdueCompactCard(),
+                    ],
+                    if (dueSoonInvoices.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _buildDueSoonCard(),
+                    ],
+                    if (outOfStockProducts.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _buildOutOfStockCard(),
+                    ],
+                  ],
+                );
+                if (bottomConstraints.maxWidth < Breakpoints.compactMax) {
+                  return Column(
+                    children: [
+                      mainColumn,
+                      const SizedBox(height: 14),
+                      sidebarColumn,
+                    ],
+                  );
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: mainColumn),
+                    const SizedBox(width: 14),
+                    Expanded(flex: 2, child: sidebarColumn),
+                  ],
+                );
+              }),
               const SizedBox(height: 24),
             ],
           ),

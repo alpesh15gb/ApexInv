@@ -62,8 +62,7 @@ class OnboardingStepCloud extends StatelessWidget {
           const SizedBox(height: 16),
           const Text(
             'You can change this anytime in Settings → Cloud Sync.',
-            style: TextStyle(
-                fontSize: 12, fontStyle: FontStyle.italic),
+            style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
           ),
         ],
       ),

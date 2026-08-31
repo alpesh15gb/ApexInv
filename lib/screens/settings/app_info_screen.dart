@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:apexbooks/common/app_config.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
@@ -45,7 +46,7 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
         centerTitle: false,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(context.isCompact ? 16 : 32),
         child: Center(
           child: Container(
             constraints: const BoxConstraints(maxWidth: 820),
@@ -64,26 +65,26 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 32, vertical: 28),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          Theme.of(context).brightness == Brightness.dark
-                              ? 'assets/images/logo_dark.png'
-                              : 'assets/images/logo.png',
-                          width: 130,
-                          height: 52,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    // Compact: stack logo / name / description / version so
+                    // nothing fights for width. Expanded: keep the hero Row.
+                    child: context.isCompact
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
+                              Image.asset(
+                                Theme.of(context).brightness == Brightness.dark
+                                    ? 'assets/images/logo_dark.png'
+                                    : 'assets/images/logo.png',
+                                width: 160,
+                                height: 64,
+                                fit: BoxFit.contain,
+                              ),
+                              const SizedBox(height: 14),
                               Text(
                                 cfg.name.toUpperCase(),
+                                textAlign: TextAlign.center,
                                 style: const TextStyle(
-                                  fontSize: AppFontSize.xxlarge,
+                                  fontSize: AppFontSize.xlarge,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 1.2,
                                 ),
@@ -91,6 +92,7 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
                               const SizedBox(height: 6),
                               Text(
                                 cfg.description,
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: AppFontSize.small,
                                   color: Theme.of(context)
@@ -99,66 +101,145 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
                                   height: 1.5,
                                 ),
                               ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color:
+                                          primaryColor.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  cfg.version,
+                                  style: TextStyle(
+                                    fontSize: AppFontSize.medium,
+                                    fontWeight: FontWeight.bold,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Image.asset(
+                                Theme.of(context).brightness == Brightness.dark
+                                    ? 'assets/images/logo_dark.png'
+                                    : 'assets/images/logo.png',
+                                width: 130,
+                                height: 52,
+                                fit: BoxFit.contain,
+                              ),
+                              const SizedBox(width: 24),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      cfg.name.toUpperCase(),
+                                      style: const TextStyle(
+                                        fontSize: AppFontSize.xxlarge,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      cfg.description,
+                                      style: TextStyle(
+                                        fontSize: AppFontSize.small,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color:
+                                          primaryColor.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  cfg.version,
+                                  style: TextStyle(
+                                    fontSize: AppFontSize.medium,
+                                    fontWeight: FontWeight.bold,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 24),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: primaryColor.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                                color: primaryColor.withValues(alpha: 0.3)),
-                          ),
-                          child: Text(
-                            cfg.version,
-                            style: TextStyle(
-                              fontSize: AppFontSize.medium,
-                              fontWeight: FontWeight.bold,
-                              color: primaryColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
                 // ── Two info cards ───────────────────────────────────────
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: _infoCard(l10n.appInfoAppDetailsTitle, [
-                        _infoRow(Icons.apps_rounded, l10n.appInfoAppNameLabel,
-                            cfg.name.toUpperCase()),
-                        _infoRow(Icons.tag_rounded, l10n.appInfoVersionLabel,
-                            cfg.version),
-                        _infoRow(Icons.gavel_rounded, l10n.appInfoLicenseLabel,
-                            cfg.license.toUpperCase()),
-                      ]),
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      flex: 3,
-                      child: _infoCard(l10n.appInfoDeveloperTitle, [
-                        _infoRow(
-                            Icons.person_rounded,
-                            l10n.appInfoDeveloperLabel,
-                            cfg.developer.toUpperCase()),
-                        _infoRow(Icons.email_rounded,
-                            l10n.appInfoSupportEmailLabel, cfg.supportEmail),
-                        _infoRow(Icons.language_rounded, l10n.fieldWebsiteLabel,
-                            cfg.website),
-                      ]),
-                    ),
-                  ],
-                ),
+                if (context.isCompact) ...[
+                  _infoCard(l10n.appInfoAppDetailsTitle, [
+                    _infoRow(Icons.apps_rounded, l10n.appInfoAppNameLabel,
+                        cfg.name.toUpperCase()),
+                    _infoRow(Icons.tag_rounded, l10n.appInfoVersionLabel,
+                        cfg.version),
+                    _infoRow(Icons.gavel_rounded, l10n.appInfoLicenseLabel,
+                        cfg.license.toUpperCase()),
+                  ]),
+                  const SizedBox(height: 20),
+                  _infoCard(l10n.appInfoDeveloperTitle, [
+                    _infoRow(Icons.person_rounded, l10n.appInfoDeveloperLabel,
+                        cfg.developer.toUpperCase()),
+                    _infoRow(Icons.email_rounded, l10n.appInfoSupportEmailLabel,
+                        cfg.supportEmail),
+                    _infoRow(Icons.language_rounded, l10n.fieldWebsiteLabel,
+                        cfg.website),
+                  ]),
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: _infoCard(l10n.appInfoAppDetailsTitle, [
+                          _infoRow(Icons.apps_rounded, l10n.appInfoAppNameLabel,
+                              cfg.name.toUpperCase()),
+                          _infoRow(Icons.tag_rounded, l10n.appInfoVersionLabel,
+                              cfg.version),
+                          _infoRow(
+                              Icons.gavel_rounded,
+                              l10n.appInfoLicenseLabel,
+                              cfg.license.toUpperCase()),
+                        ]),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        flex: 3,
+                        child: _infoCard(l10n.appInfoDeveloperTitle, [
+                          _infoRow(
+                              Icons.person_rounded,
+                              l10n.appInfoDeveloperLabel,
+                              cfg.developer.toUpperCase()),
+                          _infoRow(Icons.email_rounded,
+                              l10n.appInfoSupportEmailLabel, cfg.supportEmail),
+                          _infoRow(Icons.language_rounded,
+                              l10n.fieldWebsiteLabel, cfg.website),
+                        ]),
+                      ),
+                    ],
+                  ),
 
                 const SizedBox(height: 20),
 
@@ -292,20 +373,50 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
             const SizedBox(height: 16),
             const Divider(height: 1, color: Color(0xFFF5F5F5)),
             const SizedBox(height: 16),
-            Row(
+            // Wrap: version info and the action buttons flow to separate
+            // lines on narrow windows instead of overflowing.
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 16,
+              runSpacing: 12,
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Icon(Icons.tag_rounded,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.tag_rounded,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 14),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(l10n.appInfoCurrentVersionLabel,
+                            style: TextStyle(
+                                fontSize: AppFontSize.xsmall,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 3),
+                        Text(cfg.version,
+                            style: const TextStyle(
+                                fontSize: AppFontSize.medium,
+                                fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                    if (info != null) ...[
+                      const SizedBox(width: 32),
+                      Icon(Icons.new_releases_outlined,
                           size: 18,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
+                          color: hasUpdate
+                              ? Colors.orange.shade400
+                              : Theme.of(context).colorScheme.onSurfaceVariant),
                       const SizedBox(width: 14),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(l10n.appInfoCurrentVersionLabel,
+                          Text(l10n.appInfoLatestVersionLabel,
                               style: TextStyle(
                                   fontSize: AppFontSize.xsmall,
                                   color: Theme.of(context)
@@ -313,50 +424,23 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
                                       .onSurfaceVariant,
                                   fontWeight: FontWeight.w500)),
                           const SizedBox(height: 3),
-                          Text(cfg.version,
-                              style: const TextStyle(
-                                  fontSize: AppFontSize.medium,
-                                  fontWeight: FontWeight.w500)),
+                          Text(
+                            info.latestVersion,
+                            style: TextStyle(
+                              fontSize: AppFontSize.medium,
+                              fontWeight: FontWeight.w600,
+                              color: hasUpdate
+                                  ? Colors.orange.shade700
+                                  : Colors.green.shade700,
+                            ),
+                          ),
                         ],
                       ),
-                      if (info != null) ...[
-                        const SizedBox(width: 32),
-                        Icon(Icons.new_releases_outlined,
-                            size: 18,
-                            color: hasUpdate
-                                ? Colors.orange.shade400
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant),
-                        const SizedBox(width: 14),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(l10n.appInfoLatestVersionLabel,
-                                style: TextStyle(
-                                    fontSize: AppFontSize.xsmall,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                    fontWeight: FontWeight.w500)),
-                            const SizedBox(height: 3),
-                            Text(
-                              info.latestVersion,
-                              style: TextStyle(
-                                fontSize: AppFontSize.medium,
-                                fontWeight: FontWeight.w600,
-                                color: hasUpdate
-                                    ? Colors.orange.shade700
-                                    : Colors.green.shade700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ],
-                  ),
+                  ],
                 ),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     OutlinedButton.icon(
                       onPressed: widget.isCheckingUpdate

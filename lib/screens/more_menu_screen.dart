@@ -66,8 +66,7 @@ class MoreMenuScreen extends ConsumerWidget {
             const SizedBox(height: 6),
             Center(
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
@@ -113,8 +112,8 @@ class MoreMenuScreen extends ConsumerWidget {
                 user.username,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w600),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               Text(
                 user.isAdmin()
@@ -212,8 +211,8 @@ class MoreMenuScreen extends ConsumerWidget {
                 width: 8,
                 height: 8,
                 margin: const EdgeInsets.only(right: 6),
-                decoration:
-                    const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                    color: Colors.orange, shape: BoxShape.circle),
               ),
             Icon(
               Icons.chevron_right_rounded,

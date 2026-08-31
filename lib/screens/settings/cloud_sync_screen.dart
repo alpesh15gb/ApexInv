@@ -30,8 +30,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
   @override
   void initState() {
     super.initState();
-    _needsCompany =
-        SyncController.instance.account?.companyId.isEmpty ?? false;
+    _needsCompany = SyncController.instance.account?.companyId.isEmpty ?? false;
   }
 
   @override
@@ -42,18 +41,20 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
     super.dispose();
   }
 
-  void _setBusy(bool v) => mounted ? setState(() {
-        _busy = v;
-        if (v) _error = null;
-      }) : null;
+  void _setBusy(bool v) => mounted
+      ? setState(() {
+          _busy = v;
+          if (v) _error = null;
+        })
+      : null;
 
   void _fail(String msg) => mounted ? setState(() => _error = msg) : null;
 
   Future<void> _register() async {
     if (!_formValid()) return;
     _setBusy(true);
-    final err = await SyncController.instance
-        .registerAndLink(_email.text.trim(), _password.text, _company.text.trim());
+    final err = await SyncController.instance.registerAndLink(
+        _email.text.trim(), _password.text, _company.text.trim());
     _setBusy(false);
     if (err != null) return _fail(err);
   }
@@ -63,8 +64,8 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
       return _fail('Enter your email and password');
     }
     _setBusy(true);
-    final err =
-        await SyncController.instance.loginAndLink(_email.text.trim(), _password.text);
+    final err = await SyncController.instance
+        .loginAndLink(_email.text.trim(), _password.text);
     _setBusy(false);
     if (err != null) return _fail(err);
     final account = SyncController.instance.account;
@@ -145,8 +146,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
           : ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                Text('Cloud Sync',
-                    style: theme.textTheme.headlineSmall),
+                Text('Cloud Sync', style: theme.textTheme.headlineSmall),
                 const SizedBox(height: 8),
                 Text(
                   'Your data stays on this device and syncs to your own '
@@ -157,7 +157,8 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
                 ),
                 const SizedBox(height: 24),
                 if (linked)
-                  _StatusCard(status: status, onSyncNow: _syncNow, onUnlink: _unlink)
+                  _StatusCard(
+                      status: status, onSyncNow: _syncNow, onUnlink: _unlink)
                 else if (_needsCompany)
                   _CompanyStep(
                     company: _company,

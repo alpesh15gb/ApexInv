@@ -1187,6 +1187,43 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
   }
 
+  /// Responsive KPI grid shared by every report tab. <340 logical px: 1
+  /// column; 340-699: 2 columns; 700-1023: 3 columns (2 when very tight);
+  /// >=1024: the existing desktop equal-width row. Labels wrap naturally —
+  /// never squeezed into one-character columns.
+  Widget _kpiGrid(List<Widget> cards) {
+    if (cards.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        if (width >= Breakpoints.expandedMin) {
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < cards.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  Expanded(child: cards[i]),
+                ],
+              ],
+            ),
+          );
+        }
+        final columns =
+            width < 340 ? 1 : (width < 700 ? 2 : (width < 840 ? 2 : 3));
+        const gap = 12.0;
+        final cardWidth = (width - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final card in cards) SizedBox(width: cardWidth, child: card),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _kpiCard(String label, String value, Color color, IconData icon) {
     return Card(
       elevation: 1,
@@ -1387,49 +1424,32 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               // KPI cards
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.reportsTotalBilledLabel,
-                              _money(_kpi.billed),
-                              const Color(0xFF002E78),
-                              Icons.receipt_long)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.reportsTotalCollectedLabel,
-                              _money(_kpi.collected),
-                              const Color(0xFF16A34A),
-                              Icons.check_circle_outline)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.dashboardOutstandingLabel,
-                              _money(_kpi.outstanding),
-                              const Color(0xFFDC2626),
-                              Icons.schedule)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.reportsAvgInvoiceValueLabel,
-                              _money(_kpi.avgInvoiceValue),
-                              const Color(0xFF7C3AED),
-                              Icons.trending_up)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.reportsTotalProfitLabel,
-                              _money(_kpi.profit),
-                              _kpi.profit < 0
-                                  ? const Color(0xFFDC2626)
-                                  : const Color(0xFF16A34A),
-                              Icons.savings_outlined)),
-                    ],
-                  ),
-                ),
+                child: _kpiGrid([
+                  _kpiCard(l10n.reportsTotalBilledLabel, _money(_kpi.billed),
+                      const Color(0xFF002E78), Icons.receipt_long),
+                  _kpiCard(
+                      l10n.reportsTotalCollectedLabel,
+                      _money(_kpi.collected),
+                      const Color(0xFF16A34A),
+                      Icons.check_circle_outline),
+                  _kpiCard(
+                      l10n.dashboardOutstandingLabel,
+                      _money(_kpi.outstanding),
+                      const Color(0xFFDC2626),
+                      Icons.schedule),
+                  _kpiCard(
+                      l10n.reportsAvgInvoiceValueLabel,
+                      _money(_kpi.avgInvoiceValue),
+                      const Color(0xFF7C3AED),
+                      Icons.trending_up),
+                  _kpiCard(
+                      l10n.reportsTotalProfitLabel,
+                      _money(_kpi.profit),
+                      _kpi.profit < 0
+                          ? const Color(0xFFDC2626)
+                          : const Color(0xFF16A34A),
+                      Icons.savings_outlined),
+                ]),
               ),
               if (_missingCostItemCount > 0)
                 Padding(
@@ -1952,30 +1972,15 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               // Total tax KPI
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: _kpiCard(
-                            l10n.reportsTotalTaxCollectedLabel,
-                            _money(totalTax),
-                            const Color(0xFF7C3AED),
-                            Icons.account_balance_outlined),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _kpiCard(
-                            l10n.reportsTaxRateBucketsLabel,
-                            _taxBuckets.length.toString(),
-                            const Color(0xFF0284C7),
-                            Icons.pie_chart_outline),
-                      ),
-                      const SizedBox(width: 12),
-                      const Spacer(flex: 2),
-                    ],
-                  ),
-                ),
+                child: _kpiGrid([
+                  _kpiCard(l10n.reportsTotalTaxCollectedLabel, _money(totalTax),
+                      const Color(0xFF7C3AED), Icons.account_balance_outlined),
+                  _kpiCard(
+                      l10n.reportsTaxRateBucketsLabel,
+                      _taxBuckets.length.toString(),
+                      const Color(0xFF0284C7),
+                      Icons.pie_chart_outline),
+                ]),
               ),
 
               // Tax breakdown table
@@ -2477,7 +2482,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
 
   Widget _statementSummaryCards(CustomerStatement statement) {
     final l10n = AppLocalizations.of(context)!;
-    final cards = [
+    return _kpiGrid([
       _kpiCard(
           l10n.reportsOpeningLabel,
           _statementMoney(statement, statement.openingBalance),
@@ -2503,30 +2508,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           _statementMoney(statement, statement.overdueBalance),
           const Color(0xFFDC2626),
           Icons.warning_amber_outlined),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final columns = width >= 1100
-            ? 5
-            : width >= 760
-                ? 3
-                : width >= 500
-                    ? 2
-                    : 1;
-        const spacing = 12.0;
-        final cardWidth = (width - spacing * (columns - 1)) / columns;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (final card in cards)
-              SizedBox(width: cardWidth, height: 112, child: card),
-          ],
-        );
-      },
-    );
+    ]);
   }
 
   Widget _statementTableHeader() {
@@ -3354,36 +3336,23 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                      child: IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: _kpiCard(
-                                  l10n.reportsQuotationsIssuedLabel,
-                                  _fmtInt.format(q.quotationsIssued),
-                                  const Color(0xFF0284C7),
-                                  Icons.request_quote_outlined),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _kpiCard(
-                                  l10n.reportsInvoicesInPeriodLabel,
-                                  _fmtInt.format(q.invoicesInPeriod),
-                                  const Color(0xFF16A34A),
-                                  Icons.receipt_outlined),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _kpiCard(
-                                  l10n.reportsConversionRateLabel,
-                                  '${q.conversionRate.toStringAsFixed(1)}%',
-                                  const Color(0xFF7C3AED),
-                                  Icons.trending_up),
-                            ),
-                          ],
-                        ),
-                      ),
+                      child: _kpiGrid([
+                        _kpiCard(
+                            l10n.reportsQuotationsIssuedLabel,
+                            _fmtInt.format(q.quotationsIssued),
+                            const Color(0xFF0284C7),
+                            Icons.request_quote_outlined),
+                        _kpiCard(
+                            l10n.reportsInvoicesInPeriodLabel,
+                            _fmtInt.format(q.invoicesInPeriod),
+                            const Color(0xFF16A34A),
+                            Icons.receipt_outlined),
+                        _kpiCard(
+                            l10n.reportsConversionRateLabel,
+                            '${q.conversionRate.toStringAsFixed(1)}%',
+                            const Color(0xFF7C3AED),
+                            Icons.trending_up),
+                      ]),
                     ),
                     _sectionCard(
                       child: Column(
@@ -3524,47 +3493,33 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               // KPI summary row
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.reportsTotalInvoicesLabel,
-                              _fmtInt.format(_invoiceList.length),
-                              const Color(0xFF002E78),
-                              Icons.receipt_long_outlined)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.paymentStatusPaid,
-                              _fmtInt.format(_invoiceCount('Paid')),
-                              const Color(0xFF16A34A),
-                              Icons.check_circle_outline)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.paymentStatusPartial,
-                              _fmtInt.format(_invoiceCount('Partial')),
-                              const Color(0xFFF59E0B),
-                              Icons.timelapse_outlined)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.paymentStatusUnpaid,
-                              _fmtInt.format(_invoiceCount('Unpaid')),
-                              Theme.of(context).colorScheme.onSurfaceVariant,
-                              Icons.remove_circle_outline)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: _kpiCard(
-                              l10n.dashboardOverdueSectionTitle,
-                              _fmtInt.format(_overdueCount),
-                              const Color(0xFFDC2626),
-                              Icons.warning_amber_outlined)),
-                    ],
-                  ),
-                ),
+                child: _kpiGrid([
+                  _kpiCard(
+                      l10n.reportsTotalInvoicesLabel,
+                      _fmtInt.format(_invoiceList.length),
+                      const Color(0xFF002E78),
+                      Icons.receipt_long_outlined),
+                  _kpiCard(
+                      l10n.paymentStatusPaid,
+                      _fmtInt.format(_invoiceCount('Paid')),
+                      const Color(0xFF16A34A),
+                      Icons.check_circle_outline),
+                  _kpiCard(
+                      l10n.paymentStatusPartial,
+                      _fmtInt.format(_invoiceCount('Partial')),
+                      const Color(0xFFF59E0B),
+                      Icons.timelapse_outlined),
+                  _kpiCard(
+                      l10n.paymentStatusUnpaid,
+                      _fmtInt.format(_invoiceCount('Unpaid')),
+                      Theme.of(context).colorScheme.onSurfaceVariant,
+                      Icons.remove_circle_outline),
+                  _kpiCard(
+                      l10n.dashboardOverdueSectionTitle,
+                      _fmtInt.format(_overdueCount),
+                      const Color(0xFFDC2626),
+                      Icons.warning_amber_outlined),
+                ]),
               ),
               // Table card
               _sectionCard(

@@ -58,6 +58,7 @@ class SyncEngine {
   static const _keyBaselineDone = 'baseline_done';
   static const _keyApplyingRemote = 'applying_remote';
   static const _keyLastPulledPrefix = 'last_pulled_';
+  static const _keyCursorHealDone = 'cursor_keyset_v2';
 
   Future<String?> _getState(Database db, String key) async {
     final rows = await db.query('_sync_state',
@@ -144,8 +145,8 @@ class SyncEngine {
       _cycleResult = await _runCycle(db, companyId);
     } catch (e, stack) {
       AppLogger.e(_tag, 'Sync cycle failed', e, stack);
-      _cycleResult = SyncCycleResult(
-          status: SyncCycleStatus.error, error: e.toString());
+      _cycleResult =
+          SyncCycleResult(status: SyncCycleStatus.error, error: e.toString());
     } finally {
       _inFlight = null;
       completer.complete();
@@ -163,6 +164,25 @@ class SyncEngine {
 
     // 1. PUSH collapsed outbox.
     pushed = await _pushOutbox(db, companyId);
+
+    // One-time cursor heal: cursors written against the pre-keyset server
+    // were bare timestamps that could sit mid-batch (a whole push batch
+    // shares one server timestamp), silently skipping every same-timestamp
+    // row beyond the first pulled page. Reset them exactly once — the
+    // re-pull is idempotent (LWW + pull-apply echo silencing).
+    if (await _getState(db, _keyCursorHealDone) != '1') {
+      await db.transaction((txn) async {
+        final stale = await txn.query('_sync_state',
+            where: 'key LIKE ?', whereArgs: ['$_keyLastPulledPrefix%']);
+        for (final row in stale) {
+          await txn.delete('_sync_state',
+              where: 'key = ?', whereArgs: [row['key'] as String]);
+        }
+        await txn.insert(
+            '_sync_state', {'key': _keyCursorHealDone, 'value': '1'},
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      });
+    }
 
     // 2. PULL per table (only after baseline exists, see _ensureBaseline).
     final baselineDone = await _getState(db, _keyBaselineDone) == '1';
@@ -211,7 +231,18 @@ class SyncEngine {
             op: SyncOpTypes.delete,
             changedAt: e.changedAt,
           ));
+        } else if (e.tableName == 'invoices' && payload['deleted_at'] != null) {
+          // Soft-deleted invoice → tombstone on the wire. `deleted_at` is a
+          // local-only column, so pushing the row as an 'update' would strip
+          // it and silently resurrect the invoice on every other device.
+          ops.add(SyncOp(
+            tableName: e.tableName,
+            rowPk: e.rowPk,
+            op: SyncOpTypes.delete,
+            changedAt: e.changedAt,
+          ));
         } else {
+          payload.remove('deleted_at'); // stays device-local (trash)
           ops.add(SyncOp(
             tableName: e.tableName,
             rowPk: e.rowPk,
@@ -275,8 +306,8 @@ class SyncEngine {
       // Apply in one transaction with the silencing flag set so the capture
       // triggers don't re-enqueue remote echoes (dbplan §3.4).
       await db.transaction((txn) async {
-        await txn.insert('_sync_state',
-            {'key': _keyApplyingRemote, 'value': '1'},
+        await txn.insert(
+            '_sync_state', {'key': _keyApplyingRemote, 'value': '1'},
             conflictAlgorithm: ConflictAlgorithm.replace);
         try {
           for (final op in page.ops) {
@@ -284,10 +315,9 @@ class SyncEngine {
           }
           // Cursor advances only inside the same transaction — a crash
           // mid-apply re-pulls the page (apply is idempotent via LWW).
-          await txn.insert('_sync_state', {
-            'key': '$_keyLastPulledPrefix$table',
-            'value': page.nextCursor
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          await txn.insert('_sync_state',
+              {'key': '$_keyLastPulledPrefix$table', 'value': page.nextCursor},
+              conflictAlgorithm: ConflictAlgorithm.replace);
         } finally {
           await txn.delete('_sync_state',
               where: 'key = ?', whereArgs: [_keyApplyingRemote]);
@@ -393,12 +423,16 @@ class SyncEngine {
       await _pullAll(db, companyId);
     }
 
-    // Baseline: push every local row of every synced table (chunked by the
-    // transport's push loop; reads see a consistent snapshot per query).
+    // Baseline: push every local row of every synced table. Soft-deleted
+    // invoices are skipped (the trash is device-local; a baseline push of
+    // the row would resurrect it on other devices). Chunked at 500 ops per
+    // push — matches the outbox drain size and the server's 5000-op cap,
+    // and keeps any single push's rows inside one page of pulls.
     final ops = <SyncOp>[];
     for (final table in syncTableOrder) {
       final rows = await db.query(table);
       for (final r in rows) {
+        if (table == 'invoices' && r['deleted_at'] != null) continue;
         final payload = Map<String, dynamic>.from(r);
         payload.removeWhere((k, _) =>
             syncLocalOnlyColumns.contains(k) ||
@@ -414,13 +448,20 @@ class SyncEngine {
       }
     }
     if (ops.isNotEmpty) {
-      final receipt = await transport.push(companyId, ops);
+      var lastServerTime = '';
+      const chunkSize = 500;
+      for (var i = 0; i < ops.length; i += chunkSize) {
+        final end = (i + chunkSize).clamp(0, ops.length);
+        final receipt = await transport.push(companyId, ops.sublist(i, end));
+        lastServerTime = receipt.serverTime;
+      }
       await db.insert('_sync_state', {'key': _keyBaselineDone, 'value': '1'},
           conflictAlgorithm: ConflictAlgorithm.replace);
       // Baseline ops were never in the outbox; nothing to mark. Receipt time
-      // becomes the pull floor by seeding cursors.
+      // becomes the pull floor by seeding cursors ('|' suffix = keyset token
+      // with empty pk; the tiebreaker keeps same-timestamp rows ordered).
       for (final table in syncTableOrder) {
-        await _setState(db, '$_keyLastPulledPrefix$table', receipt.serverTime);
+        await _setState(db, '$_keyLastPulledPrefix$table', '$lastServerTime|');
       }
     } else {
       await db.insert('_sync_state', {'key': _keyBaselineDone, 'value': '1'},

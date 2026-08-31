@@ -3635,7 +3635,21 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                   // oversized 24px invoice-number font is toned down, and the
                   // lowest-priority piece (the date) is dropped entirely on
                   // narrow windows instead of fighting for space.
-                  final compact = titleConstraints.maxWidth < 640;
+                  final compact =
+                      titleConstraints.maxWidth < Breakpoints.compactMax;
+                  // Compact: the title is ONLY "New Invoice"/"Edit Invoice" —
+                  // never concatenated with the invoice number (which lives on
+                  // the secondary line in the AppBar's bottom dock).
+                  if (compact) {
+                    final label = _invoiceTypeLabel(invoiceType);
+                    return Text(
+                      (widget.invoiceToEdit != null || widget.cloneFrom != null)
+                          ? 'Edit $label'
+                          : 'New $label',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    );
+                  }
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -3745,6 +3759,19 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
               // Create/Update row.
               actions: [
                 if (MediaQuery.sizeOf(context).width < Breakpoints.compactMax &&
+                    isEditing)
+                  IconButton(
+                    tooltip: AppLocalizations.of(context)!
+                        .createInvoiceNewShortLabel,
+                    icon: const Icon(Icons.add, size: 20),
+                    onPressed: () async {
+                      if (await _confirmLeaveIfDirty() && mounted) {
+                        widget.onCreateNewInvoice?.call();
+                        await resetValues('Invoice');
+                      }
+                    },
+                  ),
+                if (MediaQuery.sizeOf(context).width < Breakpoints.compactMax &&
                     _invoice != null) ...[
                   IconButton(
                     tooltip: AppLocalizations.of(context)!.actionView,
@@ -3775,6 +3802,26 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                   const SizedBox(width: 4),
                 ],
               ],
+              // Compact: the invoice number gets its own secondary docked
+              // line under the title instead of competing with it.
+              bottom: MediaQuery.sizeOf(context).width < Breakpoints.compactMax
+                  ? PreferredSize(
+                      preferredSize: const Size.fromHeight(22),
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            '$invoiceType No: #$currentInvoiceNumber',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.white70),
+                          ),
+                        ),
+                      ),
+                    )
+                  : null,
             ),
             body: !isEditing && _invoice != null
                 ? buildInvoiceSuccessScreen()
@@ -4391,77 +4438,37 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   }
 
   Widget _productQuickAddBarV2() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          // The ancestor Focus intercepts arrow-key / escape events before
-          // they reach the TextField, so you can move through the dropdown
-          // results with the keyboard instead of only being able to click.
-          child: Focus(
-            onKeyEvent: (node, event) {
-              if (!_showProductDropdownV2 || filteredProducts.isEmpty) {
-                return KeyEventResult.ignored;
-              }
-              if (event is KeyDownEvent || event is KeyRepeatEvent) {
-                if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  setState(() {
-                    _highlightedProductIndexV2 =
-                        (_highlightedProductIndexV2 + 1)
-                            .clamp(0, filteredProducts.length - 1);
-                  });
-                  _ensureHighlightedProductVisibleV2();
-                  return KeyEventResult.handled;
-                }
-                if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                  setState(() {
-                    _highlightedProductIndexV2 =
-                        (_highlightedProductIndexV2 - 1)
-                            .clamp(0, filteredProducts.length - 1);
-                  });
-                  _ensureHighlightedProductVisibleV2();
-                  return KeyEventResult.handled;
-                }
-                if (event.logicalKey == LogicalKeyboardKey.escape) {
-                  setState(() => _showProductDropdownV2 = false);
-                  return KeyEventResult.handled;
-                }
-              }
-              return KeyEventResult.ignored;
-            },
-            child: TextField(
-              controller: searchController,
-              focusNode: _productSearchFocusNodeV2,
-              onChanged: (value) {
-                _filterProducts(value);
-                setState(() {
-                  _showProductDropdownV2 = value.trim().isNotEmpty;
-                  _highlightedProductIndexV2 = 0;
-                });
-              },
-              onSubmitted: (_) {
-                if (_showProductDropdownV2 && filteredProducts.isNotEmpty) {
-                  final index = _highlightedProductIndexV2.clamp(
-                      0, filteredProducts.length - 1);
-                  _selectProductFromDropdownV2(filteredProducts[index]);
-                }
-              },
-              decoration: _flatFieldDecorationV2(
-                AppLocalizations.of(context)!.createInvoiceSearchProductLabel,
-                prefixIcon: const Icon(Icons.search, size: 18),
-                suffixIcon: searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 16),
-                        onPressed: () {
-                          searchController.clear();
-                          setState(() => _showProductDropdownV2 = false);
-                        },
-                      )
-                    : null,
+    // Compact: full-width search row, Custom Item on its own row below —
+    // they must not share a cramped row on phones.
+    if (MediaQuery.sizeOf(context).width < Breakpoints.compactMax) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _productSearchFieldV2(),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: _addAdHocItemDialog,
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(
+                  AppLocalizations.of(context)!.createInvoiceCustomItemButton),
+              style: OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppBorderRadius.xsmall)),
               ),
             ),
           ),
-        ),
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _productSearchFieldV2()),
         const SizedBox(width: 12),
         OutlinedButton.icon(
           onPressed: _addAdHocItemDialog,
@@ -4475,6 +4482,70 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _productSearchFieldV2() {
+    return Focus(
+      onKeyEvent: (node, event) {
+        if (!_showProductDropdownV2 || filteredProducts.isEmpty) {
+          return KeyEventResult.ignored;
+        }
+        if (event is KeyDownEvent || event is KeyRepeatEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            setState(() {
+              _highlightedProductIndexV2 = (_highlightedProductIndexV2 + 1)
+                  .clamp(0, filteredProducts.length - 1);
+            });
+            _ensureHighlightedProductVisibleV2();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            setState(() {
+              _highlightedProductIndexV2 = (_highlightedProductIndexV2 - 1)
+                  .clamp(0, filteredProducts.length - 1);
+            });
+            _ensureHighlightedProductVisibleV2();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.escape) {
+            setState(() => _showProductDropdownV2 = false);
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: TextField(
+        controller: searchController,
+        focusNode: _productSearchFocusNodeV2,
+        onChanged: (value) {
+          _filterProducts(value);
+          setState(() {
+            _showProductDropdownV2 = value.trim().isNotEmpty;
+            _highlightedProductIndexV2 = 0;
+          });
+        },
+        onSubmitted: (_) {
+          if (_showProductDropdownV2 && filteredProducts.isNotEmpty) {
+            final index = _highlightedProductIndexV2.clamp(
+                0, filteredProducts.length - 1);
+            _selectProductFromDropdownV2(filteredProducts[index]);
+          }
+        },
+        decoration: _flatFieldDecorationV2(
+          AppLocalizations.of(context)!.createInvoiceSearchProductLabel,
+          prefixIcon: const Icon(Icons.search, size: 18),
+          suffixIcon: searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 16),
+                  onPressed: () {
+                    searchController.clear();
+                    setState(() => _showProductDropdownV2 = false);
+                  },
+                )
+              : null,
+        ),
+      ),
     );
   }
 

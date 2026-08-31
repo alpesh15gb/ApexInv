@@ -218,7 +218,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 
 type pullRequest struct {
 	Table  string `json:"table"`
-	Cursor string `json:"cursor"` // RFC3339; "" = beginning
+	Cursor string `json:"cursor"` // opaque "ts|pk" keyset token; "" = beginning
 }
 
 func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
@@ -231,17 +231,12 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	var cursor time.Time
-	if req.Cursor != "" {
-		var err error
-		cursor, err = time.Parse(time.RFC3339Nano, req.Cursor)
-		if err != nil {
+	page, err := s.Store.Pull(r.Context(), companyID, req.Table, req.Cursor)
+	if err != nil {
+		if errors.Is(err, store.ErrInvalidCursor) {
 			writeErr(w, http.StatusBadRequest, "invalid cursor")
 			return
 		}
-	}
-	page, err := s.Store.Pull(r.Context(), companyID, req.Table, cursor)
-	if err != nil {
 		log.Printf("pull failed (company %s, table %s): %v", companyID, req.Table, err)
 		writeErr(w, http.StatusInternalServerError, "pull failed")
 		return

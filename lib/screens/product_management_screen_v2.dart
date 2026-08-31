@@ -1889,6 +1889,66 @@ class _ProductManagementScreenV2State
   }
 
   Widget _headerBarV2() {
+    final l10n = AppLocalizations.of(context)!;
+    // Compact toolbar: title/subtitle get the full width, New Product is
+    // the primary action, everything else lives in the More menu.
+    if (context.isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.productMgmtTitle,
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.onSurface)),
+          const SizedBox(height: 2),
+          Text(l10n.productMgmtSubtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _showAddPanelV2 = true;
+                      _addPanelTabV2 = 0;
+                    });
+                  },
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(l10n.productMgmtNewProductButton),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppBorderRadius.xsmall)),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _statsLoadingV2
+                    ? null
+                    : () async {
+                        await _loadStatsV2();
+                      },
+                icon: _statsLoadingV2
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh),
+                tooltip: l10n.actionRefresh,
+              ),
+              _compactMoreMenuV2(l10n),
+            ],
+          ),
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2011,6 +2071,84 @@ class _ProductManagementScreenV2State
     );
   }
 
+  /// Compact More menu: Import / Export / admin operations / column and
+  /// stat-card visibility, all in one popup.
+  Widget _compactMoreMenuV2(AppLocalizations l10n) {
+    return PopupMenuButton<String>(
+      tooltip: l10n.invoiceMgmtMoreActionsTooltip,
+      onSelected: (value) async {
+        switch (value) {
+          case 'import':
+            await _showImportDialog();
+            await _loadStatsV2();
+          case 'export_csv':
+            await _exportToCSV();
+          case 'export_pdf':
+            await _exportToPDF();
+          case 'delete_all':
+            await _confirmDeleteAll();
+            await _loadStatsV2();
+          case 'columns':
+            _openColumnsSettingsV2();
+          case 'stats':
+            _toggleStatsCardsV2();
+        }
+      },
+      itemBuilder: (ctx) => [
+        PopupMenuItem(
+            value: 'import',
+            child: Row(children: [
+              const Icon(Icons.upload_file_outlined, size: 18),
+              const SizedBox(width: 10),
+              Text(l10n.actionImport),
+            ])),
+        PopupMenuItem(
+            value: 'export_csv',
+            child: Row(children: [
+              const Icon(Icons.file_download_outlined, size: 18),
+              const SizedBox(width: 10),
+              Text(l10n.actionExport),
+            ])),
+        PopupMenuItem(
+            value: 'export_pdf',
+            child: Row(children: [
+              const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              const SizedBox(width: 10),
+              Text(l10n.customerMgmtExportPdfMenuLabel),
+            ])),
+        if (widget.user.isAdmin())
+          PopupMenuItem(
+              value: 'delete_all',
+              child: Row(children: [
+                const Icon(Icons.delete_sweep, size: 18, color: Colors.red),
+                const SizedBox(width: 10),
+                Text(l10n.productMgmtDeleteAllTitle,
+                    style: const TextStyle(color: Colors.red)),
+              ])),
+        PopupMenuItem(
+            value: 'columns',
+            child: Row(children: [
+              const Icon(Icons.view_column_outlined, size: 18),
+              const SizedBox(width: 10),
+              Text(l10n.customerMgmtColumnsLabel),
+            ])),
+        PopupMenuItem(
+            value: 'stats',
+            child: Row(children: [
+              Icon(
+                  _showStatsCardsV2
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  size: 18),
+              const SizedBox(width: 10),
+              Text(_showStatsCardsV2
+                  ? l10n.customerMgmtHideStatCardsTooltip
+                  : l10n.customerMgmtShowStatCardsTooltip),
+            ])),
+      ],
+    );
+  }
+
   Widget _searchFilterRowV2() {
     final l10n = AppLocalizations.of(context)!;
     final sortOptions = [
@@ -2042,29 +2180,97 @@ class _ProductManagementScreenV2State
       orElse: () => sortOptions.first,
     )['label'] as String;
 
+    final searchField = TextField(
+      focusNode: _searchFocusNode,
+      onChanged: _onSearchChangedV2,
+      decoration: InputDecoration(
+        hintText: l10n.productMgmtSearchHint,
+        prefixIcon: const Icon(Icons.search, size: 20),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+            borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+            borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant)),
+      ),
+    );
+
+    // Compact: search gets its own full-width row; Filter + Sort share the
+    // row below; Columns/stat visibility live in the header More menu.
+    if (context.isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          searchField,
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Flexible(
+                child: PopupMenuButton<String>(
+                  tooltip: l10n.productMgmtFilterByStockStatusTooltip,
+                  onSelected: (value) {
+                    if (!mounted) return;
+                    setState(() {
+                      _currentPage = 0;
+                      _activeTabV2 = switch (value) {
+                        'low' => 3,
+                        'out' => 4,
+                        'expired' => 5,
+                        _ => (_activeTabV2 >= 3 && _activeTabV2 <= 5)
+                            ? 0
+                            : _activeTabV2,
+                      };
+                    });
+                    _applyClientFilterV2();
+                  },
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                        value: 'all',
+                        child: Text(l10n.productMgmtAllStockLevelsLabel)),
+                    PopupMenuItem(
+                        value: 'low',
+                        child: Text(l10n.productMgmtLowStockLabel)),
+                    PopupMenuItem(
+                        value: 'out',
+                        child: Text(l10n.productMgmtOutOfStockLabel)),
+                    if (_columnsConfig.productMetadata &&
+                        _columnsConfig.metaExpiryDate)
+                      PopupMenuItem(
+                          value: 'expired',
+                          child: Text(l10n.productMgmtExpiredLabel)),
+                  ],
+                  child: _menuButtonLookV2(
+                      Icons.filter_list, l10n.invoiceMgmtFilterLabel),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: PopupMenuButton<Map<String, Object>>(
+                  tooltip: l10n.invoiceMgmtSortLabel,
+                  onSelected: (opt) => _onSortSelectionV2(
+                      opt['field'] as String, opt['asc'] as bool),
+                  itemBuilder: (ctx) => sortOptions
+                      .map((o) => PopupMenuItem(
+                          value: o, child: Text(o['label'] as String)))
+                      .toList(),
+                  child: _menuButtonLookV2(Icons.swap_vert,
+                      l10n.customerMgmtSortWithLabel(currentLabel)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
     return Row(
       children: [
-        Expanded(
-          child: TextField(
-            focusNode: _searchFocusNode,
-            onChanged: _onSearchChangedV2,
-            decoration: InputDecoration(
-              hintText: l10n.productMgmtSearchHint,
-              prefixIcon: const Icon(Icons.search, size: 20),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                  borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant)),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                  borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant)),
-            ),
-          ),
-        ),
+        Expanded(child: searchField),
         const SizedBox(width: 10),
         Flexible(
           child: Wrap(
@@ -2143,26 +2349,32 @@ class _ProductManagementScreenV2State
     );
   }
 
-  Widget _tabChipV2(String label, int count, int index) {
+  final GlobalKey _selectedTabKeyV2 = GlobalKey();
+
+  Widget _tabChipV2(String label, int count, int index, {Key? chipKey}) {
     final selected = _activeTabV2 == index;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: OutlinedButton(
-        onPressed: () => _selectTabV2(index),
-        style: OutlinedButton.styleFrom(
-          backgroundColor: selected ? Theme.of(context).primaryColor : null,
-          foregroundColor:
-              selected ? Colors.white : Theme.of(context).colorScheme.onSurface,
-          side: BorderSide(
-              color: selected
-                  ? Theme.of(context).primaryColor
-                  : Theme.of(context).colorScheme.outlineVariant),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+    return KeyedSubtree(
+      key: chipKey,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: OutlinedButton(
+          onPressed: () => _selectTabV2(index),
+          style: OutlinedButton.styleFrom(
+            backgroundColor: selected ? Theme.of(context).primaryColor : null,
+            foregroundColor: selected
+                ? Colors.white
+                : Theme.of(context).colorScheme.onSurface,
+            side: BorderSide(
+                color: selected
+                    ? Theme.of(context).primaryColor
+                    : Theme.of(context).colorScheme.outlineVariant),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+          ),
+          child: Text(AppLocalizations.of(context)!
+              .customerMgmtTabChipLabel(label, count)),
         ),
-        child: Text(AppLocalizations.of(context)!
-            .customerMgmtTabChipLabel(label, count)),
       ),
     );
   }
@@ -2171,17 +2383,32 @@ class _ProductManagementScreenV2State
     final l10n = AppLocalizations.of(context)!;
     final showExpiredTab =
         _columnsConfig.productMetadata && _columnsConfig.metaExpiryDate;
+    // Keep the selected category chip in view — the strip may scroll, but
+    // the active tab must never sit clipped off-screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _selectedTabKeyV2.currentContext;
+      if (ctx != null && mounted) {
+        Scrollable.ensureVisible(ctx,
+            alignment: 0.1, duration: const Duration(milliseconds: 150));
+      }
+    });
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          _tabChipV2(l10n.invoiceMgmtStatusAllLabel, _allCountV2, 0),
-          _tabChipV2(l10n.navProducts, _productsCountV2, 1),
-          _tabChipV2(l10n.productMgmtServicesTabLabel, _servicesCountV2, 2),
-          _tabChipV2(l10n.productMgmtLowStockTabLabel, _lowStockCountV2, 3),
-          _tabChipV2(l10n.productMgmtOutOfStockTabLabel, _outOfStockCountV2, 4),
+          _tabChipV2(l10n.invoiceMgmtStatusAllLabel, _allCountV2, 0,
+              chipKey: _activeTabV2 == 0 ? _selectedTabKeyV2 : null),
+          _tabChipV2(l10n.navProducts, _productsCountV2, 1,
+              chipKey: _activeTabV2 == 1 ? _selectedTabKeyV2 : null),
+          _tabChipV2(l10n.productMgmtServicesTabLabel, _servicesCountV2, 2,
+              chipKey: _activeTabV2 == 2 ? _selectedTabKeyV2 : null),
+          _tabChipV2(l10n.productMgmtLowStockTabLabel, _lowStockCountV2, 3,
+              chipKey: _activeTabV2 == 3 ? _selectedTabKeyV2 : null),
+          _tabChipV2(l10n.productMgmtOutOfStockTabLabel, _outOfStockCountV2, 4,
+              chipKey: _activeTabV2 == 4 ? _selectedTabKeyV2 : null),
           if (showExpiredTab)
-            _tabChipV2(l10n.productMgmtExpiredLabel, _expiredCountV2, 5),
+            _tabChipV2(l10n.productMgmtExpiredLabel, _expiredCountV2, 5,
+                chipKey: _activeTabV2 == 5 ? _selectedTabKeyV2 : null),
         ],
       ),
     );

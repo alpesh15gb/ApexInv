@@ -274,56 +274,128 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ];
   }
 
-  /// Horizontal scrolling section chips for compact/medium windows —
-  /// replaces the NavigationRail so content gets the full width.
+  /// Compact section selector: a single full-width row showing the current
+  /// section; tapping opens a bottom-sheet menu of all destinations. No
+  /// horizontal scrolling strip, so the selected section can never sit
+  /// partially off-screen and never competes with a child screen's own tabs.
   Widget _buildMobileSectionBar(List<_SettingsDestination> destinations) {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainer,
-        border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outlineVariant, width: 1),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        bottom: false,
-        child: SizedBox(
-          height: 52,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            itemCount: destinations.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (context, i) {
-              final selected = _selectedIndex == i;
-              final d = destinations[i];
-              return ChoiceChip(
-                selected: selected,
-                showCheckmark: false,
-                label: Text(d.label),
-                avatar: Icon(
-                  d.icon,
-                  size: 16,
-                  color: selected
-                      ? theme.colorScheme.onPrimary
-                      : theme.colorScheme.onSurfaceVariant,
-                ),
-                labelStyle: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  color: selected
-                      ? theme.colorScheme.onPrimary
-                      : theme.colorScheme.onSurfaceVariant,
-                ),
-                selectedColor: theme.primaryColor,
-                backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                onSelected: (_) => setState(() => _selectedIndex = i),
-              );
-            },
+    final current =
+        destinations[_selectedIndex.clamp(0, destinations.length - 1)];
+    return Material(
+      color: theme.colorScheme.surfaceContainer,
+      child: InkWell(
+        onTap: () => _showSectionSheet(destinations),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom:
+                  BorderSide(color: theme.colorScheme.outlineVariant, width: 1),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(current.icon, size: 20, color: theme.primaryColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(current.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w600)),
+              ),
+              Badge(
+                smallSize: 8,
+                isLabelVisible: current.showUpdateDot,
+                child: const Icon(Icons.expand_more),
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _showSectionSheet(List<_SettingsDestination> destinations) {
+    final theme = Theme.of(context);
+    return showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.75,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          AppLocalizations.of(sheetContext)!.navSettings,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(sheetContext),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.only(bottom: 8),
+                    children: [
+                      for (var i = 0; i < destinations.length; i++)
+                        ListTile(
+                          leading: Icon(destinations[i].icon,
+                              color: i == _selectedIndex
+                                  ? theme.primaryColor
+                                  : theme.colorScheme.onSurfaceVariant),
+                          title: Text(
+                            destinations[i].label,
+                            style: TextStyle(
+                              fontWeight: i == _selectedIndex
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: i == _selectedIndex
+                                  ? theme.primaryColor
+                                  : null,
+                            ),
+                          ),
+                          trailing: destinations[i].showUpdateDot
+                              ? Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                      color: Colors.orange,
+                                      shape: BoxShape.circle),
+                                )
+                              : null,
+                          selected: i == _selectedIndex,
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            setState(() => _selectedIndex = i);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -197,12 +197,10 @@ class SyncAccountClient {
   }
 
   Future<List<dynamic>> _getList(String path, String token) async {
-    final res = await _client
-        .get(
-          Uri.parse('$baseUrl$path'),
-          headers: {'Authorization': 'Bearer $token'},
-        )
-        .timeout(const Duration(seconds: 20));
+    final res = await _client.get(
+      Uri.parse('$baseUrl$path'),
+      headers: {'Authorization': 'Bearer $token'},
+    ).timeout(const Duration(seconds: 20));
     if (res.statusCode >= 400) throw _httpError(res);
     final decoded = jsonDecode(res.body);
     if (decoded is List) return decoded;
@@ -224,7 +222,7 @@ class SyncAccountClient {
         return SyncAuthHttpException(j['error'].toString(), res.statusCode);
       }
     } catch (_) {}
-    return SyncAuthHttpException('Server error (HTTP ${res.statusCode})',
-        res.statusCode);
+    return SyncAuthHttpException(
+        'Server error (HTTP ${res.statusCode})', res.statusCode);
   }
 }

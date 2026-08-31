@@ -1583,15 +1583,105 @@ class _CustomerManagementScreenV2State
       ],
     );
 
-    // Compact: title on its own row, actions wrapping below it — the
-    // side-by-side Row starves the title and stacks the actions vertically.
+    // Compact toolbar: full-width title, New Customer primary, refresh icon,
+    // everything else (Import/Export/PDF/Delete-all) in the More menu.
     if (context.isCompact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          titleBlock,
+          Text(AppLocalizations.of(context)!.customerMgmtTitle,
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.onSurface)),
+          const SizedBox(height: 2),
+          Text(AppLocalizations.of(context)!.customerMgmtSubtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 12),
-          actions,
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => setState(() => _showAddPanelV2 = true),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(AppLocalizations.of(context)!
+                      .customerMgmtNewCustomerButton),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppBorderRadius.xsmall)),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _isLoading ? null : _loadCustomers,
+                icon: _isLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh),
+                tooltip: AppLocalizations.of(context)!.actionRefresh,
+              ),
+              PopupMenuButton<String>(
+                tooltip:
+                    AppLocalizations.of(context)!.invoiceMgmtMoreActionsTooltip,
+                onSelected: (value) {
+                  switch (value) {
+                    case 'import':
+                      _showImportDialog();
+                    case 'export_csv':
+                      _exportToCSV();
+                    case 'export_pdf':
+                      _exportToPDF();
+                    case 'delete_all':
+                      _confirmDeleteAll();
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  PopupMenuItem(
+                      value: 'import',
+                      child: Row(children: [
+                        const Icon(Icons.upload_file_outlined, size: 18),
+                        const SizedBox(width: 10),
+                        Text(AppLocalizations.of(context)!.actionImport),
+                      ])),
+                  PopupMenuItem(
+                      value: 'export_csv',
+                      child: Row(children: [
+                        const Icon(Icons.file_download_outlined, size: 18),
+                        const SizedBox(width: 10),
+                        Text(AppLocalizations.of(context)!.actionExport),
+                      ])),
+                  PopupMenuItem(
+                      value: 'export_pdf',
+                      child: Row(children: [
+                        const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                        const SizedBox(width: 10),
+                        Text(AppLocalizations.of(context)!
+                            .customerMgmtExportPdfMenuLabel),
+                      ])),
+                  if (widget.user.isAdmin())
+                    PopupMenuItem(
+                        value: 'delete_all',
+                        child: Row(children: [
+                          const Icon(Icons.delete_sweep,
+                              size: 18, color: Colors.red),
+                          const SizedBox(width: 10),
+                          Text(
+                              AppLocalizations.of(context)!
+                                  .customerMgmtDeleteAllTitle,
+                              style: const TextStyle(color: Colors.red)),
+                        ])),
+                ],
+              ),
+            ],
+          ),
         ],
       );
     }
@@ -1635,29 +1725,92 @@ class _CustomerManagementScreenV2State
       orElse: () => sortOptions.first,
     )['label'] as String;
 
+    final searchField = TextField(
+      focusNode: _searchFocusNode,
+      onChanged: _onSearchChangedV2,
+      decoration: InputDecoration(
+        hintText: l10n.customerMgmtSearchHint(_taxWord),
+        prefixIcon: const Icon(Icons.search, size: 20),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+            borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+            borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant)),
+      ),
+    );
+
+    // Compact: full-width search; Filter + Sort below; Columns/stat toggles
+    // live in the header More menu.
+    if (context.isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          searchField,
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Flexible(
+                child: PopupMenuButton<String>(
+                  tooltip: l10n.invoiceMgmtFilterLabel,
+                  onSelected: (value) {
+                    if (!mounted) return;
+                    setState(() {
+                      _currentPage = 0;
+                      _activeTabV2 = switch (value) {
+                        'gst' => 3,
+                        'no_gst' => 4,
+                        _ => _activeTabV2 >= 3 ? 0 : _activeTabV2,
+                      };
+                      _applyFilterV2();
+                    });
+                  },
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                        value: 'all',
+                        child: Text(
+                            l10n.customerMgmtAllTaxStatusesLabel(_taxWord))),
+                    PopupMenuItem(
+                        value: 'gst',
+                        child: Text(l10n
+                            .customerMgmtTaxRegisteredLowerLabel(_taxWord))),
+                    PopupMenuItem(
+                        value: 'no_gst',
+                        child:
+                            Text(l10n.customerMgmtWithoutTaxLabel(_taxWord))),
+                  ],
+                  child: _menuButtonLookV2(
+                      Icons.filter_list, l10n.invoiceMgmtFilterLabel),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: PopupMenuButton<Map<String, Object>>(
+                  tooltip: l10n.invoiceMgmtSortLabel,
+                  onSelected: (opt) => _onSortSelectionV2(
+                      opt['field'] as String, opt['asc'] as bool),
+                  itemBuilder: (ctx) => sortOptions
+                      .map((o) => PopupMenuItem(
+                          value: o, child: Text(o['label'] as String)))
+                      .toList(),
+                  child: _menuButtonLookV2(Icons.swap_vert,
+                      l10n.customerMgmtSortWithLabel(currentLabel)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
     return Row(
       children: [
-        Expanded(
-          child: TextField(
-            focusNode: _searchFocusNode,
-            onChanged: _onSearchChangedV2,
-            decoration: InputDecoration(
-              hintText: l10n.customerMgmtSearchHint(_taxWord),
-              prefixIcon: const Icon(Icons.search, size: 20),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                  borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant)),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                  borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant)),
-            ),
-          ),
-        ),
+        Expanded(child: searchField),
         const SizedBox(width: 10),
         Flexible(
           child: Wrap(
@@ -1771,55 +1924,76 @@ class _CustomerManagementScreenV2State
     );
   }
 
-  Widget _tabChipV2(String label, int count, int index) {
+  final GlobalKey _selectedTabKeyV2 = GlobalKey();
+
+  Widget _tabChipV2(String label, int count, int index, {Key? chipKey}) {
     final selected = _activeTabV2 == index;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: OutlinedButton(
-        onPressed: () => _selectTabV2(index),
-        style: OutlinedButton.styleFrom(
-          backgroundColor: selected ? Theme.of(context).primaryColor : null,
-          foregroundColor:
-              selected ? Colors.white : Theme.of(context).colorScheme.onSurface,
-          side: BorderSide(
-              color: selected
-                  ? Theme.of(context).primaryColor
-                  : Theme.of(context).colorScheme.outlineVariant),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+    return KeyedSubtree(
+      key: chipKey,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: OutlinedButton(
+          onPressed: () => _selectTabV2(index),
+          style: OutlinedButton.styleFrom(
+            backgroundColor: selected ? Theme.of(context).primaryColor : null,
+            foregroundColor: selected
+                ? Colors.white
+                : Theme.of(context).colorScheme.onSurface,
+            side: BorderSide(
+                color: selected
+                    ? Theme.of(context).primaryColor
+                    : Theme.of(context).colorScheme.outlineVariant),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+          ),
+          child: Text(AppLocalizations.of(context)!
+              .customerMgmtTabChipLabel(label, count)),
         ),
-        child: Text(AppLocalizations.of(context)!
-            .customerMgmtTabChipLabel(label, count)),
       ),
     );
   }
 
   Widget _tabsRowV2() {
+    // Keep the selected category chip in view — the strip may scroll, but
+    // the active tab must never sit clipped off-screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _selectedTabKeyV2.currentContext;
+      if (ctx != null && mounted) {
+        Scrollable.ensureVisible(ctx,
+            alignment: 0.1, duration: const Duration(milliseconds: 150));
+      }
+    });
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
           _tabChipV2(AppLocalizations.of(context)!.invoiceMgmtStatusAllLabel,
-              _customers.length, 0),
+              _customers.length, 0,
+              chipKey: _activeTabV2 == 0 ? _selectedTabKeyV2 : null),
           _tabChipV2(AppLocalizations.of(context)!.customerMgmtBusinessesLabel,
-              _businessesCountV2, 1),
+              _businessesCountV2, 1,
+              chipKey: _activeTabV2 == 1 ? _selectedTabKeyV2 : null),
           _tabChipV2(AppLocalizations.of(context)!.customerMgmtIndividualsLabel,
-              _individualsCountV2, 2),
+              _individualsCountV2, 2,
+              chipKey: _activeTabV2 == 2 ? _selectedTabKeyV2 : null),
           _tabChipV2(
               AppLocalizations.of(context)!
                   .customerMgmtTaxRegisteredLabel(_taxWord),
               _gstRegisteredCountV2,
-              3),
+              3,
+              chipKey: _activeTabV2 == 3 ? _selectedTabKeyV2 : null),
           _tabChipV2(
               AppLocalizations.of(context)!.customerMgmtWithOutstandingLabel,
               _withOutstandingCountV2,
-              5),
+              5,
+              chipKey: _activeTabV2 == 5 ? _selectedTabKeyV2 : null),
           _tabChipV2(
               AppLocalizations.of(context)!
                   .customerMgmtWithoutTaxLabel(_taxWord),
               _withoutGstCountV2,
-              4),
+              4,
+              chipKey: _activeTabV2 == 4 ? _selectedTabKeyV2 : null),
         ],
       ),
     );
@@ -2313,39 +2487,63 @@ class _CustomerManagementScreenV2State
                         : Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               const Spacer(),
+              // 2-3 common quick actions visible; statement/edit/delete live
+              // in the card overflow menu.
               IconButton(
                 icon: const Icon(Icons.visibility_outlined, size: 18),
                 visualDensity: VisualDensity.compact,
                 onPressed: () => _viewCustomerV2(c),
                 tooltip: l10n.actionView,
               ),
-              if (widget.onViewCustomerStatement != null)
-                IconButton(
-                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => widget.onViewCustomerStatement!(c),
-                  tooltip: l10n.customerMgmtViewStatementTooltip,
-                ),
               IconButton(
                 icon: const Icon(Icons.payments_outlined, size: 18),
                 visualDensity: VisualDensity.compact,
                 onPressed: () => _receivePayment(c),
                 tooltip: 'Receive Payment',
               ),
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                visualDensity: VisualDensity.compact,
-                onPressed: () => _editCustomerV2(c),
-                tooltip: l10n.actionEdit,
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, size: 20),
+                tooltip: l10n.invoiceMgmtMoreActionsTooltip,
+                onSelected: (value) {
+                  switch (value) {
+                    case 'statement':
+                      widget.onViewCustomerStatement?.call(c);
+                    case 'edit':
+                      _editCustomerV2(c);
+                    case 'delete':
+                      if (widget.user.isAdmin()) _deleteCustomerV2(c);
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  if (widget.onViewCustomerStatement != null)
+                    PopupMenuItem(
+                        value: 'statement',
+                        child: Row(children: [
+                          const Icon(Icons.receipt_long_outlined, size: 18),
+                          const SizedBox(width: 10),
+                          Text(l10n.customerMgmtViewStatementTooltip),
+                        ])),
+                  PopupMenuItem(
+                      value: 'edit',
+                      child: Row(children: [
+                        const Icon(Icons.edit_outlined, size: 18),
+                        const SizedBox(width: 10),
+                        Text(l10n.actionEdit),
+                      ])),
+                  if (widget.user.isAdmin())
+                    PopupMenuItem(
+                        value: 'delete',
+                        child: Row(children: [
+                          Icon(Icons.delete_outline,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.error),
+                          const SizedBox(width: 10),
+                          Text(l10n.actionDelete,
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error)),
+                        ])),
+                ],
               ),
-              if (widget.user.isAdmin())
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  color: Theme.of(context).colorScheme.error,
-                  onPressed: () => _deleteCustomerV2(c),
-                  tooltip: l10n.actionDelete,
-                ),
             ],
           ),
         ],

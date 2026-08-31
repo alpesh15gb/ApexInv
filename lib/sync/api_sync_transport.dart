@@ -91,9 +91,8 @@ class ApiSyncTransport implements SyncTransport {
         rowPk: (m['rowPk'] ?? '').toString(),
         op: (m['op'] ?? 'update').toString(),
         changedAt: DateTime.parse(m['changedAt'] as String),
-        lwwAt: m['lwwAt'] == null
-            ? null
-            : DateTime.tryParse(m['lwwAt'] as String),
+        lwwAt:
+            m['lwwAt'] == null ? null : DateTime.tryParse(m['lwwAt'] as String),
         payload: payload,
       ));
     }
@@ -146,9 +145,8 @@ class ApiSyncTransport implements SyncTransport {
   static String _truncate(String s) =>
       s.length <= 200 ? s : '${s.substring(0, 200)}…';
 
-  static Set<String> _stringSet(dynamic v) => v is List
-      ? {for (final e in v) e.toString()}
-      : const {};
+  static Set<String> _stringSet(dynamic v) =>
+      v is List ? {for (final e in v) e.toString()} : const {};
 
   static Map<String, String> _stringMap(dynamic v) => v is Map
       ? {for (final e in v.entries) e.key.toString(): e.value.toString()}

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -32,8 +33,9 @@ type Store struct {
 
 // Sentinel errors surfaced to the API layer.
 var (
-	ErrEmailTaken = errors.New("email already registered")
-	ErrNotFound   = errors.New("not found")
+	ErrEmailTaken    = errors.New("email already registered")
+	ErrNotFound      = errors.New("not found")
+	ErrInvalidCursor = errors.New("invalid cursor")
 )
 
 // Open connects, applies the schema idempotently, and returns the store.
@@ -326,16 +328,37 @@ func itoa(n int) string {
 
 // PullPage is one page of server changes for a table.
 type PullPage struct {
-	Ops       []Op      `json:"ops"`
-	NextCursor time.Time `json:"nextCursor"`
-	HasMore   bool      `json:"hasMore"`
+	Ops []Op `json:"ops"`
+	// NextCursor is opaque: "<RFC3339Nano>|<row_pk>" — the (ts, pk) keyset
+	// position to resume from. The pk tiebreaker exists because a single
+	// push batch commits in ONE transaction, so every row in the batch
+	// shares the same server_updated_at (now() is transaction-start); a
+	// ts-only cursor skipped every same-ts row beyond the first page.
+	NextCursor string `json:"nextCursor"`
+	HasMore    bool   `json:"hasMore"`
 }
 
 const pullPageSize = 500
 
 // Pull returns rows and tombstones for table changed after cursor.
-func (s *Store) Pull(ctx context.Context, companyID, table string, cursor time.Time) (*PullPage, error) {
+func (s *Store) Pull(ctx context.Context, companyID, table string, rawCursor string) (*PullPage, error) {
 	page := &PullPage{Ops: []Op{}}
+
+	// Parse the opaque cursor: "ts|pk" (current) or bare "ts" (legacy).
+	var cursor time.Time
+	var cursorPK string
+	if rawCursor != "" {
+		tsPart := rawCursor
+		if i := strings.LastIndex(rawCursor, "|"); i >= 0 {
+			tsPart = rawCursor[:i]
+			cursorPK = rawCursor[i+1:]
+		}
+		var err error
+		cursor, err = time.Parse(time.RFC3339Nano, tsPart)
+		if err != nil {
+			return nil, ErrInvalidCursor
+		}
+	}
 
 	// Server_updated_at (receive clock) drives the filter and the cursor:
 	// it is the only monotone, single-clock-domain quantity here. Returning
@@ -348,15 +371,24 @@ func (s *Store) Pull(ctx context.Context, companyID, table string, cursor time.T
 	// row's updated_at (this device's clock) against the authoring device's
 	// stamp. Arbitrating against server_updated_at silently drops deletes
 	// when the pulling device's clock runs ahead of the server's.
+	//
+	// Keyset pagination on (server_updated_at, row_pk): deterministic order
+	// with a unique tiebreaker, so same-timestamp batches never skip rows.
 	rows, err := s.pool.Query(ctx, `
-		(SELECT row_pk, data, server_updated_at, updated_at FROM records
-		  WHERE company_id=$1 AND table_name=$2 AND server_updated_at > $3
-		  ORDER BY server_updated_at LIMIT $4)
-		UNION ALL
-		(SELECT row_pk, NULL, server_updated_at, client_changed_at FROM tombstones
-		  WHERE company_id=$1 AND table_name=$2 AND server_updated_at > $3
-		  ORDER BY server_updated_at LIMIT $4)`,
-		companyID, table, cursor, pullPageSize+1)
+		SELECT * FROM (
+		  (SELECT row_pk, data, server_updated_at, updated_at FROM records
+		    WHERE company_id=$1 AND table_name=$2
+		      AND (server_updated_at, row_pk) > ($3, $4)
+		    LIMIT $5)
+		  UNION ALL
+		  (SELECT row_pk, NULL, server_updated_at, client_changed_at FROM tombstones
+		    WHERE company_id=$1 AND table_name=$2
+		      AND (server_updated_at, row_pk) > ($3, $4)
+		    LIMIT $5)
+		) u
+		ORDER BY server_updated_at, row_pk
+		LIMIT $5`,
+		companyID, table, cursor, cursorPK, pullPageSize+1)
 	if err != nil {
 		return nil, err
 	}
@@ -386,12 +418,13 @@ func (s *Store) Pull(ctx context.Context, companyID, table string, cursor time.T
 		page.Ops = page.Ops[:pullPageSize]
 		page.HasMore = true
 	}
-	// An empty page must not advance the cursor (and would panic indexing an
-	// empty slice): keep the caller's cursor so the next poll re-checks.
+	// An empty page must not advance the cursor: keep the caller's cursor
+	// verbatim so the next poll re-checks.
 	if len(page.Ops) > 0 {
-		page.NextCursor = page.Ops[len(page.Ops)-1].ChangedAt
+		last := page.Ops[len(page.Ops)-1]
+		page.NextCursor = last.ChangedAt.UTC().Format(time.RFC3339Nano) + "|" + last.RowPK
 	} else {
-		page.NextCursor = cursor
+		page.NextCursor = rawCursor
 	}
 	return page, nil
 }

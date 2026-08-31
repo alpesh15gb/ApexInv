@@ -62,12 +62,13 @@ void main() {
       ),
     ));
     expect(find.text('card body'), findsOneWidget);
-    final accentContainers = tester.widgetList<Container>(
+    // Accent bar = 4px-wide positioned bar stretched between top/bottom.
+    final accentBars = tester.widgetList<Positioned>(
       find.byWidgetPredicate(
-        (w) => w is Container && w.constraints?.maxWidth == 4,
+        (w) => w is Positioned && w.width == 4 && w.top == 0 && w.bottom == 0,
       ),
     );
-    expect(accentContainers.length, 1);
+    expect(accentBars.length, 1);
   });
 
   testWidgets('AppDialog shows AlertDialog on medium/expanded windows',
@@ -213,7 +214,8 @@ void main() {
         ]);
 
     // Wide (medium test surface 800x600): one Row, all three fields share it.
-    await tester.pumpWidget(_wrap(Scaffold(body: SingleChildScrollView(child: grid()))));
+    await tester.pumpWidget(
+        _wrap(Scaffold(body: SingleChildScrollView(child: grid()))));
     final rowA = tester.getTopLeft(find.byType(TextField).at(0));
     final rowB = tester.getTopLeft(find.byType(TextField).at(1));
     expect(rowB.dy, rowA.dy, reason: 'wide: fields side by side');
@@ -222,7 +224,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     tester.view.physicalSize = const Size(400, 800);
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(_wrap(Scaffold(body: SingleChildScrollView(child: grid()))));
+    await tester.pumpWidget(
+        _wrap(Scaffold(body: SingleChildScrollView(child: grid()))));
     await tester.pump();
     final colA = tester.getTopLeft(find.byType(TextField).at(0));
     final colB = tester.getTopLeft(find.byType(TextField).at(1));
@@ -234,7 +237,8 @@ void main() {
     // Extremely narrow 320px: one field per row.
     tester.view.devicePixelRatio = 1.0;
     tester.view.physicalSize = const Size(320, 800);
-    await tester.pumpWidget(_wrap(Scaffold(body: SingleChildScrollView(child: grid()))));
+    await tester.pumpWidget(
+        _wrap(Scaffold(body: SingleChildScrollView(child: grid()))));
     await tester.pump();
     final nA = tester.getTopLeft(find.byType(TextField).at(0));
     final nB = tester.getTopLeft(find.byType(TextField).at(1));
@@ -270,5 +274,56 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Save settings'), findsOneWidget);
   });
-}
 
+  testWidgets(
+      'Accented EntityCard inside a vertical ListView at 320px renders its '
+      'content (regression: stretch accent bar blanked invoice cards)',
+      (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_wrap(
+      Scaffold(
+        body: ListView.builder(
+          itemCount: 5,
+          itemBuilder: (context, i) => EntityCard(
+            key: ValueKey(i),
+            accentColor: i.isEven ? Colors.green : Colors.red,
+            margin: EdgeInsets.zero,
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('#INV-00${i + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text('Customer $i'),
+                const SizedBox(height: 4),
+                Text('Out: ${100 + i}.00'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    // Real content assertions — the invoice card text must actually be on
+    // screen and laid out with sane dimensions, not just "no exception".
+    expect(find.text('#INV-001'), findsOneWidget);
+    expect(find.text('#INV-002'), findsOneWidget);
+    expect(find.text('Customer 0'), findsOneWidget);
+    final cardRect = tester.getRect(find.text('#INV-001'));
+    expect(cardRect.width, greaterThan(100),
+        reason: 'invoice text must have usable width at 320px');
+    expect(cardRect.height, greaterThan(0));
+    // Scroll the last card into view — every record must be reachable.
+    await tester.scrollUntilVisible(
+      find.text('#INV-005'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('#INV-005'), findsOneWidget);
+  });
+}

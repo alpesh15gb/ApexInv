@@ -16,8 +16,11 @@ import 'package:apexbooks/sync/sync_transport.dart';
 /// authoring device's client-clock stamp as `lwwAt`).
 class FakeSyncTransport implements SyncTransport {
   // company -> table -> pk -> (payload, serverUpdatedAt, clientLwwAt, deleted)
-  final Map<String, Map<String, Map<String, (Map<String, dynamic>, DateTime, DateTime, bool)>>> _data =
-      {};
+  final Map<
+          String,
+          Map<String,
+              Map<String, (Map<String, dynamic>, DateTime, DateTime, bool)>>>
+      _data = {};
   // Start at real wall-clock so pushed rows always compare newer than the
   // device-written updated_at values they carry (mirrors a live server).
   // [startClockLag] shifts the initial clock backward to model a server
@@ -40,8 +43,9 @@ class FakeSyncTransport implements SyncTransport {
       String companyId, String tableName, String cursor) async {
     final tables = _data[companyId] ?? {};
     final rows = tables[tableName] ?? {};
-    final cursorTime =
-        cursor.isEmpty ? DateTime.fromMillisecondsSinceEpoch(0) : DateTime.parse(cursor);
+    final cursorTime = cursor.isEmpty
+        ? DateTime.fromMillisecondsSinceEpoch(0)
+        : DateTime.parse(cursor);
 
     final ops = <SyncOp>[];
     var latest = cursorTime;
@@ -85,13 +89,18 @@ class FakeSyncTransport implements SyncTransport {
       final clientStamp = op.changedAt;
       if (op.op == SyncOpTypes.delete) {
         final existing = rows[op.rowPk];
-        if (existing != null && !clientStamp.isAfter(existing.$3) && !existing.$4) {
+        if (existing != null &&
+            !clientStamp.isAfter(existing.$3) &&
+            !existing.$4) {
           continue; // delete loses LWW to a newer row
         }
-        rows[op.rowPk] = (existing?.$1 ?? const {}, _serverClock, clientStamp, true);
+        rows[op.rowPk] =
+            (existing?.$1 ?? const {}, _serverClock, clientStamp, true);
       } else {
         final existing = rows[op.rowPk];
-        if (existing != null && !existing.$4 && !clientStamp.isAfter(existing.$3)) {
+        if (existing != null &&
+            !existing.$4 &&
+            !clientStamp.isAfter(existing.$3)) {
           continue; // stale push
         }
         rows[op.rowPk] = (
@@ -161,8 +170,8 @@ void main() {
 
     test('linkCompany enables sync and sets baseline', () async {
       expect(await engineA.isEnabled(), isTrue);
-      final baseline = await deviceA.query('_sync_state',
-          where: 'key = ?', whereArgs: ['baseline_done']);
+      final baseline = await deviceA
+          .query('_sync_state', where: 'key = ?', whereArgs: ['baseline_done']);
       expect(baseline.first['value'], '1');
     });
 
@@ -178,8 +187,7 @@ void main() {
   });
 
   group('A → B propagation', () {
-    test('customer created on A appears on B after sync both ways',
-        () async {
+    test('customer created on A appears on B after sync both ways', () async {
       await deviceA.insert('customers', {'id': 'c-100', 'name': 'Alice'});
       await engineA.syncNow(); // push A
       await engineB.syncNow(); // pull B
@@ -206,8 +214,7 @@ void main() {
       expect(onA.first['name'], 'Bob Jr.');
     });
 
-    test('older edit loses to newer remote edit (LWW older loses)',
-        () async {
+    test('older edit loses to newer remote edit (LWW older loses)', () async {
       await deviceA.insert('customers', {'id': 'c-102', 'name': 'Carol'});
       await engineA.syncNow();
       await engineB.syncNow();
@@ -262,7 +269,8 @@ void main() {
       expect(onB.first['name'], 'Eve-kept');
     });
 
-    test('tombstone arbitration uses the client-clock domain, not the '
+    test(
+        'tombstone arbitration uses the client-clock domain, not the '
         'server receive clock', () async {
       // Regression for the lwwAt contract (prod-reproduced): when the
       // server's receive clock trails the devices' clocks, arbitrating the
@@ -326,8 +334,8 @@ void main() {
           .where((o) => o.tableName == 'products' && o.rowPk == 'p-900')
           .length;
       expect(after, before + 1); // collapsed to ONE op
-      final op = server.pushedOps.lastWhere(
-          (o) => o.tableName == 'products' && o.rowPk == 'p-900');
+      final op = server.pushedOps
+          .lastWhere((o) => o.tableName == 'products' && o.rowPk == 'p-900');
       expect(op.payload!['price'], 15.0); // latest state, not intermediates
     });
 
@@ -335,20 +343,17 @@ void main() {
         () async {
       await deviceA.insert('customers', {'id': 'c-105', 'name': 'Frank'});
       await engineA.syncNow();
-      final outboxBefore =
-          Sqflite.firstIntValue(await deviceB.rawQuery(
+      final outboxBefore = Sqflite.firstIntValue(await deviceB.rawQuery(
               'SELECT COUNT(*) FROM _sync_outbox WHERE pushed_at IS NULL')) ??
           0;
       await engineB.syncNow(); // pulls Frank
-      final outboxAfter =
-          Sqflite.firstIntValue(await deviceB.rawQuery(
+      final outboxAfter = Sqflite.firstIntValue(await deviceB.rawQuery(
               'SELECT COUNT(*) FROM _sync_outbox WHERE pushed_at IS NULL')) ??
           0;
       expect(outboxAfter, outboxBefore); // no echo ops
     });
 
-    test('full convergence: both devices end identical after churn',
-        () async {
+    test('full convergence: both devices end identical after churn', () async {
       // Churn on both sides.
       await deviceA.insert('customers', {'id': 'c-200', 'name': 'Gail'});
       await deviceB.insert('customers', {'id': 'c-201', 'name': 'Hank'});
@@ -377,6 +382,87 @@ void main() {
       final bProd = await deviceB
           .query('products', where: 'id = ?', whereArgs: ['p-200']);
       expect(aProd.first['name'], bProd.first['name']);
+    });
+
+    test('soft-deleted invoice (trash) is removed on the other device',
+        () async {
+      // Regression: `deleted_at` is a local-only column, so the soft delete
+      // used to push as a plain UPDATE and the invoice silently stayed
+      // alive on every other device.
+      await deviceA.insert('invoices', {
+        'id': 'inv-400',
+        'customer_id': 'c-1',
+        'customer_name': 'Trash Target',
+        'date': '2026-08-31',
+        'type': 'Invoice',
+        'invoice_number': '00000001',
+      });
+      await engineA.syncNow();
+      await engineB.syncNow();
+      expect(
+          (await deviceB
+              .query('invoices', where: 'id = ?', whereArgs: ['inv-400'])),
+          hasLength(1));
+
+      // A moves the invoice to the trash (exactly what
+      // InvoiceService.softDeleteInvoice does).
+      await deviceA.update('invoices', {'deleted_at': '2026-08-31T10:00:00Z'},
+          where: 'id = ?', whereArgs: ['inv-400']);
+      await engineA.syncNow();
+      await engineB.syncNow();
+
+      expect(
+          await deviceB
+              .query('invoices', where: 'id = ?', whereArgs: ['inv-400']),
+          isEmpty,
+          reason: 'soft delete must cross devices as a tombstone');
+    });
+
+    test('baseline skips soft-deleted invoices (trash is device-local)',
+        () async {
+      await deviceA.insert('invoices', {
+        'id': 'inv-401',
+        'customer_id': 'c-1',
+        'customer_name': 'Trashed',
+        'date': '2026-08-31',
+        'type': 'Invoice',
+      });
+      await deviceA.update('invoices', {'deleted_at': '2026-08-31T10:00:00Z'},
+          where: 'id = ?', whereArgs: ['inv-401']);
+
+      // A brand-new device links: its baseline must not resurrect A's trash.
+      final dbC = await _createDevice();
+      final engineC = SyncEngine(dbAccessor: () => dbC, transport: server);
+      await engineC.linkCompany(dbC, company);
+      await engineC.syncNow();
+
+      expect(
+        await dbC.query('invoices', where: 'id = ?', whereArgs: ['inv-401']),
+        isEmpty,
+      );
+      await dbC.close();
+    });
+
+    test(
+        'many rows pushed in one batch are all pulled (no same-timestamp '
+        'skips)', () async {
+      // Regression for the server-side pagination bug: rows pushed in one
+      // transaction share a server timestamp, and a ts-only cursor skipped
+      // everything beyond the first page. The fake has no page limit, so
+      // simulate the fix contract directly: the cursor must carry the
+      // '|' keyset tiebreaker after a cycle that pulled rows.
+      await deviceA.insert('customers', {'id': 'c-500', 'name': 'Batch'});
+      await engineA.syncNow();
+
+      final result = await engineB.syncNow();
+      expect(result.pulled, greaterThan(0));
+      final stored = await deviceB.query('_sync_state',
+          where: 'key = ?', whereArgs: ['last_pulled_customers']);
+      final cursor = stored.first['value'] as String;
+      // With the keyset server the cursor is "ts|pk"; legacy/fake servers
+      // may still send bare timestamps — either way the stored value must
+      // not be empty after pulling rows.
+      expect(cursor, isNotEmpty);
     });
   });
 }

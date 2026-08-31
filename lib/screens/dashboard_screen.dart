@@ -2912,6 +2912,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(9),
@@ -2927,25 +2928,38 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    if (subtitle?.isNotEmpty ?? false) ...[
-                      const SizedBox(width: 4),
+                // Title wraps naturally (up to 2 lines) instead of being
+                // squeezed beside the alert.
+                Text(
+                  title,
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                      height: 1.25),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface),
+                ),
+                // Alerts ("1 out of stock") get their own secondary line
+                // instead of competing with the title for width.
+                if (subtitle?.isNotEmpty ?? false) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Icon(Icons.warning_amber_rounded,
                           size: 11, color: subtitleColor ?? Colors.red),
-                      const SizedBox(width: 2),
+                      const SizedBox(width: 3),
                       Flexible(
                         child: Text(
                           subtitle!,
@@ -2958,18 +2972,8 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
                         ),
                       ),
                     ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface),
-                ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -3496,6 +3500,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(9),
@@ -3510,12 +3515,15 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Title wraps naturally (up to 2 lines) instead of
+                // ellipsizing ordinary labels like "Products".
                 Text(title,
                     style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 11.5,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w500),
-                    maxLines: 1,
+                        fontWeight: FontWeight.w500,
+                        height: 1.25),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 3),
                 Text(value,

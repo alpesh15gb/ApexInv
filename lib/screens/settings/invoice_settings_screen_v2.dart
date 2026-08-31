@@ -5,10 +5,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/supported_currencies.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/widgets/adaptive/sticky_action_bar.dart';
 
 class InvoiceSettingsScreenV2 extends ConsumerStatefulWidget {
   final VoidCallback? onNavigateToCustomization;
@@ -1473,7 +1475,10 @@ class _InvoiceSettingsScreenV2State
       shadowColor: Colors.black.withValues(alpha: 0.1),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+        // Compact phones: tighter card padding so form fields get the width.
+        padding: context.isCompact
+            ? const EdgeInsets.fromLTRB(16, 18, 16, 20)
+            : const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1566,9 +1571,9 @@ class _InvoiceSettingsScreenV2State
           );
         }
 
-        // Narrow: rail collapses to a horizontal chip strip; Save (and the
-        // custom-fields promo) move into a bottom bar so both stay
-        // reachable without needing a persistent side rail.
+        // Narrow: rail collapses to a horizontal chip strip. Only Save is
+        // sticky; the custom-fields promo lives inside the scrollable
+        // content so it can never reserve a tall fixed band at the bottom.
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1578,33 +1583,23 @@ class _InvoiceSettingsScreenV2State
             Expanded(
               child: SingleChildScrollView(
                 key: ValueKey(_selectedSectionV2),
-                padding: const EdgeInsets.fromLTRB(12, 16, 12, 16),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
                 child: Align(
                   alignment: Alignment.topCenter,
-                  child: _sectionCardV2(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _sectionCardV2(),
+                      if (widget.onNavigateToCustomization != null) ...[
+                        const SizedBox(height: 16),
+                        _promoCardV2(),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainer,
-                border: Border(
-                  top: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant),
-                ),
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (widget.onNavigateToCustomization != null) ...[
-                    _promoCardV2(),
-                    const SizedBox(height: 12),
-                  ],
-                  _saveButtonV2(),
-                ],
-              ),
-            ),
+            StickyActionBar(child: _saveButtonV2()),
           ],
         );
       }),

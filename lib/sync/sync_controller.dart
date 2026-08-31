@@ -115,8 +115,8 @@ class SyncController {
     }
   }
 
-  Future<Database> _database() async => _db ??= await (_dbFuture ??=
-          DatabaseHelper().database.then((db) => _db = db));
+  Future<Database> _database() async => _db ??=
+      await (_dbFuture ??= DatabaseHelper().database.then((db) => _db = db));
 
   Future<void> _activate(SyncAccount account) async {
     _account = account;
@@ -128,8 +128,7 @@ class SyncController {
     // The engine wants a synchronous accessor; resolve the (single) open
     // future up front so every engine call lands on the same instance.
     final db = await _database();
-    final engine =
-        SyncEngine(dbAccessor: () => db, transport: transport);
+    final engine = SyncEngine(dbAccessor: () => db, transport: transport);
     _engine = engine;
     engine.startPullTimer();
     engine.startOutboxWatcher();
@@ -147,8 +146,8 @@ class SyncController {
   /// transition from offline → any network fires one cycle. Desktop NICs
   /// flap rarely; the wasOffline latch keeps it to one cycle per outage.
   void _watchConnectivity() {
-    _connectivitySub ??= Connectivity().onConnectivityChanged
-        .listen((results) async {
+    _connectivitySub ??=
+        Connectivity().onConnectivityChanged.listen((results) async {
       final online = results.any((r) => r != ConnectivityResult.none);
       if (online && _wasOffline) {
         _wasOffline = false;
@@ -204,8 +203,8 @@ class SyncController {
 
   /// Register + create company + baseline. [companyName] is the cloud
   /// mirror of this device's books.
-  Future<String?> registerAndLink(String email, String password,
-      String companyName) async {
+  Future<String?> registerAndLink(
+      String email, String password, String companyName) async {
     final client = SyncAccountClient(baseUrl: _kApiBaseUrl);
     final res = await client.register(email, password, companyName);
     final account = res.account;
@@ -271,7 +270,6 @@ class SyncController {
     await settings.setSetting(_kSettingsKey, '');
     _emit(const SyncStatusState());
   }
-
 
   /// Manual "Sync now" — returns an error string or null on success.
   Future<String?> syncNow() async {

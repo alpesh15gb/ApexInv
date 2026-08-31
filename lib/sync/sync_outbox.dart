@@ -49,10 +49,14 @@ class SyncOutbox {
         .toList();
   }
 
-  /// Reads the current row for [rowPk] from [table] with local-only columns
-  /// stripped — the payload that goes on the wire. Handles company_info's
-  /// INTEGER pk (outbox stores pks as strings on the wire).
-  Future<Map<String, dynamic>?> readRowPayload(String table, String rowPk) async {
+  /// Reads the current row for [rowPk] from [table] with the shared
+  /// local-only columns stripped — the payload that goes on the wire.
+  /// Per-table local-only columns (invoices.deleted_at) are deliberately
+  /// KEPT so the engine can act on them (soft-delete → tombstone); the
+  /// engine strips them before pushing. Handles company_info's INTEGER pk
+  /// (outbox stores pks as strings on the wire).
+  Future<Map<String, dynamic>?> readRowPayload(
+      String table, String rowPk) async {
     late List<Map<String, dynamic>> rows;
     if (table == 'company_info') {
       rows = await db.query(table,
@@ -63,9 +67,7 @@ class SyncOutbox {
     }
     if (rows.isEmpty) return null;
     final row = Map<String, dynamic>.from(rows.first);
-    row.removeWhere((k, _) =>
-        syncLocalOnlyColumns.contains(k) ||
-        (syncPerTableLocalOnlyColumns[table]?.contains(k) ?? false));
+    row.removeWhere((k, _) => syncLocalOnlyColumns.contains(k));
     return row;
   }
 

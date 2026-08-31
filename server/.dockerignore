@@ -1,0 +1,4 @@
+# Keep the build context lean; secrets never enter the image.
+.env
+*.md
+docker-compose.yml

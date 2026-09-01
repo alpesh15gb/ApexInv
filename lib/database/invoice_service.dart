@@ -14,11 +14,15 @@ import 'package:apexbooks/utils/app_date.dart';
 import 'package:apexbooks/utils/app_logger.dart';
 import 'database_helper.dart';
 import 'payment_service.dart';
+import 'accounting_service.dart';
 
 const _tag = 'InvoiceService';
 
 class InvoiceService {
   static final dbHelper = DatabaseHelper();
+
+  static bool _affectsStock(String type) =>
+      type == 'Invoice' || type == 'Delivery Challan';
 
   // ─────────────────────────────────────────────
   // Insert Invoice + Items + Stock Deduction (transactional)
@@ -55,6 +59,8 @@ class InvoiceService {
         'custom_invoice_number': invoice.customInvoiceNumber,
         'payment_term_id': invoice.paymentTermId,
         'custom_fields': invoice.customFields ?? '',
+        'sales_channel': invoice.salesChannel,
+        'source_order_id': invoice.sourceOrderId,
       });
 
       for (var item in invoice.items) {
@@ -82,16 +88,31 @@ class InvoiceService {
           'description': item.description,
         });
       }
-    });
-
-    // Stock deduction happens outside the transaction to avoid nested DB calls
-    for (var item in invoice.items) {
-      final product = await ProductService.getProductById(item.product.id);
-      if (product != null && !product.unlimitedStock) {
-        final newStock = product.stock - item.quantity;
-        await ProductService.updateProductStock(product.id, newStock);
+      if (_affectsStock(invoice.type)) {
+        for (final item in invoice.items) {
+          final rows = await txn.query('products',
+              columns: ['stock', 'unlimited_stock'],
+              where: 'id = ?',
+              whereArgs: [item.product.id],
+              limit: 1);
+          if (rows.isEmpty ||
+              (rows.first['unlimited_stock'] as int? ?? 0) == 1) continue;
+          final stock = (rows.first['stock'] as num? ?? 0).toDouble();
+          final reservedRows = await txn.rawQuery('''
+            SELECT COALESCE(SUM(i.quantity - i.fulfilled_quantity), 0) AS qty
+            FROM sale_order_items i JOIN sale_orders o ON o.id = i.sale_order_id
+            WHERE i.product_id = ? AND o.status IN ('confirmed', 'partial')
+          ''', [item.product.id]);
+          final reserved =
+              (reservedRows.first['qty'] as num? ?? 0).toDouble();
+          if (item.quantity > stock - reserved + 0.000001) {
+            throw StateError('Insufficient unreserved stock for ${item.product.name}');
+          }
+          await txn.update('products', {'stock': stock - item.quantity},
+              where: 'id = ?', whereArgs: [item.product.id]);
+        }
       }
-    }
+    });
   }
 
   static Future<void> updateInvoice(Invoice invoice) async {
@@ -103,6 +124,9 @@ class InvoiceService {
       where: 'invoice_id = ?',
       whereArgs: [invoice.id],
     );
+    final oldHeader = await db.query('invoices', columns: ['type'],
+        where: 'id = ?', whereArgs: [invoice.id], limit: 1);
+    final oldType = oldHeader.isEmpty ? invoice.type : oldHeader.first['type'] as String;
 
     await db.transaction((txn) async {
       // 1. Update the main invoice row
@@ -134,6 +158,8 @@ class InvoiceService {
           'custom_invoice_number': invoice.customInvoiceNumber,
           'payment_term_id': invoice.paymentTermId,
           'custom_fields': invoice.customFields ?? '',
+          'sales_channel': invoice.salesChannel,
+          'source_order_id': invoice.sourceOrderId,
         },
         where: 'id = ?',
         whereArgs: [invoice.id],
@@ -172,28 +198,46 @@ class InvoiceService {
           'description': item.description,
         });
       }
+
+      final stockDelta = <String, double>{};
+      if (_affectsStock(oldType)) {
+        for (final oldItem in oldItems) {
+          final productId = oldItem['product_id'] as String?;
+          if (productId == null) continue;
+          stockDelta[productId] = (stockDelta[productId] ?? 0) +
+              ((oldItem['quantity'] as num?)?.toDouble() ?? 0);
+        }
+      }
+      if (_affectsStock(invoice.type)) {
+        for (final item in invoice.items) {
+          stockDelta[item.product.id] =
+              (stockDelta[item.product.id] ?? 0) - item.quantity;
+        }
+      }
+      for (final entry in stockDelta.entries) {
+        if (entry.value.abs() <= 0.000001) continue;
+        final rows = await txn.query('products',
+            columns: ['name', 'stock', 'unlimited_stock'],
+            where: 'id = ?', whereArgs: [entry.key], limit: 1);
+        if (rows.isEmpty ||
+            (rows.first['unlimited_stock'] as int? ?? 0) == 1) continue;
+        final next = (rows.first['stock'] as num? ?? 0).toDouble() + entry.value;
+        var reserved = 0.0;
+        if (entry.value < 0) {
+          final reservedRows = await txn.rawQuery('''
+            SELECT COALESCE(SUM(i.quantity - i.fulfilled_quantity), 0) AS qty
+            FROM sale_order_items i JOIN sale_orders o ON o.id = i.sale_order_id
+            WHERE i.product_id = ? AND o.status IN ('confirmed', 'partial')
+          ''', [entry.key]);
+          reserved = (reservedRows.first['qty'] as num? ?? 0).toDouble();
+        }
+        if (next - reserved < -0.000001) {
+          throw StateError('Insufficient stock for ${rows.first['name']}');
+        }
+        await txn.update('products', {'stock': next},
+            where: 'id = ?', whereArgs: [entry.key]);
+      }
     });
-
-    // Restore stock for old items (outside transaction)
-    for (var oldItem in oldItems) {
-      final product =
-          await ProductService.getProductById(oldItem['product_id'] as String);
-      if (product != null && !product.unlimitedStock) {
-        final rawQty = oldItem['quantity'];
-        final oldQty = (rawQty as num?)?.toDouble() ?? 0;
-        final restoredStock = product.stock + oldQty;
-        await ProductService.updateProductStock(product.id, restoredStock);
-      }
-    }
-
-    // Deduct stock for new items
-    for (var item in invoice.items) {
-      final product = await ProductService.getProductById(item.product.id);
-      if (product != null && !product.unlimitedStock) {
-        final newStock = product.stock - item.quantity;
-        await ProductService.updateProductStock(product.id, newStock);
-      }
-    }
   }
 
   static Future<double> getPreviousBalanceDueForInvoice(Invoice invoice) async {
@@ -264,7 +308,7 @@ class InvoiceService {
     );
     final paymentRows = await db.rawQuery(
       'SELECT invoice_id, COALESCE(SUM(amount_paid), 0.0) as paid '
-      'FROM invoice_payments WHERE invoice_id IN ($placeholders) '
+      "FROM invoice_payments WHERE invoice_id IN ($placeholders) AND cheque_status NOT IN ('bounced', 'cancelled') "
       'GROUP BY invoice_id',
       ids,
     );
@@ -409,6 +453,8 @@ class InvoiceService {
       customInvoiceNumber: i['custom_invoice_number'] as String?,
       paymentTermId: i['payment_term_id'] as String? ?? '',
       customFields: i['custom_fields'] as String?,
+      salesChannel: i['sales_channel'] as String? ?? 'invoice',
+      sourceOrderId: i['source_order_id'] as String?,
       payments: payments,
     );
   }
@@ -598,6 +644,11 @@ class InvoiceService {
   // [sign] is +1 to restore stock, -1 to deduct again.
   static Future<void> _adjustStockForInvoice(String invoiceId, int sign) async {
     final db = await dbHelper.database;
+    final headers = await db.query('invoices', columns: ['type'],
+        where: 'id = ?', whereArgs: [invoiceId], limit: 1);
+    if (headers.isEmpty || !_affectsStock(headers.first['type'] as String)) {
+      return;
+    }
     final items = await db.query(
       'invoice_items',
       where: 'invoice_id = ?',
@@ -657,6 +708,14 @@ class InvoiceService {
     final wasSoftDeleted = rows.isNotEmpty && rows.first['deleted_at'] != null;
     if (!wasSoftDeleted) {
       await _adjustStockForInvoice(id, 1);
+    }
+    final paymentRows = await db.query('invoice_payments',
+        columns: ['id'], where: 'invoice_id = ?', whereArgs: [id]);
+    for (final payment in paymentRows) {
+      await AccountingService.reverseSource(
+          sourceType: 'invoice_payment',
+          sourceId: payment['id'] as String,
+          reason: 'Invoice permanently deleted');
     }
     await db.transaction((txn) async {
       await txn
@@ -748,6 +807,8 @@ class InvoiceService {
           customInvoiceNumber: map['custom_invoice_number'] as String?,
           paymentTermId: map['payment_term_id'] as String? ?? '',
           customFields: map['custom_fields'] as String?,
+          salesChannel: map['sales_channel'] as String? ?? 'invoice',
+          sourceOrderId: map['source_order_id'] as String?,
         ),
       );
     }
@@ -758,7 +819,7 @@ class InvoiceService {
     final placeholders = List.filled(ids.length, '?').join(',');
     final paymentRows = await db.rawQuery(
       'SELECT * FROM invoice_payments '
-      'WHERE invoice_id IN ($placeholders) '
+      "WHERE invoice_id IN ($placeholders) AND cheque_status NOT IN ('bounced', 'cancelled') "
       'ORDER BY invoice_id, date_paid ASC, rowid ASC',
       ids,
     );
@@ -801,7 +862,7 @@ class InvoiceService {
       'SELECT COALESCE(SUM(ip.amount_paid), 0.0) as revenue '
       'FROM invoice_payments ip '
       'JOIN invoices i ON ip.invoice_id = i.id '
-      'WHERE i.type = ? AND i.deleted_at IS NULL',
+      "WHERE i.type = ? AND i.deleted_at IS NULL AND ip.cheque_status NOT IN ('bounced', 'cancelled')",
       ['Invoice'],
     );
     final revenue = (revenueResult.first['revenue'] as num?)?.toDouble() ?? 0.0;
@@ -837,7 +898,7 @@ class InvoiceService {
 
     final paymentSums = await db.rawQuery(
       'SELECT invoice_id, COALESCE(SUM(amount_paid), 0.0) as paid '
-      'FROM invoice_payments WHERE invoice_id IN ($placeholders) '
+      "FROM invoice_payments WHERE invoice_id IN ($placeholders) AND cheque_status NOT IN ('bounced', 'cancelled') "
       'GROUP BY invoice_id',
       ids,
     );
@@ -999,7 +1060,7 @@ class InvoiceService {
       "COALESCE(SUM(ip.amount_paid), 0.0) as revenue "
       "FROM invoice_payments ip "
       "JOIN invoices i ON ip.invoice_id = i.id "
-      "WHERE i.type = 'Invoice' AND i.deleted_at IS NULL "
+      "WHERE i.type = 'Invoice' AND i.deleted_at IS NULL AND ip.cheque_status NOT IN ('bounced', 'cancelled') "
       "AND substr(ip.date_paid, 1, 10) >= ? "
       "GROUP BY substr(ip.date_paid, 1, 7) "
       "ORDER BY month ASC",
@@ -1024,6 +1085,7 @@ class InvoiceService {
       'FROM invoices i '
       'LEFT JOIN invoice_payments ip ON i.id = ip.invoice_id '
       "WHERE i.type = 'Invoice' AND i.deleted_at IS NULL "
+      "AND (ip.cheque_status IS NULL OR ip.cheque_status NOT IN ('bounced', 'cancelled')) "
       'GROUP BY i.customer_name '
       'ORDER BY total_paid DESC, invoice_count DESC '
       'LIMIT ?',

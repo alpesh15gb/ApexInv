@@ -6,6 +6,7 @@ import 'package:apexbooks/models/invoice.dart';
 import 'package:apexbooks/models/invoice_payment.dart';
 import 'package:apexbooks/utils/app_date.dart';
 import 'package:apexbooks/utils/app_logger.dart';
+import 'accounting_service.dart';
 import 'database_helper.dart';
 
 const _tag = 'PaymentService';
@@ -25,6 +26,7 @@ class PaymentService {
     String? notes,
     String? chequeNumber,
     DateTime? chequeDate,
+    String? accountId,
   }) async {
     final db = await _dbHelper.database;
     late InvoicePayment saved;
@@ -32,7 +34,7 @@ class PaymentService {
     await db.transaction((txn) async {
       // 1. Snapshot: total already paid before this installment
       final sumResult = await txn.rawQuery(
-        'SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ?',
+        "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
         [invoice.id],
       );
       final previouslyPaid = (sumResult.first['total'] as num).toDouble();
@@ -59,8 +61,56 @@ class PaymentService {
         paid: previouslyPaid + amountPaid,
       );
 
+      if (amountPaid <= InvoiceCalculator.moneyEpsilon ||
+          amountPaid >
+              invoice.total - previouslyPaid + InvoiceCalculator.moneyEpsilon) {
+        throw StateError('Payment must be within the outstanding balance');
+      }
+      final paymentId = _uuid.v4();
+      final isCheque = paymentMethod == 'Check';
+      String? resolvedAccountId;
+      String? chequeId;
+      if (isCheque) {
+        if ((chequeNumber?.trim().isEmpty ?? true) || chequeDate == null) {
+          throw StateError('Cheque number and cheque date are required');
+        }
+        if (accountId != null) {
+          resolvedAccountId = await AccountingService.resolveAccountId(txn,
+              requestedAccountId: accountId,
+              paymentMethod: 'Bank Transfer',
+              currencyCode: invoice.currencyCode,
+              currencySymbol: invoice.currencySymbol);
+        }
+        chequeId = await AccountingService.createCheque(txn,
+            direction: 'received',
+            partyName: invoice.customer.name,
+            amount: amountPaid,
+            chequeNumber: chequeNumber!,
+            chequeDate: chequeDate,
+            sourceType: 'invoice_payment',
+            sourceId: paymentId,
+            currencyCode: invoice.currencyCode,
+            currencySymbol: invoice.currencySymbol,
+            notes: notes ?? '');
+      } else {
+        resolvedAccountId = await AccountingService.resolveAccountId(txn,
+            requestedAccountId: accountId,
+            paymentMethod: paymentMethod,
+            currencyCode: invoice.currencyCode,
+            currencySymbol: invoice.currencySymbol);
+        await AccountingService.insertMovement(txn,
+            accountId: resolvedAccountId,
+            kind: 'customer_receipt',
+            amount: amountPaid,
+            date: datePaid,
+            sourceType: 'invoice_payment',
+            sourceId: paymentId,
+            reference: receiptNumber,
+            notes: notes ?? '');
+      }
+
       saved = InvoicePayment(
-        id: _uuid.v4(),
+        id: paymentId,
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber ?? invoice.id,
         receiptNumber: receiptNumber,
@@ -74,6 +124,9 @@ class PaymentService {
         chequeNumber: chequeNumber,
         chequeDate: chequeDate,
         chequeCleared: false,
+        accountId: resolvedAccountId,
+        chequeId: chequeId,
+        chequeStatus: isCheque ? 'pending' : 'none',
       );
 
       await txn.insert('invoice_payments', saved.toMap());
@@ -91,7 +144,11 @@ class PaymentService {
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? accountId,
   }) async {
+    if (paymentMethod == 'Check') {
+      throw StateError('Record cheque payments individually');
+    }
     final db = await _dbHelper.database;
     int count = 0;
     await db.transaction((txn) async {
@@ -125,9 +182,23 @@ class PaymentService {
           datePaid: datePaid,
           paymentMethod: paymentMethod,
           notes: notes,
+          accountId: await AccountingService.resolveAccountId(txn,
+              requestedAccountId: accountId,
+              paymentMethod: paymentMethod,
+              currencyCode: invoice.currencyCode,
+              currencySymbol: invoice.currencySymbol),
         );
 
         await txn.insert('invoice_payments', payment.toMap());
+        await AccountingService.insertMovement(txn,
+            accountId: payment.accountId!,
+            kind: 'customer_receipt',
+            amount: amountPaid,
+            date: datePaid,
+            sourceType: 'invoice_payment',
+            sourceId: payment.id,
+            reference: receiptNumber,
+            notes: notes ?? '');
         count++;
       }
     });
@@ -146,7 +217,11 @@ class PaymentService {
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? accountId,
   }) async {
+    if (paymentMethod == 'Check') {
+      throw StateError('Record cheque payments individually');
+    }
     final db = await _dbHelper.database;
     final saved = <InvoicePayment>[];
     await db.transaction((txn) async {
@@ -156,7 +231,7 @@ class PaymentService {
         if (amountPaid <= InvoiceCalculator.moneyEpsilon) continue;
 
         final sumResult = await txn.rawQuery(
-          'SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ?',
+          "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
           [invoice.id],
         );
         final previouslyPaid = (sumResult.first['total'] as num).toDouble();
@@ -192,9 +267,23 @@ class PaymentService {
           datePaid: datePaid,
           paymentMethod: paymentMethod,
           notes: notes,
+          accountId: await AccountingService.resolveAccountId(txn,
+              requestedAccountId: accountId,
+              paymentMethod: paymentMethod,
+              currencyCode: invoice.currencyCode,
+              currencySymbol: invoice.currencySymbol),
         );
 
         await txn.insert('invoice_payments', payment.toMap());
+        await AccountingService.insertMovement(txn,
+            accountId: payment.accountId!,
+            kind: 'customer_receipt',
+            amount: amountPaid,
+            date: datePaid,
+            sourceType: 'invoice_payment',
+            sourceId: payment.id,
+            reference: receiptNumber,
+            notes: notes ?? '');
         saved.add(payment);
       }
     });
@@ -209,7 +298,7 @@ class PaymentService {
     final db = await _dbHelper.database;
     final rows = await db.query(
       'invoice_payments',
-      where: 'invoice_id = ?',
+      where: "invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
       whereArgs: [invoiceId],
       orderBy: 'date_paid ASC, rowid ASC',
     );
@@ -221,7 +310,7 @@ class PaymentService {
   static Future<double> getTotalPaidForInvoice(String invoiceId) async {
     final db = await _dbHelper.database;
     final result = await db.rawQuery(
-      'SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ?',
+      "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
       [invoiceId],
     );
     return (result.first['total'] as num).toDouble();
@@ -238,7 +327,7 @@ class PaymentService {
     final rows = await db.rawQuery(
       'SELECT invoice_id, COALESCE(SUM(amount_paid), 0.0) AS total '
       'FROM invoice_payments '
-      'WHERE invoice_id IN ($placeholders) '
+      "WHERE invoice_id IN ($placeholders) AND cheque_status NOT IN ('bounced', 'cancelled') "
       'GROUP BY invoice_id',
       invoiceIds,
     );
@@ -249,9 +338,29 @@ class PaymentService {
   }
 
   // ─────────────────────────────────────────────
-  // Delete a single payment (admin action — hard delete)
+  // Delete a single payment (admin action). The cash/bank effect is reversed
+  // first, so removing a receipt can never leave the account register stale.
   static Future<void> deletePayment(String paymentId) async {
     final db = await _dbHelper.database;
+    final rows = await db.query('invoice_payments',
+        columns: ['cheque_id', 'cheque_status'],
+        where: 'id = ?',
+        whereArgs: [paymentId],
+        limit: 1);
+    if (rows.isEmpty) return;
+    final chequeId = rows.first['cheque_id'] as String?;
+    if (chequeId != null && chequeId.isNotEmpty) {
+      final wasCleared = rows.first['cheque_status'] == 'cleared';
+      await AccountingService.transitionCheque(
+          chequeId: chequeId,
+          status: wasCleared ? 'bounced' : 'cancelled',
+          notes: 'Payment removed by administrator');
+    } else {
+      await AccountingService.reverseSource(
+          sourceType: 'invoice_payment',
+          sourceId: paymentId,
+          reason: 'Payment removed by administrator');
+    }
     await db
         .delete('invoice_payments', where: 'id = ?', whereArgs: [paymentId]);
     AppLogger.d(_tag, 'Payment deleted: $paymentId');
@@ -264,7 +373,8 @@ class PaymentService {
     final db = await _dbHelper.database;
     final rows = await db.query(
       'invoice_payments',
-      where: 'date_paid >= ? AND date_paid <= ?',
+      where:
+          "date_paid >= ? AND date_paid <= ? AND cheque_status NOT IN ('bounced', 'cancelled')",
       whereArgs: [
         AppDate.dateKey(from),
         AppDate.dateKey(to),
@@ -280,7 +390,7 @@ class PaymentService {
     final result = await db.rawQuery(
       'SELECT COALESCE(SUM(tax_amount_paid), 0.0) AS total '
       'FROM invoice_payments '
-      'WHERE date_paid >= ? AND date_paid <= ?',
+      "WHERE date_paid >= ? AND date_paid <= ? AND cheque_status NOT IN ('bounced', 'cancelled')",
       [
         AppDate.dateKey(from),
         AppDate.dateKey(to),

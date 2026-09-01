@@ -15,6 +15,9 @@ class InvoicePayment {
   final String? chequeNumber;
   final DateTime? chequeDate;
   final bool chequeCleared;
+  final String? accountId;
+  final String? chequeId;
+  final String chequeStatus;
 
   const InvoicePayment({
     required this.id,
@@ -31,6 +34,9 @@ class InvoicePayment {
     this.chequeNumber,
     this.chequeDate,
     this.chequeCleared = false,
+    this.accountId,
+    this.chequeId,
+    this.chequeStatus = 'none',
   });
 
   Map<String, dynamic> toMap() => {
@@ -48,6 +54,9 @@ class InvoicePayment {
         'cheque_number': chequeNumber,
         'cheque_date': chequeDate?.toIso8601String(),
         'cheque_cleared': chequeCleared ? 1 : 0,
+        'account_id': accountId,
+        'cheque_id': chequeId,
+        'cheque_status': chequeStatus,
       };
 
   factory InvoicePayment.fromMap(Map<String, dynamic> map) => InvoicePayment(
@@ -65,5 +74,8 @@ class InvoicePayment {
         chequeNumber: map['cheque_number'] as String?,
         chequeDate: DateTime.tryParse(map['cheque_date'] as String? ?? ''),
         chequeCleared: (map['cheque_cleared'] as int? ?? 0) == 1,
+        accountId: map['account_id'] as String?,
+        chequeId: map['cheque_id'] as String?,
+        chequeStatus: map['cheque_status'] as String? ?? 'none',
       );
 }

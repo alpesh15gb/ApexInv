@@ -18,7 +18,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 47;
+  final dbVersion = 48;
 
   /// Emits when the sync engine finishes applying pulled remote rows, so the
   /// UI layer can refresh its lists. Write-side signaling needs no stream:
@@ -57,6 +57,17 @@ class DatabaseHelper {
   @visibleForTesting
   Future<void> upgradeDbForTest(Database db, int oldVersion, int newVersion) =>
       _upgradeDB(db, oldVersion, newVersion);
+
+  @visibleForTesting
+  void useDatabaseForTest(Database db) {
+    _database = db;
+  }
+
+  @visibleForTesting
+  void clearDatabaseForTest() {
+    _database = null;
+    _path = null;
+  }
 
   Future<void> _createDB(Database db, int version) async {
     await db.execute('''
@@ -145,7 +156,9 @@ class DatabaseHelper {
         reference_invoice_id TEXT,
         is_recurring INTEGER DEFAULT 0,
         recurring_frequency TEXT,
-        recurring_next_date TEXT
+        recurring_next_date TEXT,
+        sales_channel TEXT DEFAULT 'invoice',
+        source_order_id TEXT
       )
     ''');
 
@@ -234,7 +247,10 @@ class DatabaseHelper {
         notes            TEXT,
         cheque_number    TEXT,
         cheque_date      TEXT,
-        cheque_cleared   INTEGER DEFAULT 0
+        cheque_cleared   INTEGER DEFAULT 0,
+        account_id       TEXT,
+        cheque_id        TEXT,
+        cheque_status    TEXT DEFAULT 'none'
       )
     ''');
 
@@ -328,7 +344,11 @@ class DatabaseHelper {
         date TEXT NOT NULL,
         category_id TEXT NOT NULL,
         payment_method TEXT,
-        notes TEXT
+        notes TEXT,
+        account_id TEXT,
+        cheque_id TEXT,
+        cheque_status TEXT DEFAULT 'none',
+        payment_group_id TEXT
       )
     ''');
     await db.execute(
@@ -471,6 +491,8 @@ class DatabaseHelper {
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_purchase_bill_payments_bill ON purchase_bill_payments(purchase_bill_id)');
 
+    await _createAccountingSchema(db);
+
     // ── Phase 7: Sync foundation (dbplan.md §3.2) ──
     // Columns + change-capture triggers so every write path (current and
     // future) lands in _sync_outbox transactionally. The sync engine itself
@@ -482,6 +504,303 @@ class DatabaseHelper {
     }
     await installSyncCapture(db);
     await backfillSyncColumns(db);
+  }
+
+  Future<void> _createAccountingSchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS financial_accounts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('cash', 'bank')),
+        institution TEXT DEFAULT '',
+        account_number_masked TEXT DEFAULT '',
+        ifsc TEXT DEFAULT '',
+        currency_code TEXT NOT NULL DEFAULT 'INR',
+        currency_symbol TEXT NOT NULL DEFAULT '₹',
+        opening_balance REAL NOT NULL DEFAULT 0,
+        opening_date TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        notes TEXT DEFAULT ''
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS financial_transactions (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        transfer_account_id TEXT,
+        kind TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        reference TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        reversal_of TEXT,
+        voided_at TEXT
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_fin_tx_account_date ON financial_transactions(account_id, date)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_fin_tx_source ON financial_transactions(source_type, source_id)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sale_orders (
+        id TEXT PRIMARY KEY,
+        order_number TEXT NOT NULL,
+        customer_id TEXT,
+        customer_name TEXT NOT NULL,
+        customer_email TEXT DEFAULT '',
+        customer_phone TEXT DEFAULT '',
+        customer_address TEXT DEFAULT '',
+        customer_gstin TEXT DEFAULT '',
+        date TEXT NOT NULL,
+        expected_date TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        currency_code TEXT NOT NULL DEFAULT 'INR',
+        currency_symbol TEXT NOT NULL DEFAULT '₹',
+        notes TEXT DEFAULT ''
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sale_order_items (
+        id TEXT PRIMARY KEY,
+        sale_order_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        quantity REAL NOT NULL,
+        fulfilled_quantity REAL NOT NULL DEFAULT 0,
+        unit_price REAL NOT NULL,
+        tax_rate REAL NOT NULL DEFAULT 0,
+        discount REAL NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_sale_orders_status ON sale_orders(status)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_sale_order_items_order ON sale_order_items(sale_order_id)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cheques (
+        id TEXT PRIMARY KEY,
+        direction TEXT NOT NULL CHECK(direction IN ('received', 'issued')),
+        party_name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        currency_code TEXT NOT NULL DEFAULT 'INR',
+        currency_symbol TEXT NOT NULL DEFAULT '₹',
+        cheque_number TEXT NOT NULL,
+        cheque_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        source_type TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        bank_account_id TEXT,
+        deposited_at TEXT,
+        cleared_at TEXT,
+        notes TEXT DEFAULT ''
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_cheques_status_date ON cheques(status, cheque_date)');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS loan_accounts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        lender TEXT NOT NULL,
+        original_principal REAL NOT NULL,
+        annual_interest_rate REAL NOT NULL DEFAULT 0,
+        start_date TEXT NOT NULL,
+        maturity_date TEXT,
+        disbursement_account_id TEXT,
+        currency_code TEXT NOT NULL DEFAULT 'INR',
+        currency_symbol TEXT NOT NULL DEFAULT '₹',
+        status TEXT NOT NULL DEFAULT 'active',
+        notes TEXT DEFAULT ''
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS loan_movements (
+        id TEXT PRIMARY KEY,
+        loan_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL,
+        principal_amount REAL NOT NULL DEFAULT 0,
+        interest_amount REAL NOT NULL DEFAULT 0,
+        fee_amount REAL NOT NULL DEFAULT 0,
+        account_id TEXT NOT NULL,
+        reference TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        voided_at TEXT
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_loan_movements_loan_date ON loan_movements(loan_id, date)');
+
+    await db.insert(
+        'financial_accounts',
+        {
+          'id': 'cash-default',
+          'name': 'Cash In Hand',
+          'type': 'cash',
+          'currency_code': 'INR',
+          'currency_symbol': '₹',
+          'opening_balance': 0,
+          'opening_date': DateTime(2000).toIso8601String(),
+          'active': 1,
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> _backfillAccountingTransactions(Database db) async {
+    Future<String> ensureAccount(
+        String type, String code, String symbol) async {
+      final id = type == 'cash' && code == 'INR'
+          ? 'cash-default'
+          : type == 'cash'
+              ? 'cash-$code'
+              : 'bank-general-$code';
+      await db.insert(
+          'financial_accounts',
+          {
+            'id': id,
+            'name': type == 'cash'
+                ? 'Cash In Hand${code == 'INR' ? '' : ' ($code)'}'
+                : 'General Bank${code == 'INR' ? '' : ' ($code)'}',
+            'type': type,
+            'currency_code': code,
+            'currency_symbol': symbol,
+            'opening_balance': 0,
+            'opening_date': DateTime(2000).toIso8601String(),
+            'active': 1,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+      return id;
+    }
+
+    final incoming = await db.rawQuery('''
+      SELECT p.*, i.customer_name, i.currency_code, i.currency_symbol
+      FROM invoice_payments p JOIN invoices i ON i.id = p.invoice_id
+    ''');
+    for (final row in incoming) {
+      final code = row['currency_code'] as String? ?? 'INR';
+      final symbol = row['currency_symbol'] as String? ?? '₹';
+      final method = row['payment_method'] as String? ?? 'Cash';
+      final paymentId = row['id'] as String;
+      if (method == 'Check' &&
+          (row['cheque_number'] as String? ?? '').isNotEmpty) {
+        final chequeId = 'legacy-cheque-in-$paymentId';
+        await db.insert(
+            'cheques',
+            {
+              'id': chequeId,
+              'direction': 'received',
+              'party_name': row['customer_name'] as String? ?? '',
+              'amount': row['amount_paid'],
+              'currency_code': code,
+              'currency_symbol': symbol,
+              'cheque_number': row['cheque_number'],
+              'cheque_date': row['cheque_date'] ?? row['date_paid'],
+              'status': (row['cheque_cleared'] as int? ?? 0) == 1
+                  ? 'cleared'
+                  : 'pending',
+              'source_type': 'invoice_payment',
+              'source_id': paymentId,
+              if ((row['cheque_cleared'] as int? ?? 0) == 1)
+                'cleared_at': row['date_paid'],
+              'notes': row['notes'] as String? ?? '',
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore);
+        await db.update(
+            'invoice_payments',
+            {
+              'cheque_id': chequeId,
+              'cheque_status':
+                  (row['cheque_cleared'] as int? ?? 0) == 1
+                      ? 'cleared'
+                      : 'pending',
+            },
+            where: 'id = ?',
+            whereArgs: [paymentId]);
+        // A legacy cleared cheque had already been treated as Bank.
+        if ((row['cheque_cleared'] as int? ?? 0) != 1) continue;
+      }
+      final accountId = await ensureAccount(
+          method == 'Cash' ? 'cash' : 'bank', code, symbol);
+      if (method == 'Check') {
+        await db.update('cheques', {'bank_account_id': accountId},
+            where: 'id = ?', whereArgs: ['legacy-cheque-in-$paymentId']);
+      }
+      await db.update('invoice_payments', {'account_id': accountId},
+          where: 'id = ?', whereArgs: [paymentId]);
+      await db.insert(
+          'financial_transactions',
+          {
+            'id': 'legacy-in-$paymentId',
+            'account_id': accountId,
+            'kind': 'customer_receipt',
+            'amount': row['amount_paid'],
+            'date': row['date_paid'],
+            'source_type': 'invoice_payment',
+            'source_id': paymentId,
+            'reference': row['receipt_number'] as String? ?? '',
+            'notes': row['notes'] as String? ?? '',
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+
+    final outgoing = await db.rawQuery('''
+      SELECT p.*, b.currency_code, b.currency_symbol, b.bill_number
+      FROM purchase_bill_payments p
+      JOIN purchase_bills b ON b.id = p.purchase_bill_id
+    ''');
+    for (final row in outgoing) {
+      final code = row['currency_code'] as String? ?? 'INR';
+      final symbol = row['currency_symbol'] as String? ?? '₹';
+      final method = row['payment_method'] as String? ?? 'Cash';
+      final paymentId = row['id'] as String;
+      final accountId = await ensureAccount(
+          method == 'Cash' ? 'cash' : 'bank', code, symbol);
+      await db.update('purchase_bill_payments', {'account_id': accountId},
+          where: 'id = ?', whereArgs: [paymentId]);
+      await db.insert(
+          'financial_transactions',
+          {
+            'id': 'legacy-out-$paymentId',
+            'account_id': accountId,
+            'kind': 'supplier_payment',
+            'amount': -((row['amount_paid'] as num).toDouble()),
+            'date': row['date_paid'],
+            'source_type': 'purchase_bill_payment',
+            'source_id': paymentId,
+            'reference': row['bill_number'] as String? ?? '',
+            'notes': row['notes'] as String? ?? '',
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+
+    final expenses = await db.query('expenses');
+    for (final row in expenses) {
+      final method = row['payment_method'] as String? ?? 'Cash';
+      final accountId =
+          await ensureAccount(method == 'Cash' ? 'cash' : 'bank', 'INR', '₹');
+      await db.update('expenses', {'account_id': accountId},
+          where: 'id = ?', whereArgs: [row['id']]);
+      await db.insert(
+          'financial_transactions',
+          {
+            'id': 'legacy-expense-${row['id']}',
+            'account_id': accountId,
+            'kind': 'expense',
+            'amount': -((row['amount'] as num).toDouble()),
+            'date': row['date'],
+            'source_type': 'expense',
+            'source_id': row['id'],
+            'reference': row['description'] as String? ?? '',
+            'notes': row['notes'] as String? ?? '',
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -1036,15 +1355,16 @@ class DatabaseHelper {
           )
         ''');
         await db.execute('''
-          CREATE TABLE IF NOT EXISTS expenses (
-            id TEXT PRIMARY KEY,
-            description TEXT NOT NULL,
-            amount REAL NOT NULL DEFAULT 0,
-            date TEXT NOT NULL,
-            category_id TEXT NOT NULL,
-            payment_method TEXT,
-            notes TEXT
-          )
+      CREATE TABLE IF NOT EXISTS expenses (
+        id TEXT PRIMARY KEY,
+        description TEXT NOT NULL,
+        amount REAL NOT NULL DEFAULT 0,
+        date TEXT NOT NULL,
+        category_id TEXT NOT NULL,
+        payment_method TEXT,
+        notes TEXT,
+        account_id TEXT
+      )
         ''');
         await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)');
@@ -1273,6 +1593,52 @@ class DatabaseHelper {
       await _runMigrationStep(db, 47, 'sync_register_purchase_bill_payments', () async {
         await addSyncColumns(db, 'purchase_bill_payments');
         await installSyncCapture(db);
+      });
+    }
+
+    if (oldVersion < 48) {
+      await _runMigrationStep(db, 48, 'create_accounting_foundation', () async {
+        await _createAccountingSchema(db);
+      });
+      await _runMigrationStep(db, 48, 'link_operational_payments', () async {
+        for (final stmt in [
+          "ALTER TABLE invoices ADD COLUMN sales_channel TEXT DEFAULT 'invoice'",
+          'ALTER TABLE invoices ADD COLUMN source_order_id TEXT',
+          'ALTER TABLE invoice_payments ADD COLUMN account_id TEXT',
+          'ALTER TABLE invoice_payments ADD COLUMN cheque_id TEXT',
+          "ALTER TABLE invoice_payments ADD COLUMN cheque_status TEXT DEFAULT 'none'",
+          'ALTER TABLE purchase_bill_payments ADD COLUMN account_id TEXT',
+          'ALTER TABLE purchase_bill_payments ADD COLUMN cheque_id TEXT',
+          "ALTER TABLE purchase_bill_payments ADD COLUMN cheque_status TEXT DEFAULT 'none'",
+          'ALTER TABLE purchase_bill_payments ADD COLUMN payment_group_id TEXT',
+          'ALTER TABLE expenses ADD COLUMN account_id TEXT',
+        ]) {
+          try {
+            await db.execute(stmt);
+          } catch (e) {
+            if (!e.toString().toLowerCase().contains('duplicate column name')) {
+              rethrow;
+            }
+          }
+        }
+      });
+      await _runMigrationStep(db, 48, 'backfill_account_registers', () async {
+        await _backfillAccountingTransactions(db);
+      });
+      await _runMigrationStep(db, 48, 'sync_register_accounting', () async {
+        for (final table in [
+          'financial_accounts',
+          'financial_transactions',
+          'sale_orders',
+          'sale_order_items',
+          'cheques',
+          'loan_accounts',
+          'loan_movements',
+        ]) {
+          await addSyncColumns(db, table);
+        }
+        await installSyncCapture(db);
+        await backfillSyncColumns(db);
       });
     }
   }

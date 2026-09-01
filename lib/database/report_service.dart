@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:apexbooks/database/database_helper.dart';
+import 'package:apexbooks/database/accounting_service.dart';
 import 'package:apexbooks/services/backend_services.dart';
 import 'package:apexbooks/services/pdf/pdf_report_header.dart';
 import 'package:apexbooks/common/common.dart';
@@ -152,7 +153,7 @@ class ReportService {
 
     final payRows = await db.rawQuery(
       'SELECT invoice_id, COALESCE(SUM(amount_paid), 0.0) AS paid '
-      'FROM invoice_payments WHERE invoice_id IN ($ph) '
+      "FROM invoice_payments WHERE invoice_id IN ($ph) AND cheque_status NOT IN ('bounced', 'cancelled') "
       'GROUP BY invoice_id',
       ids,
     );
@@ -260,6 +261,7 @@ class ReportService {
       "FROM invoice_items ii "
       "JOIN invoices i ON i.id = ii.invoice_id "
       "WHERE i.deleted_at IS NULL AND i.type = 'Invoice' "
+      "AND ip.cheque_status NOT IN ('bounced', 'cancelled') "
       "$ccFilter"
       "AND i.date >= ? AND i.date <= ?",
       args,
@@ -690,7 +692,7 @@ class ReportService {
       final paymentRows = await db.rawQuery(
         'SELECT invoice_id, receipt_number, amount_paid, date_paid, '
         'payment_method, notes '
-        'FROM invoice_payments WHERE invoice_id IN ($ph) '
+        "FROM invoice_payments WHERE invoice_id IN ($ph) AND cheque_status NOT IN ('bounced', 'cancelled') "
         'ORDER BY date_paid ASC, rowid ASC',
         ids,
       );
@@ -1225,6 +1227,7 @@ class ReportService {
       FROM invoice_payments
       JOIN invoices i ON i.id = invoice_payments.invoice_id
       WHERE i.deleted_at IS NULL AND i.type = 'Invoice'
+        AND invoice_payments.cheque_status NOT IN ('bounced', 'cancelled')
         AND date_paid >= ? AND date_paid <= ?
         ${currencyCode == null ? '' : 'AND i.currency_code = ?'}
       GROUP BY substr(date_paid, 1, 10), invoice_number
@@ -1286,6 +1289,7 @@ class ReportService {
       "SELECT COALESCE(SUM(amount_paid), 0) AS v FROM invoice_payments p "
       "JOIN invoices i ON i.id = p.invoice_id "
       "WHERE i.deleted_at IS NULL AND i.type = 'Invoice' AND p.date_paid >= ? AND p.date_paid <= ? "
+      "AND p.cheque_status NOT IN ('bounced', 'cancelled') "
       "${currencyCode == null ? '' : 'AND i.currency_code = ?'}",
       [from.toIso8601String(), to.toIso8601String(),
         if (currencyCode != null) currencyCode],
@@ -1299,6 +1303,7 @@ class ReportService {
       "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM purchase_bill_payments p "
       "JOIN purchase_bills b ON b.id = p.purchase_bill_id "
       "WHERE p.date_paid >= ? AND p.date_paid <= ? "
+      "AND p.cheque_status NOT IN ('bounced', 'cancelled') "
       "${currencyCode == null ? '' : 'AND b.currency_code = ?'}",
       [from.toIso8601String(), to.toIso8601String(),
         if (currencyCode != null) currencyCode],
@@ -1307,6 +1312,7 @@ class ReportService {
       "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM invoice_payments p "
       "JOIN invoices i ON i.id = p.invoice_id "
       "WHERE p.date_paid >= ? AND p.date_paid <= ? "
+      "AND p.cheque_status NOT IN ('bounced', 'cancelled') "
       "${currencyCode == null ? '' : 'AND i.currency_code = ?'}",
       [from.toIso8601String(), to.toIso8601String(),
         if (currencyCode != null) currencyCode],
@@ -1329,11 +1335,16 @@ class ReportService {
   static Future<List<ChequeEntry>> getCheques() async {
     final db = await _db.database;
     final rows = await db.rawQuery('''
-      SELECT invoice_id, invoice_number, customer_name, amount_paid,
-             cheque_number, cheque_date, cheque_cleared
-      FROM invoice_payments
-      WHERE payment_method = 'Cheque' AND cheque_number IS NOT NULL
-      ORDER BY cheque_cleared ASC, cheque_date ASC
+      SELECT c.source_id AS invoice_payment_id, p.invoice_id,
+             p.invoice_number, i.customer_name, c.amount AS amount_paid,
+             c.cheque_number, c.cheque_date,
+             CASE WHEN c.status = 'cleared' THEN 1 ELSE 0 END AS cheque_cleared
+      FROM cheques c
+      JOIN invoice_payments p ON p.id = c.source_id
+      JOIN invoices i ON i.id = p.invoice_id
+      WHERE c.direction = 'received'
+        AND c.status NOT IN ('bounced', 'cancelled')
+      ORDER BY cheque_cleared ASC, c.cheque_date ASC
     ''');
     return rows.map((r) {
       return ChequeEntry(
@@ -1351,12 +1362,19 @@ class ReportService {
   static Future<void> markChequeCleared(
       String invoiceId, String chequeNumber) async {
     final db = await _db.database;
-    await db.update(
-      'invoice_payments',
-      {'cheque_cleared': 1},
-      where: 'invoice_id = ? AND cheque_number = ?',
-      whereArgs: [invoiceId, chequeNumber],
-    );
+    final rows = await db.rawQuery('''
+      SELECT c.id FROM cheques c
+      JOIN invoice_payments p ON p.id = c.source_id
+      WHERE p.invoice_id = ? AND c.cheque_number = ?
+      LIMIT 1
+    ''', [invoiceId, chequeNumber]);
+    if (rows.isEmpty) return;
+    final banks = await AccountingService.getAccounts(type: 'bank');
+    if (banks.isEmpty) throw StateError('Create a bank account first');
+    await AccountingService.transitionCheque(
+        chequeId: rows.first['id'] as String,
+        status: 'cleared',
+        bankAccountId: banks.first.id);
   }
 
   /// Product metadata batches/expiries within [days].

@@ -27,7 +27,9 @@ void main() {
     test('fresh create has sync columns on all synced tables', () async {
       final db = await createFresh();
       for (final table in ['company_info', 'customers', 'products', 'invoices',
-          'invoice_items', 'invoice_payments']) {
+          'invoice_items', 'invoice_payments', 'financial_accounts',
+          'financial_transactions', 'sale_orders', 'sale_order_items',
+          'cheques', 'loan_accounts', 'loan_movements']) {
         final cols = await db.rawQuery('PRAGMA table_info($table)');
         final names = cols.map((r) => r['name'] as String).toSet();
         expect(names, contains('company_id'), reason: table);

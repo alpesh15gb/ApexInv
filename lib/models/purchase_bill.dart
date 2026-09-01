@@ -117,6 +117,10 @@ class PurchaseBillPayment {
   final DateTime datePaid;
   final String? paymentMethod;
   final String? notes;
+  final String? accountId;
+  final String? chequeId;
+  final String chequeStatus;
+  final String? paymentGroupId;
 
   const PurchaseBillPayment({
     required this.id,
@@ -127,6 +131,10 @@ class PurchaseBillPayment {
     required this.datePaid,
     this.paymentMethod,
     this.notes,
+    this.accountId,
+    this.chequeId,
+    this.chequeStatus = 'none',
+    this.paymentGroupId,
   });
 
   Map<String, dynamic> toMap() => {
@@ -138,6 +146,10 @@ class PurchaseBillPayment {
         'date_paid': datePaid.toIso8601String(),
         'payment_method': paymentMethod,
         'notes': notes,
+        'account_id': accountId,
+        'cheque_id': chequeId,
+        'cheque_status': chequeStatus,
+        'payment_group_id': paymentGroupId,
       };
 
   factory PurchaseBillPayment.fromMap(Map<String, dynamic> map) =>
@@ -150,6 +162,10 @@ class PurchaseBillPayment {
         datePaid: DateTime.parse(map['date_paid'] as String),
         paymentMethod: map['payment_method'] as String?,
         notes: map['notes'] as String?,
+        accountId: map['account_id'] as String?,
+        chequeId: map['cheque_id'] as String?,
+        chequeStatus: map['cheque_status'] as String? ?? 'none',
+        paymentGroupId: map['payment_group_id'] as String?,
       );
 }
 

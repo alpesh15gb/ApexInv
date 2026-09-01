@@ -2,6 +2,7 @@ import 'package:apexbooks/models/expense.dart';
 import 'package:apexbooks/models/expense_category.dart';
 import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
+import 'accounting_service.dart';
 
 class ExpenseService {
   static final dbHelper = DatabaseHelper();
@@ -37,14 +38,45 @@ class ExpenseService {
 
   static Future<void> insertExpense(Expense expense) async {
     final db = await dbHelper.database;
-    await db.insert('expenses', expense.toMap());
+    await db.transaction((txn) async {
+      final accountId = await AccountingService.resolveAccountId(txn,
+          requestedAccountId: expense.accountId,
+          paymentMethod: expense.paymentMethod);
+      await txn.insert('expenses', expense.toMap()..['account_id'] = accountId);
+      await AccountingService.insertMovement(txn,
+          accountId: accountId,
+          kind: 'expense',
+          amount: -expense.amount,
+          date: expense.date,
+          sourceType: 'expense',
+          sourceId: expense.id,
+          reference: expense.description,
+          notes: expense.notes ?? '');
+    });
   }
 
   static Future<void> updateExpense(Expense expense) async {
     final db = await dbHelper.database;
-    final updateMap = expense.toMap()..remove('category_name');
-    await db.update('expenses', updateMap,
-        where: 'id = ?', whereArgs: [expense.id]);
+    await db.transaction((txn) async {
+      await _reverseInTransaction(txn, expense.id, 'Expense edited');
+      final accountId = await AccountingService.resolveAccountId(txn,
+          requestedAccountId: expense.accountId,
+          paymentMethod: expense.paymentMethod);
+      final updateMap = expense.toMap()
+        ..remove('category_name')
+        ..['account_id'] = accountId;
+      await txn.update('expenses', updateMap,
+          where: 'id = ?', whereArgs: [expense.id]);
+      await AccountingService.insertMovement(txn,
+          accountId: accountId,
+          kind: 'expense',
+          amount: -expense.amount,
+          date: expense.date,
+          sourceType: 'expense',
+          sourceId: expense.id,
+          reference: expense.description,
+          notes: expense.notes ?? '');
+    });
   }
 
   static Future<Expense?> getExpenseById(String id) async {
@@ -132,7 +164,33 @@ class ExpenseService {
 
   static Future<void> deleteExpense(String id) async {
     final db = await dbHelper.database;
-    await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
+    await db.transaction((txn) async {
+      await _reverseInTransaction(txn, id, 'Expense deleted');
+      await txn.delete('expenses', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  static Future<void> _reverseInTransaction(
+      DatabaseExecutor txn, String expenseId, String reason) async {
+    final rows = await txn.query('financial_transactions',
+        where:
+            "source_type = 'expense' AND source_id = ? AND reversal_of IS NULL AND voided_at IS NULL",
+        whereArgs: [expenseId]);
+    for (final row in rows) {
+      final already = await txn.query('financial_transactions',
+          columns: ['id'], where: 'reversal_of = ?',
+          whereArgs: [row['id']], limit: 1);
+      if (already.isNotEmpty) continue;
+      await AccountingService.insertMovement(txn,
+          accountId: row['account_id'] as String,
+          kind: 'reversal',
+          amount: -((row['amount'] as num).toDouble()),
+          date: DateTime.now(),
+          sourceType: 'expense',
+          sourceId: expenseId,
+          notes: reason,
+          reversalOf: row['id'] as String);
+    }
   }
 
   static Future<double> getTotalExpenses(

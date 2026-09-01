@@ -13,6 +13,7 @@ class SqlitePaymentRepository implements PaymentRepository {
     String? notes,
     String? chequeNumber,
     DateTime? chequeDate,
+    String? accountId,
   }) =>
       PaymentService.addPayment(
         invoice: invoice,
@@ -22,6 +23,7 @@ class SqlitePaymentRepository implements PaymentRepository {
         notes: notes,
         chequeNumber: chequeNumber,
         chequeDate: chequeDate,
+        accountId: accountId,
       );
   @override
   Future<int> addPaymentBatch({
@@ -29,12 +31,14 @@ class SqlitePaymentRepository implements PaymentRepository {
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? accountId,
   }) =>
       PaymentService.addPaymentBatch(
         invoices: invoices,
         datePaid: datePaid,
         paymentMethod: paymentMethod,
         notes: notes,
+        accountId: accountId,
       );
   @override
   Future<List<InvoicePayment>> applyPaymentAcrossInvoices({
@@ -42,12 +46,14 @@ class SqlitePaymentRepository implements PaymentRepository {
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? accountId,
   }) =>
       PaymentService.applyPaymentAcrossInvoices(
         allocations: allocations,
         datePaid: datePaid,
         paymentMethod: paymentMethod,
         notes: notes,
+        accountId: accountId,
       );
   @override
   Future<List<InvoicePayment>> getPaymentsForInvoice(String invoiceId) =>

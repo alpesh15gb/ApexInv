@@ -39,6 +39,13 @@ void main() {
          'purchase_bills',
          'purchase_bill_items',
          'purchase_bill_payments',
+         'financial_accounts',
+         'financial_transactions',
+         'sale_orders',
+         'sale_order_items',
+         'cheques',
+         'loan_accounts',
+         'loan_movements',
       ]),
     );
 
@@ -63,6 +70,8 @@ void main() {
         'currency_symbol',
         'tax_mode',
         'invoice_number',
+        'sales_channel',
+        'source_order_id',
       ]),
     );
 

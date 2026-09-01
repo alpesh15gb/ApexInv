@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import 'accounting_service.dart';
 
 import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/models/purchase_bill.dart';
@@ -114,6 +115,10 @@ class PurchaseBillService {
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? accountId,
+    String? chequeNumber,
+    DateTime? chequeDate,
+    String? paymentGroupId,
   }) async {
     final db = await dbHelper.database;
     final bill = await getBill(id);
@@ -121,8 +126,10 @@ class PurchaseBillService {
     final recordedAmount = amount.clamp(0, bill.outstanding).toDouble();
     if (recordedAmount <= 0) throw StateError('Purchase bill is fully paid');
     final paid = bill.amountPaid + recordedAmount;
+    final paymentId = const Uuid().v4();
+    final isCheque = paymentMethod == 'Check';
     final payment = PurchaseBillPayment(
-      id: const Uuid().v4(),
+      id: paymentId,
       purchaseBillId: id,
       amountPaid: recordedAmount,
       previouslyPaid: bill.amountPaid,
@@ -131,32 +138,188 @@ class PurchaseBillService {
       datePaid: datePaid,
       paymentMethod: paymentMethod,
       notes: notes,
+      accountId: accountId,
+      chequeStatus: isCheque ? 'pending' : 'none',
+      paymentGroupId: paymentGroupId,
     );
     await db.transaction((txn) async {
-      await txn.insert('purchase_bill_payments', payment.toMap());
+      String? resolvedAccountId;
+      String? chequeId;
+      if (isCheque) {
+        if ((chequeNumber?.trim().isEmpty ?? true) || chequeDate == null) {
+          throw StateError('Cheque number and cheque date are required');
+        }
+        if (accountId != null) {
+          resolvedAccountId = await AccountingService.resolveAccountId(txn,
+              requestedAccountId: accountId,
+              paymentMethod: 'Bank Transfer',
+              currencyCode: bill.currencyCode,
+              currencySymbol: bill.currencySymbol);
+        }
+        chequeId = await AccountingService.createCheque(txn,
+            direction: 'issued',
+            partyName: bill.supplierName,
+            amount: recordedAmount,
+            chequeNumber: chequeNumber!,
+            chequeDate: chequeDate,
+            sourceType: 'purchase_bill_payment',
+            sourceId: paymentId,
+            currencyCode: bill.currencyCode,
+            currencySymbol: bill.currencySymbol,
+            notes: notes ?? '');
+      } else {
+        resolvedAccountId = await AccountingService.resolveAccountId(txn,
+            requestedAccountId: accountId,
+            paymentMethod: paymentMethod,
+            currencyCode: bill.currencyCode,
+            currencySymbol: bill.currencySymbol);
+        await AccountingService.insertMovement(txn,
+            accountId: resolvedAccountId,
+            kind: 'supplier_payment',
+            amount: -recordedAmount,
+            date: datePaid,
+            sourceType: 'purchase_bill_payment',
+            sourceId: paymentId,
+            reference: bill.billNumber ?? bill.id,
+            notes: notes ?? '');
+      }
+      final storedPayment = PurchaseBillPayment(
+        id: payment.id,
+        purchaseBillId: payment.purchaseBillId,
+        amountPaid: payment.amountPaid,
+        previouslyPaid: payment.previouslyPaid,
+        balanceAfter: payment.balanceAfter,
+        datePaid: payment.datePaid,
+        paymentMethod: payment.paymentMethod,
+        notes: payment.notes,
+        accountId: resolvedAccountId,
+        chequeId: chequeId,
+        chequeStatus: payment.chequeStatus,
+        paymentGroupId: payment.paymentGroupId,
+      );
+      await txn.insert('purchase_bill_payments', storedPayment.toMap());
       await txn.update('purchase_bills', {'amount_paid': paid},
           where: 'id = ?', whereArgs: [id]);
     });
-    return payment;
+    final rows = await db.query('purchase_bill_payments',
+        where: 'id = ?', whereArgs: [paymentId], limit: 1);
+    return PurchaseBillPayment.fromMap(rows.first);
   }
 
   static Future<List<PurchaseBillPayment>> getPayments(String billId) async {
     final db = await dbHelper.database;
     final rows = await db.query('purchase_bill_payments',
-        where: 'purchase_bill_id = ?',
+        where:
+            "purchase_bill_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
         whereArgs: [billId],
         orderBy: 'date_paid ASC, rowid ASC');
     return rows.map(PurchaseBillPayment.fromMap).toList();
   }
 
+  /// Applies one outgoing payment across several bills from the same supplier.
+  /// The allocations and one cash/bank movement commit atomically.
+  static Future<List<PurchaseBillPayment>> recordPaymentBatch({
+    required List<({PurchaseBill bill, double amount})> allocations,
+    required DateTime datePaid,
+    required String paymentMethod,
+    String? accountId,
+    String? notes,
+  }) async {
+    final positive = allocations.where((a) => a.amount > 0).toList();
+    if (positive.isEmpty) throw ArgumentError('Enter at least one allocation');
+    if (paymentMethod == 'Check') {
+      throw StateError('Issue a cheque against one bill at a time');
+    }
+    final suppliers = positive.map((a) => a.bill.supplierName).toSet();
+    final currencies = positive.map((a) => a.bill.currencyCode).toSet();
+    if (suppliers.length != 1 || currencies.length != 1) {
+      throw StateError('A payment can cover one supplier and currency only');
+    }
+    for (final a in positive) {
+      if (a.amount > a.bill.outstanding + 0.005) {
+        throw StateError('Allocation exceeds ${a.bill.billNumber ?? a.bill.id}');
+      }
+    }
+
+    final db = await dbHelper.database;
+    final groupId = const Uuid().v4();
+    final saved = <PurchaseBillPayment>[];
+    await db.transaction((txn) async {
+      final first = positive.first.bill;
+      final resolved = await AccountingService.resolveAccountId(txn,
+          requestedAccountId: accountId,
+          paymentMethod: paymentMethod,
+          currencyCode: first.currencyCode,
+          currencySymbol: first.currencySymbol);
+      final total = positive.fold(0.0, (sum, a) => sum + a.amount);
+      await AccountingService.insertMovement(txn,
+          accountId: resolved,
+          kind: 'supplier_payment',
+          amount: -total,
+          date: datePaid,
+          sourceType: 'payment_out_group',
+          sourceId: groupId,
+          reference: first.supplierName,
+          notes: notes ?? '');
+      for (final allocation in positive) {
+        final rows = await txn.query('purchase_bills',
+            columns: ['amount_paid', 'total_amount'],
+            where: 'id = ?',
+            whereArgs: [allocation.bill.id],
+            limit: 1);
+        if (rows.isEmpty) throw StateError('Purchase bill no longer exists');
+        final previous = (rows.first['amount_paid'] as num? ?? 0).toDouble();
+        final billTotal = (rows.first['total_amount'] as num? ?? 0).toDouble();
+        if (previous + allocation.amount > billTotal + 0.005) {
+          throw StateError('A bill changed while the payment was being saved');
+        }
+        final payment = PurchaseBillPayment(
+          id: const Uuid().v4(),
+          purchaseBillId: allocation.bill.id,
+          amountPaid: allocation.amount,
+          previouslyPaid: previous,
+          balanceAfter: (billTotal - previous - allocation.amount)
+              .clamp(0, double.infinity)
+              .toDouble(),
+          datePaid: datePaid,
+          paymentMethod: paymentMethod,
+          notes: notes,
+          accountId: resolved,
+          paymentGroupId: groupId,
+        );
+        await txn.insert('purchase_bill_payments', payment.toMap());
+        await txn.update(
+            'purchase_bills', {'amount_paid': previous + allocation.amount},
+            where: 'id = ?', whereArgs: [allocation.bill.id]);
+        saved.add(payment);
+      }
+    });
+    return saved;
+  }
+
   static Future<void> deletePayment(PurchaseBillPayment payment) async {
     final db = await dbHelper.database;
+    if (payment.chequeId != null) {
+      await AccountingService.transitionCheque(
+          chequeId: payment.chequeId!,
+          status: payment.chequeStatus == 'cleared' ? 'bounced' : 'cancelled',
+          notes: 'Purchase payment removed by administrator');
+    } else {
+      await AccountingService.reverseSource(
+          sourceType: 'purchase_bill_payment',
+          sourceId: payment.id,
+          reason: 'Purchase payment removed by administrator');
+    }
     await db.transaction((txn) async {
       await txn.delete('purchase_bill_payments',
           where: 'id = ?', whereArgs: [payment.id]);
-      await txn.rawUpdate(
-          'UPDATE purchase_bills SET amount_paid = MAX(0, amount_paid - ?) WHERE id = ?',
-          [payment.amountPaid, payment.purchaseBillId]);
+      await txn.rawUpdate('''
+        UPDATE purchase_bills SET amount_paid = COALESCE((
+          SELECT SUM(amount_paid) FROM purchase_bill_payments
+          WHERE purchase_bill_id = ?
+            AND cheque_status NOT IN ('bounced', 'cancelled')
+        ), 0) WHERE id = ?
+      ''', [payment.purchaseBillId, payment.purchaseBillId]);
     });
   }
 

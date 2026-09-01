@@ -10,12 +10,14 @@ abstract class PaymentRepository {
     String? notes,
     String? chequeNumber,
     DateTime? chequeDate,
+    String? accountId,
   });
   Future<int> addPaymentBatch({
     required List<Invoice> invoices,
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? accountId,
   });
 
   /// Applies a single payment across multiple invoices for the same
@@ -28,6 +30,7 @@ abstract class PaymentRepository {
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? accountId,
   });
   Future<List<InvoicePayment>> getPaymentsForInvoice(String invoiceId);
   Future<double> getTotalPaidForInvoice(String invoiceId);

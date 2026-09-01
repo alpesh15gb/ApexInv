@@ -7,6 +7,7 @@ class Expense {
   final String? categoryName;
   final String? paymentMethod;
   final String? notes;
+  final String? accountId;
 
   const Expense({
     required this.id,
@@ -17,6 +18,7 @@ class Expense {
     this.categoryName,
     this.paymentMethod,
     this.notes,
+    this.accountId,
   });
 
   factory Expense.fromMap(Map<String, dynamic> map) {
@@ -29,6 +31,7 @@ class Expense {
       categoryName: map['category_name'] as String?,
       paymentMethod: map['payment_method'] as String?,
       notes: map['notes'] as String?,
+      accountId: map['account_id'] as String?,
     );
   }
 
@@ -41,6 +44,7 @@ class Expense {
       'category_id': categoryId,
       'payment_method': paymentMethod,
       'notes': notes,
+      'account_id': accountId,
     };
   }
 
@@ -53,6 +57,7 @@ class Expense {
     String? categoryName,
     String? paymentMethod,
     String? notes,
+    String? accountId,
   }) {
     return Expense(
       id: id ?? this.id,
@@ -63,6 +68,7 @@ class Expense {
       categoryName: categoryName ?? this.categoryName,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       notes: notes ?? this.notes,
+      accountId: accountId ?? this.accountId,
     );
   }
 }

@@ -40,6 +40,8 @@ class Invoice {
   bool isRecurring;
   String? recurringFrequency; // weekly/monthly/quarterly/yearly
   DateTime? recurringNextDate;
+  String salesChannel; // invoice | pos | sale_order
+  String? sourceOrderId;
   String?
       customInvoiceNumber; // shown instead of invoiceNumber in PDF when hideInvoiceNumber is true
   String paymentTermId; // linked payment term ID
@@ -76,6 +78,8 @@ class Invoice {
     this.isRecurring = false,
     this.recurringFrequency,
     this.recurringNextDate,
+    this.salesChannel = 'invoice',
+    this.sourceOrderId,
   });
 
   /// Text to render for the invoice number in PDF/receipt output, or null to omit the line entirely.
@@ -116,7 +120,10 @@ class Invoice {
 
   double get total => _totals.total;
 
-  double get amountPaid => payments.fold(0.0, (sum, p) => sum + p.amountPaid);
+  double get amountPaid => payments
+      .where((p) =>
+          p.chequeStatus != 'bounced' && p.chequeStatus != 'cancelled')
+      .fold(0.0, (sum, p) => sum + p.amountPaid);
 
   double get outstandingBalance =>
       InvoiceCalculator.outstanding(total: total, paid: amountPaid);

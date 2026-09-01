@@ -1,0 +1,25 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+          cache: true
+      - run: flutter pub get
+      # Keep compiler errors blocking while the repository's existing lint
+      # backlog remains visible without breaking unrelated feature work.
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - run: flutter test

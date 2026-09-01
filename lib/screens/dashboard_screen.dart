@@ -48,7 +48,12 @@ import 'package:apexbooks/screens/more_menu_screen.dart';
 import 'package:apexbooks/screens/purchase_bill_screen.dart';
 import 'package:apexbooks/screens/reminders_screen.dart';
 import 'package:apexbooks/screens/audit_log_screen.dart';
-import 'package:apexbooks/screens/placeholder_screen.dart';
+import 'package:apexbooks/screens/cheques_screen.dart';
+import 'package:apexbooks/screens/financial_accounts_screen.dart';
+import 'package:apexbooks/screens/loan_accounts_screen.dart';
+import 'package:apexbooks/screens/payment_out_screen.dart';
+import 'package:apexbooks/screens/pos_screen.dart';
+import 'package:apexbooks/screens/sale_orders_screen.dart';
 import 'package:apexbooks/database/recurring_invoice_engine.dart';
 
 // invoice.type is a raw internal value ('Invoice'/'Quotation'/'Receipt'/
@@ -296,25 +301,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       case 18:
         return const AuditLogScreen();
       case 19:
-        return const PlaceholderScreen(
-            title: 'Sale Order', icon: Icons.shopping_bag_outlined);
+        return const SaleOrdersScreen();
       case 20:
-        return const PlaceholderScreen(title: 'POS', icon: Icons.point_of_sale);
+        return const PosScreen();
       case 21:
-        return const PlaceholderScreen(
-            title: 'Payment Out', icon: Icons.payments_outlined);
+        return const PaymentOutScreen();
       case 22:
-        return const PlaceholderScreen(
-            title: 'Bank Accounts', icon: Icons.account_balance);
+        return const FinancialAccountsScreen(accountType: 'bank');
       case 23:
-        return const PlaceholderScreen(
-            title: 'Cash In Hand', icon: Icons.account_balance_wallet);
+        return const FinancialAccountsScreen(accountType: 'cash');
       case 24:
-        return const PlaceholderScreen(
-            title: 'Cheques', icon: Icons.confirmation_number_outlined);
+        return const ChequesScreen();
       case 25:
-        return const PlaceholderScreen(
-            title: 'Loan Accounts', icon: Icons.request_quote_outlined);
+        return const LoanAccountsScreen();
       case 10:
         return SettingsScreen(
           currentUser: _currentUser,

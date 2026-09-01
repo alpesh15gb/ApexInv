@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:apexbooks/database/expense_service.dart';
+import 'package:apexbooks/database/accounting_service.dart';
+import 'package:apexbooks/models/accounting.dart';
 import 'package:apexbooks/models/expense.dart';
 import 'package:apexbooks/models/expense_category.dart';
 
@@ -424,6 +426,8 @@ class _ExpenseManagementScreenState
   }
 
   Future<void> _showExpenseDialog({Expense? expense}) async {
+    final accounts = await AccountingService.getAccounts();
+    if (!mounted) return;
     final descriptionController =
         TextEditingController(text: expense?.description ?? '');
     final amountController = TextEditingController(
@@ -433,7 +437,15 @@ class _ExpenseManagementScreenState
     String selectedCategoryId = expense?.categoryId ??
         (_categories.isNotEmpty ? _categories.first.id : '');
     DateTime selectedDate = expense?.date ?? DateTime.now();
-    String paymentMethod = expense?.paymentMethod ?? '';
+    String paymentMethod = expense?.paymentMethod ?? 'Cash';
+    String? accountId = expense?.accountId;
+    List<FinancialAccount> accountChoices() => accounts
+        .where((a) => a.type == (paymentMethod == 'Cash' ? 'cash' : 'bank'))
+        .toList();
+    final initialChoices = accountChoices();
+    if (accountId == null && initialChoices.isNotEmpty) {
+      accountId = initialChoices.first.id;
+    }
 
     final result = await showDialog<bool>(
       context: context,
@@ -450,6 +462,33 @@ class _ExpenseManagementScreenState
                     labelText: 'Description *',
                     hintText: 'e.g. Office rent',
                   ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: paymentMethod,
+                  decoration: const InputDecoration(labelText: 'Payment method'),
+                  items: const ['Cash', 'Bank Transfer', 'Online', 'Other']
+                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                      .toList(),
+                  onChanged: (v) => setDialogState(() {
+                    paymentMethod = v ?? 'Cash';
+                    final choices = accountChoices();
+                    accountId = choices.isEmpty ? null : choices.first.id;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: accountChoices().any((a) => a.id == accountId)
+                      ? accountId
+                      : null,
+                  decoration: const InputDecoration(labelText: 'Pay from'),
+                  items: accountChoices()
+                      .map((a) => DropdownMenuItem<String>(
+                            value: a.id,
+                            child: Text(a.name),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setDialogState(() => accountId = v),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -549,6 +588,7 @@ class _ExpenseManagementScreenState
           categoryId: selectedCategoryId,
           paymentMethod: paymentMethod,
           notes: notesController.text,
+          accountId: accountId,
         ));
       } else {
         await ExpenseService.updateExpense(expense.copyWith(
@@ -558,6 +598,7 @@ class _ExpenseManagementScreenState
           categoryId: selectedCategoryId,
           paymentMethod: paymentMethod,
           notes: notesController.text,
+          accountId: accountId,
         ));
       }
       _loadData();

@@ -54,11 +54,12 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
       appBar: AppBar(
         title: const Text('Purchase Orders'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
+          FilledButton.icon(
             onPressed: () => _showCreateOrderDialog(),
-            tooltip: 'Create Purchase Order',
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Create'),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(

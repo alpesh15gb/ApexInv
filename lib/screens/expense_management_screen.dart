@@ -65,11 +65,12 @@ class _ExpenseManagementScreenState
       appBar: AppBar(
         title: const Text('Expenses'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
+          FilledButton.icon(
             onPressed: () => _showAddExpenseDialog(),
-            tooltip: 'Add Expense',
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Create'),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(

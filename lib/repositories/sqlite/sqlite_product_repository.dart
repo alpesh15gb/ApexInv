@@ -42,10 +42,10 @@ class SqliteProductRepository implements ProductRepository {
   @override
   Future<void> deleteProduct(String id) => ProductService.deleteProduct(id);
   @override
-  Future<void> updateProductStock(String id, int newStock) =>
+  Future<void> updateProductStock(String id, num newStock) =>
       ProductService.updateProductStock(id, newStock);
   @override
-  Future<bool> hasSufficientStock(String productId, int quantity) =>
+  Future<bool> hasSufficientStock(String productId, num quantity) =>
       ProductService.hasSufficientStock(productId, quantity);
   @override
   Future<Product?> findDuplicateByName(String name) =>

@@ -34,9 +34,10 @@ class MoreMenuScreen extends ConsumerWidget {
         children: [
           _userHeader(context),
           const SizedBox(height: 20),
+          _groupHeading(context, l10n.moreSectionDocuments),
           _section(context, 'Sales (Master)', [
             _tile(context, 2, Icons.receipt_long_outlined, 'Sales Invoices'),
-            _tile(context, 3, Icons.request_quote_outlined, 'Estimates'),
+            _tile(context, 3, Icons.request_quote_outlined, l10n.navQuotations),
             _tile(context, 16, Icons.request_page_outlined, 'Proforma Invoice'),
             _tile(context, 4, Icons.payments_outlined, 'Payment In'),
             _tile(context, 19, Icons.shopping_bag_outlined, 'Sale Order'),
@@ -200,6 +201,22 @@ class MoreMenuScreen extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _groupHeading(BuildContext context, String title) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+          color: theme.primaryColor,
+        ),
+      ),
     );
   }
 

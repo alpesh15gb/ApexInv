@@ -88,7 +88,7 @@ class InvoiceService {
     for (var item in invoice.items) {
       final product = await ProductService.getProductById(item.product.id);
       if (product != null && !product.unlimitedStock) {
-        final newStock = product.stock - item.quantity.round();
+        final newStock = product.stock - item.quantity;
         await ProductService.updateProductStock(product.id, newStock);
       }
     }
@@ -123,6 +123,7 @@ class InvoiceService {
           'tax_mode': invoice.taxMode.key,
           'is_interstate': invoice.isInterState ? 1 : 0,
           'upi_id': invoice.upiId,
+          'bank_account_id': invoice.bankAccountId,
           'due_date': invoice.dueDate?.toIso8601String(),
           'quantity_label': invoice.quantityLabel,
           'additional_costs':
@@ -179,7 +180,7 @@ class InvoiceService {
           await ProductService.getProductById(oldItem['product_id'] as String);
       if (product != null && !product.unlimitedStock) {
         final rawQty = oldItem['quantity'];
-        final oldQty = rawQty is int ? rawQty : (rawQty as double).round();
+        final oldQty = (rawQty as num?)?.toDouble() ?? 0;
         final restoredStock = product.stock + oldQty;
         await ProductService.updateProductStock(product.id, restoredStock);
       }
@@ -189,7 +190,7 @@ class InvoiceService {
     for (var item in invoice.items) {
       final product = await ProductService.getProductById(item.product.id);
       if (product != null && !product.unlimitedStock) {
-        final newStock = product.stock - item.quantity.round();
+        final newStock = product.stock - item.quantity;
         await ProductService.updateProductStock(product.id, newStock);
       }
     }
@@ -608,7 +609,7 @@ class InvoiceService {
       final product = await ProductService.getProductById(productId);
       if (product == null || product.unlimitedStock) continue;
       final rawQty = item['quantity'];
-      final qty = rawQty is int ? rawQty : ((rawQty as num?) ?? 0).round();
+      final qty = (rawQty as num?)?.toDouble() ?? 0;
       if (qty == 0) continue;
       await ProductService.updateProductStock(
           product.id, product.stock + sign * qty);

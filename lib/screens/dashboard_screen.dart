@@ -110,6 +110,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void initState() {
     super.initState();
     _currentUser = widget.loggedInUser;
+    SessionManager.initialize(_logoutAndResetSession);
     _loadCreateInvoiceLayout();
     // Offline-first recurring billing: generate due instances on start.
     RecurringInvoiceEngine.generateDue().catchError((_) {});
@@ -144,6 +145,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   void dispose() {
+    SessionManager.dispose();
     _shortcutsFocusNode.dispose();
     super.dispose();
   }
@@ -208,6 +210,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('invoice_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
+          onCreateInvoice: () => _selectTab(1),
           user: _currentUser,
           filterType: 'Invoice',
         );
@@ -216,6 +219,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('quotation_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
+          onCreateInvoice: () => _selectTab(1),
           user: _currentUser,
           filterType: 'Quotation',
         );
@@ -224,6 +228,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('receipt_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
+          onCreateInvoice: () => _selectTab(1),
           user: _currentUser,
           filterType: 'Receipt',
         );
@@ -255,6 +260,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('credit_note_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
+          onCreateInvoice: () => _selectTab(1),
           user: _currentUser,
           filterType: 'Credit Note',
         );
@@ -263,6 +269,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('debit_note_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
+          onCreateInvoice: () => _selectTab(1),
           user: _currentUser,
           filterType: 'Debit Note',
         );
@@ -271,6 +278,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('challan_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
+          onCreateInvoice: () => _selectTab(1),
           user: _currentUser,
           filterType: 'Delivery Challan',
         );
@@ -279,6 +287,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('proforma_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
+          onCreateInvoice: () => _selectTab(1),
           user: _currentUser,
           filterType: 'Proforma',
         );
@@ -445,9 +454,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         const SingleActivator(LogicalKeyboardKey.keyQ, control: true): () =>
             _selectTab(1),
       },
-      child: Focus(
-        focusNode: _shortcutsFocusNode,
-        child: Scaffold(
+      child: Listener(
+        onPointerDown: (_) => SessionManager.onUserActivity(),
+        onPointerMove: (_) => SessionManager.onUserActivity(),
+        child: Focus(
+          focusNode: _shortcutsFocusNode,
+          child: Scaffold(
           body: LayoutBuilder(
             builder: (context, constraints) {
               final screen = Stack(
@@ -481,6 +493,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ],
               );
             },
+          ),
           ),
         ),
       ),
@@ -2987,7 +3000,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
                         ),
                         child: Text(
                           AppLocalizations.of(context)!
-                              .dashboardStockLabel(product.stock),
+                               .dashboardStockLabel(product.stock.toInt()),
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,

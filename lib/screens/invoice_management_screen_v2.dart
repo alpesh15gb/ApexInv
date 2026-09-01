@@ -29,6 +29,7 @@ import 'package:apexbooks/utils/formatters.dart';
 class InvoiceManagementScreenV2 extends ConsumerStatefulWidget {
   final Function(Invoice) onEditInvoice;
   final Function(Invoice, String) onCloneInvoice;
+  final VoidCallback onCreateInvoice;
   final User user;
   final String filterType; // 'Invoice' | 'Quotation'
 
@@ -36,6 +37,7 @@ class InvoiceManagementScreenV2 extends ConsumerStatefulWidget {
     super.key,
     required this.onEditInvoice,
     required this.onCloneInvoice,
+    required this.onCreateInvoice,
     required this.user,
     this.filterType = 'Invoice',
   });
@@ -120,6 +122,13 @@ class _InvoiceManagementScreenV2State
   // ─── Data loading ──────────────────────────────────────────────────────────
 
   Future<void> _loadPage() async {
+    final needsFullScan = _hidePaid ||
+        _dueDateFilter != 'all' ||
+        _paymentStatusFilterV2 != 'all' ||
+        _invoiceDateFrom != null ||
+        _invoiceDateTo != null ||
+        _idRangeFrom != null ||
+        _idRangeTo != null;
     setState(() {
       _isLoadingPage = true;
       _selectedIds.clear(); // selection reset on every page/search change
@@ -128,7 +137,10 @@ class _InvoiceManagementScreenV2State
       final results = await Future.wait([
         ref.read(invoiceRepositoryProvider).getInvoicesPaginated(
               page: _currentPage,
-              pageSize: _pageSize,
+              // These filters are applied in Dart, so fetch the complete
+              // result before filtering instead of silently filtering only
+              // the currently visible page.
+              pageSize: needsFullScan ? 100000 : _pageSize,
               searchQuery: _searchQuery,
               filterType: widget.filterType,
               orderBy: _sortField,
@@ -217,9 +229,18 @@ class _InvoiceManagementScreenV2State
             return true;
           }).toList();
         }
+        final filteredCount = pageInvoices.length;
+        if (needsFullScan) {
+          final start = _currentPage * _pageSize;
+          pageInvoices = start >= filteredCount
+              ? <Invoice>[]
+              : pageInvoices.sublist(
+                  start,
+                  (start + _pageSize).clamp(start, filteredCount).toInt());
+        }
         setState(() {
           _pageInvoices = pageInvoices;
-          _totalCount = results[1] as int;
+          _totalCount = needsFullScan ? filteredCount : results[1] as int;
           _isLoadingPage = false;
         });
       }
@@ -2270,6 +2291,14 @@ class _InvoiceManagementScreenV2State
                 fontSize: 13.5,
                 color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
+          if (_searchQuery.isEmpty) ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: widget.onCreateInvoice,
+              icon: const Icon(Icons.add),
+              label: Text(l10n.navNewInvoice),
+            ),
+          ],
         ],
       ),
     );
@@ -2279,6 +2308,12 @@ class _InvoiceManagementScreenV2State
     final l10n = AppLocalizations.of(context)!;
     if (isWide) {
       return [
+        FilledButton.icon(
+          onPressed: widget.onCreateInvoice,
+          icon: const Icon(Icons.add, size: 18),
+          label: Text(l10n.navNewInvoice),
+        ),
+        const SizedBox(width: 8),
         if (_isBulkLoading)
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 8),
@@ -2319,6 +2354,11 @@ class _InvoiceManagementScreenV2State
     // single overflow menu, same "move to 3-dot" treatment as the
     // per-row actions.
     return [
+      IconButton(
+        icon: const Icon(Icons.add),
+        onPressed: widget.onCreateInvoice,
+        tooltip: l10n.navNewInvoice,
+      ),
       if (_isBulkLoading)
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 8),

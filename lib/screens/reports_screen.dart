@@ -432,11 +432,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             _dailyPage = 0;
           });
         case 8:
-          final dayRows = await ReportService.getDayBook(from, to);
+          final dayRows = await ReportService.getDayBook(from, to,
+              currencyCode: _reportCurrencyCode);
           if (!mounted) return;
           setState(() => _dayBook = dayRows);
         case 9:
-          final pnl = await ReportService.getPnl(from, to);
+          final pnl = await ReportService.getPnl(from, to,
+              currencyCode: _reportCurrencyCode);
           if (!mounted) return;
           setState(() => _pnl = pnl);
         case 10:
@@ -450,11 +452,16 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
         case 12:
           final (tFrom, tTo) = _range;
           final tb =
-              await LedgerService.getTrialBalance(from: tFrom, to: tTo);
+              await LedgerService.getTrialBalance(
+                  from: tFrom,
+                  to: tTo,
+                  currencyCode: _reportCurrencyCode);
           if (!mounted) return;
           setState(() => _trialBalance = tb);
         case 13:
-          final bs = await LedgerService.getBalanceSheet();
+          final (bsFrom, bsTo) = _range;
+          final bs = await LedgerService.getBalanceSheet(
+              from: bsFrom, to: bsTo, currencyCode: _reportCurrencyCode);
           if (!mounted) return;
           setState(() => _balanceSheet = bs);
       }

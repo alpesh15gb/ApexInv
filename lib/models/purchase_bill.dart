@@ -108,6 +108,51 @@ class PurchaseBillItem {
       );
 }
 
+class PurchaseBillPayment {
+  final String id;
+  final String purchaseBillId;
+  final double amountPaid;
+  final double previouslyPaid;
+  final double balanceAfter;
+  final DateTime datePaid;
+  final String? paymentMethod;
+  final String? notes;
+
+  const PurchaseBillPayment({
+    required this.id,
+    required this.purchaseBillId,
+    required this.amountPaid,
+    required this.previouslyPaid,
+    required this.balanceAfter,
+    required this.datePaid,
+    this.paymentMethod,
+    this.notes,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'purchase_bill_id': purchaseBillId,
+        'amount_paid': amountPaid,
+        'previously_paid': previouslyPaid,
+        'balance_after': balanceAfter,
+        'date_paid': datePaid.toIso8601String(),
+        'payment_method': paymentMethod,
+        'notes': notes,
+      };
+
+  factory PurchaseBillPayment.fromMap(Map<String, dynamic> map) =>
+      PurchaseBillPayment(
+        id: map['id'] as String,
+        purchaseBillId: map['purchase_bill_id'] as String,
+        amountPaid: (map['amount_paid'] as num).toDouble(),
+        previouslyPaid: (map['previously_paid'] as num?)?.toDouble() ?? 0,
+        balanceAfter: (map['balance_after'] as num?)?.toDouble() ?? 0,
+        datePaid: DateTime.parse(map['date_paid'] as String),
+        paymentMethod: map['payment_method'] as String?,
+        notes: map['notes'] as String?,
+      );
+}
+
 class PurchaseBill {
   final String id;
   final String? billNumber; // supplier's invoice number

@@ -12,8 +12,7 @@ import '../database/database_helper.dart';
 ///   Receipt (payment)   Dr Cash/Bank / Cr Accounts Receivable
 ///   Expense             Dr <category expense> / Cr Cash
 ///   Purchase bill       Dr Purchases + Dr GST Input (ITC) / Cr Payables
-///   Purchase payment    is not posted separately (paid amounts live on the
-///                       bill) — Payables carries the outstanding only.
+///   Purchase payment    Dr Accounts Payable / Cr Cash
 ///
 /// The projection is deterministic: same DB → same ledger.
 class LedgerService {
@@ -47,6 +46,7 @@ class LedgerService {
   static Future<List<JournalEntry>> getJournal({
     DateTime? from,
     DateTime? to,
+    String? currencyCode,
   }) async {
     final db = await _db.database;
     final entries = <JournalEntry>[];
@@ -60,13 +60,16 @@ class LedgerService {
             : ' AND ${[if (fromS != null) "$col >= '$fromS'", if (toS != null) "$col <= '$toS'"].join(' AND ')}';
 
     // 1. Sales invoices → AR / Sales + GST Output
+    String currencyFilter(String column) =>
+        currencyCode == null ? '' : ' AND $column = ?';
     final invoices = await db.rawQuery('''
       SELECT i.id, i.date, i.customer_name, i.total, i.tax, i.currency_symbol
       FROM invoices i
       WHERE i.deleted_at IS NULL AND i.type = 'Invoice'
+      ${currencyFilter('i.currency_code')}
       ${dateFilter('i.date')}
       ORDER BY i.date
-    ''');
+    ''', [if (currencyCode != null) currencyCode]);
     for (final inv in invoices) {
       final total = (inv['total'] as num?)?.toDouble() ?? 0;
       final tax = (inv['tax'] as num?)?.toDouble() ?? 0;
@@ -90,9 +93,12 @@ class LedgerService {
     final payments = await db.rawQuery('''
       SELECT p.date_paid AS d, p.amount_paid, p.payment_method, p.customer_name
       FROM invoice_payments p
+      JOIN invoices i ON i.id = p.invoice_id
+      WHERE i.deleted_at IS NULL AND i.type = 'Invoice'
+      ${currencyFilter('i.currency_code')}
       ${dateFilter('p.date_paid')}
       ORDER BY d
-    ''');
+    ''', [if (currencyCode != null) currencyCode]);
     for (final p in payments) {
       final method = p['payment_method'] as String? ?? 'Cash';
       final account =
@@ -119,7 +125,7 @@ class LedgerService {
       SELECT e.date, e.description, e.amount, c.name AS category
       FROM expenses e
       LEFT JOIN expense_categories c ON c.id = e.category_id
-      ${dateFilter('e.date')}
+      ${currencyCode == null || currencyCode == 'INR' ? dateFilter('e.date') : ' AND 1 = 0'}
       ORDER BY e.date
     ''');
     for (final e in expenses) {
@@ -136,20 +142,32 @@ class LedgerService {
       ));
     }
 
-    // 4. Purchase bills → Purchases + ITC / Payables (only unpaid part hits
-    //    Payables; paid part settles to Cash via a payment pair if recorded)
+    // 4. Purchase bills → Purchases + ITC / Payables.
     final bills = await db.rawQuery('''
       SELECT b.id, b.date, b.supplier_name, b.total_amount, b.total_tax,
-             b.amount_paid, b.currency_symbol
+             b.amount_paid, b.currency_symbol, b.currency_code,
+             COALESCE(SUM(p.amount_paid), 0) AS recorded_paid
       FROM purchase_bills b
+      LEFT JOIN purchase_bill_payments p ON p.purchase_bill_id = b.id
+      WHERE 1 = 1
+      ${currencyFilter('b.currency_code')}
       ${dateFilter('b.date')}
+      GROUP BY b.id
       ORDER BY b.date
-    ''');
+    ''', [if (currencyCode != null) currencyCode]);
     for (final b in bills) {
       final total = (b['total_amount'] as num?)?.toDouble() ?? 0;
       final tax = (b['total_tax'] as num?)?.toDouble() ?? 0;
-      final paid = (b['amount_paid'] as num?)?.toDouble() ?? 0;
       final net = total - tax;
+      // Pre-v47 bills stored only an aggregate paid amount. Preserve that
+      // historical payment as a bill-date cash movement when no payment
+      // records exist, while newer bills use the dated payment rows below.
+      final recordedPaid = (b['recorded_paid'] as num?)?.toDouble() ?? 0;
+      final legacyPaid = recordedPaid <= 0
+          ? ((b['amount_paid'] as num?)?.toDouble() ?? 0)
+              .clamp(0, total)
+              .toDouble()
+          : 0.0;
       final date =
           DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime.now();
       entries.add(JournalEntry(
@@ -159,19 +177,51 @@ class LedgerService {
         lines: [
           LedgerLine(account: accPurchases, debit: net, credit: 0),
           LedgerLine(account: accGstInput, debit: tax, credit: 0),
+          if (legacyPaid > 0)
+            LedgerLine(account: accCash, debit: 0, credit: legacyPaid),
           LedgerLine(
-              account: accCash, debit: 0, credit: paid), // paid on the spot
-          LedgerLine(
-              account: accPayable, debit: 0, credit: total - paid),
+              account: accPayable,
+              debit: 0,
+              credit: total - legacyPaid),
         ],
       ));
     }
 
-    // 5. Opening capital, dated at the earliest transaction (or today).
-    final capital = await getOpeningCapital();
-    if (capital > 0 && entries.isEmpty) {
+    // Purchase payments settle payables on their actual payment date.
+    final purchasePayments = await db.rawQuery('''
+      SELECT p.date_paid AS d, p.amount_paid, p.payment_method,
+             b.supplier_name, b.currency_code
+      FROM purchase_bill_payments p
+      JOIN purchase_bills b ON b.id = p.purchase_bill_id
+      WHERE 1 = 1
+      ${currencyFilter('b.currency_code')}
+      ${dateFilter('p.date_paid')}
+      ORDER BY d
+    ''', [if (currencyCode != null) currencyCode]);
+    for (final p in purchasePayments) {
+      final amount = (p['amount_paid'] as num?)?.toDouble() ?? 0;
       entries.add(JournalEntry(
-        date: DateTime.now(),
+        date: DateTime.tryParse(p['d'] as String? ?? '') ?? DateTime.now(),
+        description: 'Purchase payment — ${p['supplier_name'] ?? ''}',
+        lines: [
+          LedgerLine(account: accPayable, debit: amount, credit: 0),
+          LedgerLine(account: accCash, debit: 0, credit: amount),
+        ],
+      ));
+    }
+
+    // 5. Opening capital is a real opening entry, never omitted because other
+    // transactions exist. Anchor it to the earliest business date so it is
+    // stable and appears before subsequent activity in the full journal.
+    final capital = currencyCode == null || currencyCode == 'INR'
+        ? await getOpeningCapital()
+        : 0.0;
+    if (capital > 0) {
+      final openingDate = entries.isEmpty
+          ? DateTime.now()
+          : entries.map((e) => e.date).reduce((a, b) => a.isBefore(b) ? a : b);
+      entries.add(JournalEntry(
+        date: openingDate,
         description: 'Opening capital',
         lines: [
           LedgerLine(account: accCash, debit: capital, credit: 0),
@@ -180,6 +230,7 @@ class LedgerService {
       ));
     }
 
+    entries.sort((a, b) => a.date.compareTo(b.date));
     return entries;
   }
 
@@ -187,8 +238,10 @@ class LedgerService {
   static Future<TrialBalance> getTrialBalance({
     DateTime? from,
     DateTime? to,
+    String? currencyCode,
   }) async {
-    final journal = await getJournal(from: from, to: to);
+    final journal = await getJournal(
+        from: from, to: to, currencyCode: currencyCode);
     final byAccount = <String, ({double debit, double credit})>{};
     for (final entry in journal) {
       for (final line in entry.lines) {
@@ -217,8 +270,14 @@ class LedgerService {
   }
 
   /// Balance sheet from the full ledger: assets = liabilities + equity.
-  static Future<BalanceSheet> getBalanceSheet() async {
-    final tb = await getTrialBalance();
+  static Future<BalanceSheet> getBalanceSheet({
+    DateTime? from,
+    DateTime? to,
+    String? currencyCode,
+  }) async {
+    // A balance sheet is a point-in-time statement. Use all activity through
+    // the selected end date, rather than only movements inside the period.
+    final tb = await getTrialBalance(to: to, currencyCode: currencyCode);
     double getNet(String prefix) {
       double net = 0;
       for (final r in tb.rows) {
@@ -229,7 +288,9 @@ class LedgerService {
       return net;
     }
 
-    final opening = await getOpeningCapital();
+    final opening = currencyCode == null || currencyCode == 'INR'
+        ? await getOpeningCapital()
+        : 0.0;
     double salesCredit = 0;
     double purchasesDebit = 0;
     double expensesDebit = 0;

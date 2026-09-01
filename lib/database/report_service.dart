@@ -111,7 +111,7 @@ class ReportService {
       args.add(AppDate.dateKeyEnd(to));
     }
     if (currencyCode != null) {
-      sb.write(' AND (currency_code = ? OR currency_code IS NULL)');
+      sb.write(' AND currency_code = ?');
       args.add(currencyCode);
     }
     if (customerKey != null) {
@@ -247,7 +247,7 @@ class ReportService {
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
     final ccFilter = currencyCode != null
-        ? 'AND (i.currency_code = ? OR i.currency_code IS NULL) '
+        ? 'AND i.currency_code = ? '
         : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
@@ -280,7 +280,7 @@ class ReportService {
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
     final ccFilter = currencyCode != null
-        ? 'AND (i.currency_code = ? OR i.currency_code IS NULL) '
+        ? 'AND i.currency_code = ? '
         : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
@@ -312,7 +312,7 @@ class ReportService {
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
     final currencyFilter = currencyCode != null
-        ? 'AND (i.currency_code = ? OR i.currency_code IS NULL) '
+        ? 'AND i.currency_code = ? '
         : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
@@ -388,7 +388,7 @@ class ReportService {
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
     final currencyFilter = currencyCode != null
-        ? 'AND (i.currency_code = ? OR i.currency_code IS NULL) '
+        ? 'AND i.currency_code = ? '
         : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
@@ -505,7 +505,7 @@ class ReportService {
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
     final ccFilter = currencyCode != null
-        ? 'AND (i.currency_code = ? OR i.currency_code IS NULL) '
+        ? 'AND i.currency_code = ? '
         : '';
     final dateArgs = <Object?>[
       if (currencyCode != null) currencyCode,
@@ -635,7 +635,7 @@ class ReportService {
     );
     final args = <Object?>[];
     if (currencyCode != null) {
-      sb.write(' AND (currency_code = ? OR currency_code IS NULL)');
+      sb.write(' AND currency_code = ?');
       args.add(currencyCode);
     }
 
@@ -801,7 +801,7 @@ class ReportService {
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
     final ccFilter = currencyCode != null
-        ? 'AND (i.currency_code = ? OR i.currency_code IS NULL) '
+        ? 'AND i.currency_code = ? '
         : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
@@ -848,7 +848,7 @@ class ReportService {
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
     final currencyFilter = currencyCode != null
-        ? 'AND (currency_code = ? OR currency_code IS NULL) '
+        ? 'AND currency_code = ? '
         : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
@@ -1212,10 +1212,10 @@ class ReportService {
 
   // ── Day book / cash flow / P&L / cheques / expiries (v46 reports) ────────
 
-  /// Every money event in the period: receipts in, expenses and purchase
-  /// bills out. Cash-basis.
+  /// Every cash event in the period. Purchase bills are not cash events;
+  /// their separately recorded payments are included instead.
   static Future<List<DayBookEntry>> getDayBook(
-      DateTime from, DateTime to) async {
+      DateTime from, DateTime to, {String? currencyCode}) async {
     final db = await _db.database;
     final rows = <DayBookEntry>[];
 
@@ -1223,10 +1223,14 @@ class ReportService {
       SELECT date_paid AS d, invoice_number, customer_name,
              SUM(amount_paid) AS amt
       FROM invoice_payments
-      WHERE date_paid >= ? AND date_paid <= ?
+      JOIN invoices i ON i.id = invoice_payments.invoice_id
+      WHERE i.deleted_at IS NULL AND i.type = 'Invoice'
+        AND date_paid >= ? AND date_paid <= ?
+        ${currencyCode == null ? '' : 'AND i.currency_code = ?'}
       GROUP BY substr(date_paid, 1, 10), invoice_number
       ORDER BY d
-    ''', [from.toIso8601String(), to.toIso8601String()]);
+    ''', [from.toIso8601String(), to.toIso8601String(),
+          if (currencyCode != null) currencyCode]);
     for (final r in payRows) {
       rows.add(DayBookEntry(
         date: DateTime.tryParse(r['d'] as String? ?? '') ?? from,
@@ -1241,6 +1245,7 @@ class ReportService {
       SELECT date, description, amount FROM expenses
       WHERE date >= ? AND date <= ? ORDER BY date
     ''', [from.toIso8601String(), to.toIso8601String()]);
+    if (currencyCode != null && currencyCode != 'INR') expRows.clear();
     for (final r in expRows) {
       rows.add(DayBookEntry(
         date: DateTime.tryParse(r['date'] as String? ?? '') ?? from,
@@ -1251,15 +1256,20 @@ class ReportService {
     }
 
     final pbRows = await db.rawQuery('''
-      SELECT date, supplier_name, total_amount FROM purchase_bills
-      WHERE date >= ? AND date <= ? ORDER BY date
-    ''', [from.toIso8601String(), to.toIso8601String()]);
+      SELECT p.date_paid AS date, b.supplier_name, p.amount_paid
+      FROM purchase_bill_payments p
+      JOIN purchase_bills b ON b.id = p.purchase_bill_id
+      WHERE p.date_paid >= ? AND p.date_paid <= ?
+        ${currencyCode == null ? '' : 'AND b.currency_code = ?'}
+      ORDER BY p.date_paid
+    ''', [from.toIso8601String(), to.toIso8601String(),
+          if (currencyCode != null) currencyCode]);
     for (final r in pbRows) {
       rows.add(DayBookEntry(
         date: DateTime.tryParse(r['date'] as String? ?? '') ?? from,
-        description: 'Purchase bill — ${r['supplier_name'] ?? ''}',
+        description: 'Purchase payment — ${r['supplier_name'] ?? ''}',
         moneyIn: 0,
-        moneyOut: (r['total_amount'] as num?)?.toDouble() ?? 0,
+        moneyOut: (r['amount_paid'] as num?)?.toDouble() ?? 0,
       ));
     }
 
@@ -1267,13 +1277,18 @@ class ReportService {
     return rows;
   }
 
-  /// Cash-basis P&L: billed revenue vs expenses + purchase bills.
-  static Future<PnlSummary> getPnl(DateTime from, DateTime to) async {
+  /// Cash-basis P&L. `revenue` is collected invoice payments and `purchases`
+  /// is purchase-bill payments; the legacy fields remain for UI compatibility.
+  static Future<PnlSummary> getPnl(DateTime from, DateTime to,
+      {String? currencyCode}) async {
     final db = await _db.database;
     final invRes = await db.rawQuery(
-      "SELECT COALESCE(SUM(total), 0) AS v FROM invoices "
-      "WHERE deleted_at IS NULL AND type = 'Invoice' AND date >= ? AND date <= ?",
-      [from.toIso8601String(), to.toIso8601String()],
+      "SELECT COALESCE(SUM(amount_paid), 0) AS v FROM invoice_payments p "
+      "JOIN invoices i ON i.id = p.invoice_id "
+      "WHERE i.deleted_at IS NULL AND i.type = 'Invoice' AND p.date_paid >= ? AND p.date_paid <= ? "
+      "${currencyCode == null ? '' : 'AND i.currency_code = ?'}",
+      [from.toIso8601String(), to.toIso8601String(),
+        if (currencyCode != null) currencyCode],
     );
     final expRes = await db.rawQuery(
       "SELECT COALESCE(SUM(amount), 0) AS v FROM expenses "
@@ -1281,17 +1296,25 @@ class ReportService {
       [from.toIso8601String(), to.toIso8601String()],
     );
     final pbRes = await db.rawQuery(
-      "SELECT COALESCE(SUM(total_amount), 0) AS v FROM purchase_bills "
-      "WHERE date >= ? AND date <= ?",
-      [from.toIso8601String(), to.toIso8601String()],
+      "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM purchase_bill_payments p "
+      "JOIN purchase_bills b ON b.id = p.purchase_bill_id "
+      "WHERE p.date_paid >= ? AND p.date_paid <= ? "
+      "${currencyCode == null ? '' : 'AND b.currency_code = ?'}",
+      [from.toIso8601String(), to.toIso8601String(),
+        if (currencyCode != null) currencyCode],
     );
     final collectedRes = await db.rawQuery(
-      "SELECT COALESCE(SUM(amount_paid), 0) AS v FROM invoice_payments "
-      "WHERE date_paid >= ? AND date_paid <= ?",
-      [from.toIso8601String(), to.toIso8601String()],
+      "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM invoice_payments p "
+      "JOIN invoices i ON i.id = p.invoice_id "
+      "WHERE p.date_paid >= ? AND p.date_paid <= ? "
+      "${currencyCode == null ? '' : 'AND i.currency_code = ?'}",
+      [from.toIso8601String(), to.toIso8601String(),
+        if (currencyCode != null) currencyCode],
     );
     final revenue = (invRes.first['v'] as num?)?.toDouble() ?? 0;
-    final expenses = (expRes.first['v'] as num?)?.toDouble() ?? 0;
+    final expenses = currencyCode != null && currencyCode != 'INR'
+        ? 0.0
+        : (expRes.first['v'] as num?)?.toDouble() ?? 0;
     final purchases = (pbRes.first['v'] as num?)?.toDouble() ?? 0;
     final collected = (collectedRes.first['v'] as num?)?.toDouble() ?? 0;
     return PnlSummary(

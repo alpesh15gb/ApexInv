@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/database/purchase_bill_service.dart';
+import 'package:apexbooks/database/settings_service.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/purchase_bill.dart';
 import 'package:apexbooks/models/user.dart';
@@ -64,21 +65,33 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
 
   Future<void> _recordPayment(PurchaseBill bill) async {
     final controller = TextEditingController();
+    final notesController = TextEditingController();
+    DateTime paymentDate = DateTime.now();
+    String? method;
+    final payments = await PurchaseBillService.getPayments(bill.id);
     final l10n = AppLocalizations.of(context)!;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Pay ${bill.supplierName}'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: l10n.fieldTotalLabel,
-            prefixText: '${bill.currencySymbol} ',
-            hintText: bill.outstanding.toStringAsFixed(2),
-          ),
-        ),
+        content: StatefulBuilder(builder: (ctx, setDialogState) => SizedBox(
+              width: 520,
+              child: SingleChildScrollView(child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (payments.isNotEmpty) ...[
+                    const Align(alignment: Alignment.centerLeft, child: Text('Payment history', style: TextStyle(fontWeight: FontWeight.bold))),
+                    for (final p in payments) ListTile(dense: true, contentPadding: EdgeInsets.zero, title: Text('${p.datePaid.toLocal().toString().split(' ').first}  ${p.paymentMethod ?? 'Other'}'), trailing: Text('${bill.currencySymbol} ${p.amountPaid.toStringAsFixed(2)}')),
+                    const Divider(),
+                  ],
+                  TextField(controller: controller, autofocus: true, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: l10n.fieldTotalLabel, prefixText: '${bill.currencySymbol} ', hintText: bill.outstanding.toStringAsFixed(2))),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(value: method, decoration: const InputDecoration(labelText: 'Payment method'), items: const [DropdownMenuItem(value: 'Cash', child: Text('Cash')), DropdownMenuItem(value: 'Bank Transfer', child: Text('Bank Transfer')), DropdownMenuItem(value: 'Check', child: Text('Check')), DropdownMenuItem(value: 'Online', child: Text('Online')), DropdownMenuItem(value: 'Other', child: Text('Other'))], onChanged: (v) => setDialogState(() => method = v)),
+                  TextField(controller: notesController, decoration: const InputDecoration(labelText: 'Notes (optional)')),
+                  ListTile(contentPadding: EdgeInsets.zero, title: const Text('Payment date'), trailing: TextButton(child: Text(paymentDate.toLocal().toString().split(' ').first), onPressed: () async { final picked = await showDatePicker(context: ctx, initialDate: paymentDate, firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 365))); if (picked != null) setDialogState(() => paymentDate = picked); })),
+                ],
+              )),
+            )),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -92,7 +105,9 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
     if (ok != true) return;
     final amount = double.tryParse(controller.text.trim());
     if (amount == null || amount <= 0) return;
-    await PurchaseBillService.recordPayment(bill.id, amount);
+    await PurchaseBillService.recordPayment(bill.id, amount, datePaid: paymentDate, paymentMethod: method, notes: notesController.text.trim().isEmpty ? null : notesController.text.trim());
+    controller.dispose();
+    notesController.dispose();
     await AuditLogService.log(
       action: 'purchase_payment',
       username: widget.user.username,
@@ -118,6 +133,12 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          FilledButton.icon(
+            onPressed: () => _openForm(),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('New Bill'),
+          ),
+          const SizedBox(width: 8),
           IconButton(
             onPressed: _isLoading ? null : _load,
             icon: const Icon(Icons.refresh),
@@ -125,11 +146,6 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
           ),
           const SizedBox(width: 8),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(),
-        icon: const Icon(Icons.add),
-        label: const Text('New Bill'),
       ),
       body: Column(
         children: [
@@ -339,6 +355,7 @@ class PurchaseBillFormScreen extends ConsumerStatefulWidget {
 class _PurchaseBillFormScreenState
     extends ConsumerState<PurchaseBillFormScreen> {
   late final List<_ItemDraft> _items;
+  late final String _billId;
   final _supplierCtrl = TextEditingController();
   final _gstinCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -355,6 +372,7 @@ class _PurchaseBillFormScreenState
   bool _billExpanded = true;
   bool _isSaving = false;
   String _currencySymbol = '₹';
+  String _currencyCode = 'INR';
 
   bool get _isEdit => widget.existing != null;
 
@@ -362,6 +380,7 @@ class _PurchaseBillFormScreenState
   void initState() {
     super.initState();
     final e = widget.existing;
+    _billId = e?.id ?? const Uuid().v4();
     _items = e == null
         ? [_ItemDraft()]
         : e.items
@@ -381,6 +400,7 @@ class _PurchaseBillFormScreenState
       _emailCtrl.text = e.supplierEmail;
       _addressCtrl.text = e.supplierAddress;
       _currencySymbol = e.currencySymbol;
+      _currencyCode = e.currencyCode;
       _billNoCtrl.text = e.billNumber ?? '';
       _notesCtrl.text = e.notes;
       _date = e.date;
@@ -388,7 +408,18 @@ class _PurchaseBillFormScreenState
       _itcEligible = e.itcEligible;
       _reverseCharge = e.reverseCharge;
       _interState = e.igstTotal > 0;
+    } else {
+      _loadConfiguredCurrency();
     }
+  }
+
+  Future<void> _loadConfiguredCurrency() async {
+    final currency = await SettingsService.getCurrency();
+    if (!mounted) return;
+    setState(() {
+      _currencyCode = currency.code;
+      _currencySymbol = currency.symbol;
+    });
   }
 
   @override
@@ -407,7 +438,7 @@ class _PurchaseBillFormScreenState
   }
 
   List<PurchaseBillItem> get _computedItems {
-    final id = widget.existing?.id ?? const Uuid().v4();
+    final id = _billId;
     return _items
         .where((d) => d.name.text.trim().isNotEmpty)
         .map((d) => PurchaseBillItem.compute(
@@ -456,7 +487,8 @@ class _PurchaseBillFormScreenState
       itcEligible: _itcEligible,
       reverseCharge: _reverseCharge,
       notes: _notesCtrl.text.trim(),
-      currencySymbol: _currencySymbol,
+       currencyCode: _currencyCode,
+       currencySymbol: _currencySymbol,
       items: _computedItems,
     );
     if (_isEdit) {

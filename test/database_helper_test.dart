@@ -35,7 +35,10 @@ void main() {
         'users',
         'company_info',
         'settings',
-        'invoice_payments',
+         'invoice_payments',
+         'purchase_bills',
+         'purchase_bill_items',
+         'purchase_bill_payments',
       ]),
     );
 

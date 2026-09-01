@@ -108,16 +108,56 @@ class PurchaseBillService {
     return result;
   }
 
-  static Future<void> recordPayment(String id, double amount) async {
+  static Future<PurchaseBillPayment> recordPayment(
+    String id,
+    double amount, {
+    required DateTime datePaid,
+    String? paymentMethod,
+    String? notes,
+  }) async {
     final db = await dbHelper.database;
     final bill = await getBill(id);
-    if (bill == null) return;
-    await db.update(
-      'purchase_bills',
-      {'amount_paid': (bill.amountPaid + amount).clamp(0, bill.totalAmount)},
-      where: 'id = ?',
-      whereArgs: [id],
+    if (bill == null) throw StateError('Purchase bill not found: $id');
+    final recordedAmount = amount.clamp(0, bill.outstanding).toDouble();
+    if (recordedAmount <= 0) throw StateError('Purchase bill is fully paid');
+    final paid = bill.amountPaid + recordedAmount;
+    final payment = PurchaseBillPayment(
+      id: const Uuid().v4(),
+      purchaseBillId: id,
+      amountPaid: recordedAmount,
+      previouslyPaid: bill.amountPaid,
+      balanceAfter:
+          (bill.totalAmount - paid).clamp(0, double.infinity).toDouble(),
+      datePaid: datePaid,
+      paymentMethod: paymentMethod,
+      notes: notes,
     );
+    await db.transaction((txn) async {
+      await txn.insert('purchase_bill_payments', payment.toMap());
+      await txn.update('purchase_bills', {'amount_paid': paid},
+          where: 'id = ?', whereArgs: [id]);
+    });
+    return payment;
+  }
+
+  static Future<List<PurchaseBillPayment>> getPayments(String billId) async {
+    final db = await dbHelper.database;
+    final rows = await db.query('purchase_bill_payments',
+        where: 'purchase_bill_id = ?',
+        whereArgs: [billId],
+        orderBy: 'date_paid ASC, rowid ASC');
+    return rows.map(PurchaseBillPayment.fromMap).toList();
+  }
+
+  static Future<void> deletePayment(PurchaseBillPayment payment) async {
+    final db = await dbHelper.database;
+    await db.transaction((txn) async {
+      await txn.delete('purchase_bill_payments',
+          where: 'id = ?', whereArgs: [payment.id]);
+      await txn.rawUpdate(
+          'UPDATE purchase_bills SET amount_paid = MAX(0, amount_paid - ?) WHERE id = ?',
+          [payment.amountPaid, payment.purchaseBillId]);
+    });
   }
 
   static PurchaseBill _fromMaps(

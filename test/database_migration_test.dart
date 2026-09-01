@@ -217,6 +217,10 @@ void main() {
     expect(companyInfo['pan_number'], '');
     expect(companyInfo['fssai_code'], '');
 
+    final paymentTables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'purchase_bill_payments'");
+    expect(paymentTables, hasLength(1));
+
     await db.close();
   });
 }

@@ -17,8 +17,8 @@ abstract class ProductRepository {
   });
   Future<int> getProductCount([String query = '', String? type]);
   Future<void> deleteProduct(String id);
-  Future<void> updateProductStock(String id, int newStock);
-  Future<bool> hasSufficientStock(String productId, int quantity);
+  Future<void> updateProductStock(String id, num newStock);
+  Future<bool> hasSufficientStock(String productId, num quantity);
   Future<Product?> findDuplicateByName(String name);
   Future<void> deleteAllProducts();
   Future<void> insertBatch(List<Product> products, {int batchSize = 50});

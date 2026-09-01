@@ -18,7 +18,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 46;
+  final dbVersion = 47;
 
   /// Emits when the sync engine finishes applying pulled remote rows, so the
   /// UI layer can refresh its lists. Write-side signaling needs no stream:
@@ -80,7 +80,7 @@ class DatabaseHelper {
         name TEXT,
         description TEXT,
         price REAL,
-        stock INTEGER,
+        stock REAL,
         hsncode TEXT,
         tax_rate INTEGER,
         type TEXT DEFAULT 'product',
@@ -456,6 +456,20 @@ class DatabaseHelper {
         amount REAL DEFAULT 0
       )
     ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS purchase_bill_payments (
+        id TEXT PRIMARY KEY,
+        purchase_bill_id TEXT NOT NULL,
+        amount_paid REAL NOT NULL,
+        previously_paid REAL NOT NULL DEFAULT 0,
+        balance_after REAL NOT NULL DEFAULT 0,
+        date_paid TEXT NOT NULL,
+        payment_method TEXT,
+        notes TEXT
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_purchase_bill_payments_bill ON purchase_bill_payments(purchase_bill_id)');
 
     // ── Phase 7: Sync foundation (dbplan.md §3.2) ──
     // Columns + change-capture triggers so every write path (current and
@@ -1235,6 +1249,29 @@ class DatabaseHelper {
         for (final table in ['purchase_bills', 'purchase_bill_items']) {
           await addSyncColumns(db, table);
         }
+        await installSyncCapture(db);
+      });
+    }
+
+    if (oldVersion < 47) {
+      await _runMigrationStep(db, 47, 'create_purchase_bill_payments', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS purchase_bill_payments (
+            id TEXT PRIMARY KEY,
+            purchase_bill_id TEXT NOT NULL,
+            amount_paid REAL NOT NULL,
+            previously_paid REAL NOT NULL DEFAULT 0,
+            balance_after REAL NOT NULL DEFAULT 0,
+            date_paid TEXT NOT NULL,
+            payment_method TEXT,
+            notes TEXT
+          )
+        ''');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_purchase_bill_payments_bill ON purchase_bill_payments(purchase_bill_id)');
+      });
+      await _runMigrationStep(db, 47, 'sync_register_purchase_bill_payments', () async {
+        await addSyncColumns(db, 'purchase_bill_payments');
         await installSyncCapture(db);
       });
     }

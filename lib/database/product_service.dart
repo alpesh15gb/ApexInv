@@ -227,13 +227,13 @@ class ProductService {
         where: 'product_id = ?', whereArgs: [productId]);
   }
 
-  static Future<void> updateProductStock(String id, int newStock) async {
+  static Future<void> updateProductStock(String id, num newStock) async {
     final db = await dbHelper.database;
     await db.update('products', {'stock': newStock},
         where: 'id = ?', whereArgs: [id]);
   }
 
-  static Future<bool> hasSufficientStock(String productId, int quantity) async {
+  static Future<bool> hasSufficientStock(String productId, num quantity) async {
     final product = await getProductById(productId);
     if (product == null) return false;
     return product.unlimitedStock || product.stock >= quantity;

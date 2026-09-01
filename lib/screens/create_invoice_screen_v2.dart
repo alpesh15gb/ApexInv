@@ -715,7 +715,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                 .createInvoiceInsufficientStockTitle),
             content: Text(
               AppLocalizations.of(context)!
-                  .createInvoiceInsufficientStockMessage(product.stock, qty),
+                   .createInvoiceInsufficientStockMessage(product.stock.toInt(), qty),
             ),
             actions: [
               TextButton(
@@ -894,7 +894,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                           Text(
                               AppLocalizations.of(context)!
                                   .createInvoiceAvailableStockLabel(
-                                      product.stock),
+                                       product.stock.toInt()),
                               style: const TextStyle(color: Colors.green)),
                         ],
                       ),

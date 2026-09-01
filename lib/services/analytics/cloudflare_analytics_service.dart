@@ -32,5 +32,5 @@ class CloudflareAnalyticsService {
     }
   }
 
-  static const _heartbeatUrl = AnalyticsConfig.heartbeatUrl;
+  static const _heartbeatUrl = '${AppConfig.appUrl}/api/heartbeat';
 }

@@ -38,6 +38,7 @@ const syncTableOrder = <String>[
   'products',
   'purchase_bills',
   'purchase_bill_items',
+  'purchase_bill_payments',
   'invoices',
   'invoice_items',
   'invoice_payments',

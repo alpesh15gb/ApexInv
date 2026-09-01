@@ -17,6 +17,7 @@ import 'package:apexbooks/screens/onboarding/onboarding_step_company.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_done.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_invoice.dart';
 import 'package:apexbooks/screens/settings/cloud_sync_screen.dart';
+import 'package:apexbooks/utils/app_logger.dart';
 
 /// One-time, skippable first-login setup wizard. Each step persists its own
 /// fields immediately on "Next" so progress survives even if the app is
@@ -200,6 +201,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<void> _handleNext() async {
     if (_isBusy) return;
+    if (_currentStep == 0 && _nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Company name is required to continue'),
+      ));
+      return;
+    }
     setState(() => _isBusy = true);
     try {
       switch (_currentStep) {
@@ -216,6 +223,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       }
       if (!mounted) return;
       await _goToPage(_currentStep + 1);
+    } catch (e, stack) {
+      AppLogger.e('OnboardingScreen', 'Failed to save setup step', e, stack);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not save these settings. Please try again.'),
+        ));
+      }
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }

@@ -3,7 +3,7 @@ class Product {
   String name;
   String description;
   double price;
-  int stock;
+  num stock;
   String hsncode;
   // ignore: non_constant_identifier_names
   int tax_rate;
@@ -46,7 +46,7 @@ class Product {
       price: (map['price'] is int)
           ? (map['price'] as int).toDouble()
           : (map['price'] ?? 0.0).toDouble(),
-      stock: map['stock'] ?? 0,
+       stock: (map['stock'] as num?) ?? 0,
       hsncode: map['hsncode'] ?? '',
       tax_rate: map['tax_rate'] ?? 0,
       type: map['type'] as String? ?? 'product',
@@ -69,7 +69,7 @@ class Product {
       price: (map['product_price'] is int)
           ? (map['product_price'] as int).toDouble()
           : (map['product_price'] ?? 0.0).toDouble(),
-      stock: map['product_stock'] ?? 0,
+       stock: (map['product_stock'] as num?) ?? 0,
       hsncode: map['product_hsn_code'] ?? '',
       tax_rate: map['product_tax_rate'] ?? 0,
       type: map['product_type'] as String? ?? 'product',

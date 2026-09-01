@@ -57,6 +57,8 @@ class MoreMenuScreen extends ConsumerWidget {
                 showDot: hasUpdate),
             _tile(context, 17, Icons.notifications_active_outlined,
                 'Payment Reminders'),
+            if (user.isAdmin())
+              _tile(context, 18, Icons.fact_check_outlined, 'Audit Log'),
           ]),
           const SizedBox(height: 16),
           _logoutTile(context),

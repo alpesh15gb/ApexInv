@@ -11,6 +11,7 @@ import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/database/report_service.dart';
+import 'package:apexbooks/database/ledger_service.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/services/customer_statement_pdf_service.dart';
 import 'package:apexbooks/services/gstr_export_service.dart';
@@ -85,6 +86,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   PnlSummary? _pnl;
   List<ExpiryRow> _expiries = [];
   List<ChequeEntry> _cheques = [];
+  TrialBalance? _trialBalance;
+  BalanceSheet? _balanceSheet;
   bool _isExportingGstr = false;
   bool _gstrExportError = false;
   String? _gstrExportStatus;
@@ -444,6 +447,16 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           final chequeRows = await ReportService.getCheques();
           if (!mounted) return;
           setState(() => _cheques = chequeRows);
+        case 12:
+          final (tFrom, tTo) = _range;
+          final tb =
+              await LedgerService.getTrialBalance(from: tFrom, to: tTo);
+          if (!mounted) return;
+          setState(() => _trialBalance = tb);
+        case 13:
+          final bs = await LedgerService.getBalanceSheet();
+          if (!mounted) return;
+          setState(() => _balanceSheet = bs);
       }
       if (mounted) {
         setState(() {
@@ -760,6 +773,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     (Icons.trending_up_outlined, Icons.trending_up),
     (Icons.science_outlined, Icons.science),
     (Icons.credit_score_outlined, Icons.credit_score),
+    (Icons.account_tree_outlined, Icons.account_tree),
+    (Icons.balance_outlined, Icons.balance),
   ];
 
   String _presetLabel(_DatePreset preset) {
@@ -788,6 +803,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       8 => 'Day Book',
       9 => 'Profit & Loss',
       10 => 'Expiries',
+      12 => 'Trial Balance',
+      13 => 'Balance Sheet',
       _ => 'Cheques',
     };
   }
@@ -1191,8 +1208,168 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       9 => _buildPnl(),
       10 => _buildExpiries(),
       11 => _buildCheques(),
+      12 => _buildTrialBalance(),
+      13 => _buildBalanceSheet(),
       _ => const SizedBox.shrink(),
     };
+  }
+
+  Widget _buildTrialBalance() {
+    final tb = _trialBalance;
+    if (tb == null) {
+      return _sectionCard(
+          child: _emptyState('Loading trial balance…'));
+    }
+    return Column(children: [
+      _kpiGrid([
+        _kpiCard(
+            'Total Debit', _money(tb.totalDebit), const Color(0xFF002E78),
+            Icons.south_west),
+        _kpiCard(
+            'Total Credit', _money(tb.totalCredit), const Color(0xFF7C3AED),
+            Icons.north_east),
+        _kpiCard(
+            tb.balanced ? 'Balanced' : 'Imbalance',
+            tb.balanced ? '✓' : _money((tb.totalDebit - tb.totalCredit).abs()),
+            tb.balanced
+                ? const Color(0xFF16A34A)
+                : const Color(0xFFDC2626),
+            Icons.check_circle_outline),
+      ]),
+      _sectionCard(
+        padding: EdgeInsets.zero,
+        child: Column(children: [
+          _statementTableHeaderless(['Account', 'Debit', 'Credit']),
+          ...tb.rows.map((r) => Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                    border: Border(
+                        bottom: BorderSide(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .outlineVariant))),
+                child: Row(children: [
+                  Expanded(
+                      flex: 4,
+                      child: Text(r.account,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13))),
+                  Expanded(
+                      flex: 2,
+                      child: Text(
+                        r.debit > 0 ? _money(r.debit) : '',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontSize: 13),
+                      )),
+                  Expanded(
+                      flex: 2,
+                      child: Text(
+                        r.credit > 0 ? _money(r.credit) : '',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontSize: 13),
+                      )),
+                ]),
+              )),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: Row(children: [
+              const Expanded(
+                  flex: 4,
+                  child: Text('Total',
+                      style: TextStyle(fontWeight: FontWeight.w700))),
+              Expanded(
+                  flex: 2,
+                  child: Text(_money(tb.totalDebit),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(fontWeight: FontWeight.w700))),
+              Expanded(
+                  flex: 2,
+                  child: Text(_money(tb.totalCredit),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(fontWeight: FontWeight.w700))),
+            ]),
+          ),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _buildBalanceSheet() {
+    final bs = _balanceSheet;
+    if (bs == null) {
+      return _sectionCard(
+          child: _emptyState('Loading balance sheet…'));
+    }
+    Widget row(String label, double value, {bool bold = false}) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child:
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: bold ? FontWeight.w700 : FontWeight.w400)),
+          Text(_money(value),
+              style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: bold ? FontWeight.w700 : FontWeight.w500)),
+        ]),
+      );
+    }
+
+    return Column(children: [
+      _sectionCard(
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('ASSETS',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      letterSpacing: 0.8)),
+              const SizedBox(height: 8),
+              row('Cash & Bank', bs.cash),
+              row('Accounts Receivable', bs.receivable),
+              row('GST Input Credit (ITC)', bs.gstInput),
+              const Divider(),
+              row('Total Assets', bs.assets, bold: true),
+            ]),
+      ),
+      _sectionCard(
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('LIABILITIES',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      letterSpacing: 0.8)),
+              const SizedBox(height: 8),
+              row('Accounts Payable', bs.payables),
+              row('GST Output Payable', bs.gstOutput),
+              const SizedBox(height: 16),
+              Text('EQUITY',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      letterSpacing: 0.8)),
+              const SizedBox(height: 8),
+              row('Opening Capital', bs.openingCapital),
+              row('Net Profit', bs.netProfit),
+              const Divider(),
+              row(
+                  'Total Liabilities & Equity',
+                  bs.payables + bs.gstOutput + bs.openingCapital + bs.netProfit,
+                  bold: true),
+            ]),
+      ),
+    ]);
   }
 
   Widget _buildDayBook() {

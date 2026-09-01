@@ -86,8 +86,8 @@ class ProductService {
       final result = await db.query(
         'products',
         where: typeFilter != null
-            ? '(LOWER(name) LIKE ? OR LOWER(hsncode) LIKE ?) AND type = ?'
-            : 'LOWER(name) LIKE ? OR LOWER(hsncode) LIKE ?',
+            ? '(LOWER(name) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?) AND type = ?'
+            : 'LOWER(name) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?',
         whereArgs: typeFilter != null
             ? ['%$queryLOwer%', '%$queryLOwer%', typeFilter]
             : ['%$queryLOwer%', '%$queryLOwer%'],
@@ -113,7 +113,7 @@ class ProductService {
     final queryLOwer = query.toLowerCase();
     if (query.isNotEmpty && typeFilter != null) {
       where =
-          '(LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ?) AND type = ?';
+          '(LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?) AND type = ?';
       whereArgs = [
         '%$queryLOwer%',
         '%$queryLOwer%',
@@ -122,7 +122,7 @@ class ProductService {
       ];
     } else if (query.isNotEmpty) {
       where =
-          'LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ?';
+          'LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?';
       whereArgs = ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%'];
     } else if (typeFilter != null) {
       where = 'type = ?';
@@ -147,12 +147,12 @@ class ProductService {
     final queryLOwer = query.toLowerCase();
     if (query.isNotEmpty && typeFilter != null) {
       return Sqflite.firstIntValue(await db.rawQuery(
-        "SELECT COUNT(*) FROM products WHERE (LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ?) AND type = ?",
+        "SELECT COUNT(*) FROM products WHERE (LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?) AND type = ?",
         ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%', typeFilter],
       ))!;
     } else if (query.isNotEmpty) {
       return Sqflite.firstIntValue(await db.rawQuery(
-        "SELECT COUNT(*) FROM products WHERE LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ?",
+        "SELECT COUNT(*) FROM products WHERE LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?",
         ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%'],
       ))!;
     } else if (typeFilter != null) {

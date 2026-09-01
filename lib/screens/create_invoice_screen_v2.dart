@@ -22,6 +22,7 @@ import 'package:apexbooks/services/invoice_pdf_services.dart';
 import 'package:apexbooks/services/pdf_service.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/widgets/barcode_scanner_sheet.dart';
 
 class InvoiceFormGuard {
   Future<bool> Function()? canLeave;
@@ -4454,13 +4455,28 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   }
 
   Widget _productQuickAddBarV2() {
-    // Compact: full-width search row, Custom Item on its own row below —
+    Future<void> scanIntoSearch() async {
+      final code = await BarcodeScannerSheet.show(context);
+      if (code == null || code.isEmpty || !mounted) return;
+      searchController.text = code;
+      _filterProducts(code);
+      setState(() => _showProductDropdownV2 = code.trim().isNotEmpty);
+    }
+
+    // Compact: full-width search row + scan, Custom Item on its own row below —
     // they must not share a cramped row on phones.
     if (MediaQuery.sizeOf(context).width < Breakpoints.compactMax) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _productSearchFieldV2(),
+          Row(children: [
+            Expanded(child: _productSearchFieldV2()),
+            IconButton(
+              onPressed: scanIntoSearch,
+              icon: const Icon(Icons.qr_code_scanner),
+              tooltip: 'Scan barcode',
+            ),
+          ]),
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
@@ -4485,7 +4501,12 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(child: _productSearchFieldV2()),
-        const SizedBox(width: 12),
+        IconButton(
+          onPressed: scanIntoSearch,
+          icon: const Icon(Icons.qr_code_scanner),
+          tooltip: 'Scan barcode',
+        ),
+        const SizedBox(width: 8),
         OutlinedButton.icon(
           onPressed: _addAdHocItemDialog,
           icon: const Icon(Icons.add, size: 16),

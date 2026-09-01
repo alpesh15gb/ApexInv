@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/widgets/barcode_scanner_sheet.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -60,6 +61,8 @@ class _ProductManagementScreenV2State
   final _stockController = TextEditingController(text: '0');
   final _hsnCodeController = TextEditingController();
   final _taxRateController = TextEditingController();
+  final _barcodeController = TextEditingController();
+  final _reorderLevelController = TextEditingController(text: '0');
   final _customUnitController = TextEditingController();
   String _selectedUnit = '';
   final _formKey = GlobalKey<FormState>();
@@ -294,6 +297,8 @@ class _ProductManagementScreenV2State
     _taxRateController.dispose();
     _hsnCodeController.dispose();
     _customUnitController.dispose();
+    _barcodeController.dispose();
+    _reorderLevelController.dispose();
     _storageLocationController.dispose();
     _containerNumberController.dispose();
     _batchNumberController.dispose();
@@ -372,6 +377,9 @@ class _ProductManagementScreenV2State
         unit: _selectedUnit.trim(),
         unlimitedStock: _unlimitedStock,
         priceIncludesTax: _priceIncludesTax,
+        reorderLevel:
+            double.tryParse(_reorderLevelController.text.trim()) ?? 0,
+        barcode: _barcodeController.text.trim(),
       );
 
       await ref.read(productRepositoryProvider).insertProduct(newProduct);
@@ -411,6 +419,8 @@ class _ProductManagementScreenV2State
     _hsnCodeController.clear();
     _taxRateController.clear();
     _taxRateController.text = "18";
+    _barcodeController.clear();
+    _reorderLevelController.clear();
     _customUnitController.clear();
     _storageLocationController.clear();
     _containerNumberController.clear();
@@ -2206,7 +2216,14 @@ class _ProductManagementScreenV2State
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          searchField,
+          Row(children: [
+            Expanded(child: searchField),
+            IconButton(
+              onPressed: _scanBarcodeIntoSearch,
+              icon: const Icon(Icons.qr_code_scanner),
+              tooltip: 'Scan barcode',
+            ),
+          ]),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -2271,7 +2288,12 @@ class _ProductManagementScreenV2State
     return Row(
       children: [
         Expanded(child: searchField),
-        const SizedBox(width: 10),
+        IconButton(
+          onPressed: _scanBarcodeIntoSearch,
+          icon: const Icon(Icons.qr_code_scanner),
+          tooltip: 'Scan barcode',
+        ),
+        const SizedBox(width: 6),
         Flexible(
           child: Wrap(
             alignment: WrapAlignment.end,
@@ -2350,6 +2372,12 @@ class _ProductManagementScreenV2State
   }
 
   final GlobalKey _selectedTabKeyV2 = GlobalKey();
+
+  Future<void> _scanBarcodeIntoSearch() async {
+    final code = await BarcodeScannerSheet.show(context);
+    if (code == null || code.isEmpty || !mounted) return;
+    _onSearchChangedV2(code);
+  }
 
   Widget _tabChipV2(String label, int count, int index, {Key? chipKey}) {
     final selected = _activeTabV2 == index;
@@ -3329,6 +3357,9 @@ class _ProductManagementScreenV2State
         TextEditingController(text: metadata?.supplierName ?? '');
     final skuCtrl = TextEditingController(text: metadata?.skuCode ?? '');
     final notesCtrl = TextEditingController(text: metadata?.notes ?? '');
+    final barcodeCtrl = TextEditingController(text: product.barcode);
+    final reorderCtrl =
+        TextEditingController(text: product.reorderLevel.toStringAsFixed(0));
     final formKey = GlobalKey<FormState>();
 
     String itemType = product.type;
@@ -3357,6 +3388,8 @@ class _ProductManagementScreenV2State
       supplierCtrl.dispose();
       skuCtrl.dispose();
       notesCtrl.dispose();
+      barcodeCtrl.dispose();
+      reorderCtrl.dispose();
     }
 
     await showDialog(
@@ -3434,6 +3467,9 @@ class _ProductManagementScreenV2State
                 unit: unit.trim(),
                 unlimitedStock: unlimitedStock,
                 priceIncludesTax: priceIncludesTax,
+                reorderLevel:
+                    double.tryParse(reorderCtrl.text.trim()) ?? 0,
+                barcode: barcodeCtrl.text.trim(),
               );
               await ref.read(productRepositoryProvider).updateProduct(updated);
               await ref.read(productRepositoryProvider).upsertProductMetadata(
@@ -3716,6 +3752,42 @@ class _ProductManagementScreenV2State
                                           readOnly: !isEdit,
                                         ),
                                       ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: field(barcodeCtrl, 'Barcode',
+                                          Icons.qr_code),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      onPressed: !isEdit
+                                          ? null
+                                          : () async {
+                                              final code =
+                                                  await BarcodeScannerSheet
+                                                      .show(dialogContext);
+                                              if (code != null &&
+                                                  code.isNotEmpty) {
+                                                setDialogState(() =>
+                                                    barcodeCtrl.text = code);
+                                              }
+                                            },
+                                      icon:
+                                          const Icon(Icons.qr_code_scanner, size: 20),
+                                      tooltip: 'Scan barcode',
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: field(
+                                          reorderCtrl, 'Reorder level',
+                                          Icons.low_priority,
+                                          keyboardType:
+                                              const TextInputType.numberWithOptions(
+                                                  decimal: true)),
+                                    ),
                                   ],
                                 ),
                                 if (_columnsConfig.stock)

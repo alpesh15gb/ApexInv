@@ -36,6 +36,10 @@ class Invoice {
       invoiceDiscountType; // invoice-level discount, applied after tax
   double invoiceDiscountValue;
   bool hideInvoiceNumber; // hide real invoice number in PDF output only
+  String? referenceInvoiceId; // for credit/debit notes
+  bool isRecurring;
+  String? recurringFrequency; // weekly/monthly/quarterly/yearly
+  DateTime? recurringNextDate;
   String?
       customInvoiceNumber; // shown instead of invoiceNumber in PDF when hideInvoiceNumber is true
   String paymentTermId; // linked payment term ID
@@ -68,6 +72,10 @@ class Invoice {
     this.customInvoiceNumber,
     this.paymentTermId = '',
     this.customFields,
+    this.referenceInvoiceId,
+    this.isRecurring = false,
+    this.recurringFrequency,
+    this.recurringNextDate,
   });
 
   /// Text to render for the invoice number in PDF/receipt output, or null to omit the line entirely.

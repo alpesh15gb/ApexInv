@@ -45,6 +45,7 @@ dependencies:
   flutter_esc_pos_utils: ^1.0.1
   supabase_flutter: ^2.5.0
   connectivity_plus: ^6.0.0
+  mobile_scanner: ^5.2.3
 
 dev_dependencies:
   flutter_test:

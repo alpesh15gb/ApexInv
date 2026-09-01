@@ -14,6 +14,8 @@ class Product {
   String unit;
   bool unlimitedStock;
   bool priceIncludesTax;
+  double reorderLevel; // low-stock alert threshold
+  String barcode;
 
   Product({
     required this.id,
@@ -31,6 +33,8 @@ class Product {
     this.unit = '',
     this.unlimitedStock = false,
     this.priceIncludesTax = false,
+    this.reorderLevel = 0,
+    this.barcode = '',
   });
 
   // Convert a Map into a Product object
@@ -52,6 +56,8 @@ class Product {
       unit: map['unit'] as String? ?? '',
       unlimitedStock: (map['unlimited_stock'] ?? 0) == 1,
       priceIncludesTax: (map['price_includes_tax'] ?? 0) == 1,
+      reorderLevel: (map['reorder_level'] as num?)?.toDouble() ?? 0,
+      barcode: map['barcode'] as String? ?? '',
     );
   }
 

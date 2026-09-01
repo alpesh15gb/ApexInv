@@ -47,6 +47,8 @@ import 'package:apexbooks/screens/import_screen.dart';
 import 'package:apexbooks/screens/more_menu_screen.dart';
 import 'package:apexbooks/screens/purchase_bill_screen.dart';
 import 'package:apexbooks/screens/reminders_screen.dart';
+import 'package:apexbooks/screens/audit_log_screen.dart';
+import 'package:apexbooks/database/recurring_invoice_engine.dart';
 
 // invoice.type is a raw internal value ('Invoice'/'Quotation'/'Receipt'/
 // 'Credit Note'/'Debit Note'/'Delivery Challan'/'Proforma') used
@@ -108,6 +110,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     super.initState();
     _currentUser = widget.loggedInUser;
     _loadCreateInvoiceLayout();
+    // Offline-first recurring billing: generate due instances on start.
+    RecurringInvoiceEngine.generateDue().catchError((_) {});
     if (ref.read(appEditionConfigProvider).enableUpdateCheck) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
     }
@@ -279,6 +283,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         );
       case 17:
         return const RemindersScreen();
+      case 18:
+        return const AuditLogScreen();
       case 10:
         return SettingsScreen(
           currentUser: _currentUser,
@@ -679,6 +685,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         showDot: _hasUpdate),
                     _buildNavItem(17, Icons.notifications_active_outlined,
                         Icons.notifications_active, 'Reminders'),
+                    if (_currentUser.isAdmin())
+                      _buildNavItem(18, Icons.fact_check_outlined,
+                          Icons.fact_check, 'Audit Log'),
                   ],
                 ),
               ),

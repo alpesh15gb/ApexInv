@@ -106,7 +106,7 @@ class _PosScreenState extends State<PosScreen> {
         items: _cart.values.toList(),
         date: DateTime.now(),
         type: 'Invoice',
-        taxMode: TaxMode.item,
+        taxMode: TaxMode.perItem,
       );
 
   double get _subtotal => _previewInvoice.subtotal;

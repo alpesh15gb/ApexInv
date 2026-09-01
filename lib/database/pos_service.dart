@@ -58,7 +58,7 @@ class PosService {
       notes: notes,
       currencyCode: currencyCode,
       currencySymbol: currencySymbol,
-      taxMode: TaxMode.item,
+      taxMode: TaxMode.perItem,
     );
     final paid = tenders.fold(0.0, (sum, tender) => sum + tender.amount);
     if (tenders.any((t) => t.amount <= 0) || paid > invoice.total + 0.005) {

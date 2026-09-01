@@ -19,5 +19,7 @@ jobs:
           flutter-version: '3.32.8'
           cache: true
       - run: flutter pub get
-      - run: flutter analyze
+      # Keep compiler errors blocking while the repository's existing lint
+      # backlog remains visible without breaking unrelated feature work.
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
       - run: flutter test

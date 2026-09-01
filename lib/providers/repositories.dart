@@ -63,7 +63,6 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   );
 });
 
-
 // import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'package:apexbooks/repositories/company_info_repository.dart';
 // import 'package:apexbooks/repositories/customer_repository.dart';

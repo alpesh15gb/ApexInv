@@ -76,20 +76,19 @@ class TemplateListTile extends StatelessWidget {
   final VoidCallback onTap;
   final bool thermalDetailedTemplate;
 
-  const TemplateListTile({
-    super.key,
-    required this.template,
-    required this.name,
-    required this.description,
-    required this.themeColor,
-    required this.isPreviewed,
-    required this.isSaved,
-    required this.isDefault,
-    required this.onTap,
-    this.isDisabled = false,
-    this.disabledLabel,
-    required this.thermalDetailedTemplate
-  });
+  const TemplateListTile(
+      {super.key,
+      required this.template,
+      required this.name,
+      required this.description,
+      required this.themeColor,
+      required this.isPreviewed,
+      required this.isSaved,
+      required this.isDefault,
+      required this.onTap,
+      this.isDisabled = false,
+      this.disabledLabel,
+      required this.thermalDetailedTemplate});
 
   @override
   Widget build(BuildContext context) {
@@ -172,10 +171,12 @@ class TemplateListTile extends StatelessWidget {
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
-                          AppLocalizations.of(context)!.dashboardLayoutDefaultTitle,
+                          AppLocalizations.of(context)!
+                              .dashboardLayoutDefaultTitle,
                           style: TextStyle(
                             fontSize: AppFontSize.xsmall,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -193,7 +194,9 @@ class TemplateListTile extends StatelessWidget {
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
-                          disabledLabel ?? AppLocalizations.of(context)!.commonUnavailableLabel,
+                          disabledLabel ??
+                              AppLocalizations.of(context)!
+                                  .commonUnavailableLabel,
                           style: TextStyle(
                             fontSize: AppFontSize.xsmall,
                             color: Colors.amber[800],
@@ -506,14 +509,16 @@ class TemplatePreviewSketch extends StatelessWidget {
   Widget _gridClassic() {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFF334155), width: showDetails ? 1.2 : 1),
+        border: Border.all(
+            color: const Color(0xFF334155), width: showDetails ? 1.2 : 1),
       ),
       padding: EdgeInsets.all(showDetails ? 10 : 3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Centered header block
-          _fixedLine(showDetails ? 110 : 26, height: showDetails ? 8 : 3, color: themeColor),
+          _fixedLine(showDetails ? 110 : 26,
+              height: showDetails ? 8 : 3, color: themeColor),
           SizedBox(height: showDetails ? 5 : 2),
           _fixedLine(showDetails ? 80 : 20, height: showDetails ? 5 : 2),
           SizedBox(height: showDetails ? 10 : 3),
@@ -557,7 +562,9 @@ class TemplatePreviewSketch extends StatelessWidget {
             ),
             child: Column(
               children: [
-                Container(height: showDetails ? 16 : 4, color: const Color(0xFFE2E8F0)),
+                Container(
+                    height: showDetails ? 16 : 4,
+                    color: const Color(0xFFE2E8F0)),
                 Expanded(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -618,7 +625,7 @@ class TemplatePreviewSketch extends StatelessWidget {
   }
 
   Widget _thermal({bool detailed = false}) {
-    final rows = showDetails ? 20  : 5;
+    final rows = showDetails ? 20 : 5;
     return Center(
       child: FractionallySizedBox(
         widthFactor: 0.62,
@@ -629,7 +636,8 @@ class TemplatePreviewSketch extends StatelessWidget {
             // Centered header — narrow roll-paper look
             _dashedLine(),
             SizedBox(height: showDetails ? 8 : 2),
-            _fixedLine(showDetails ? 90 : 22, height: showDetails ? 7 : 3, color: themeColor),
+            _fixedLine(showDetails ? 90 : 22,
+                height: showDetails ? 7 : 3, color: themeColor),
             SizedBox(height: showDetails ? 4 : 1),
             _fixedLine(showDetails ? 70 : 16, height: showDetails ? 4 : 2),
             SizedBox(height: showDetails ? 2 : 1),
@@ -638,35 +646,41 @@ class TemplatePreviewSketch extends StatelessWidget {
             _dashedLine(),
             SizedBox(height: showDetails ? 6 : 2),
             // Item lines — name left, price right, no grid borders
-            ...List.generate(rows, (i) => Column(
-              children: [
-                Padding(
-                  padding: EdgeInsets.only(bottom: showDetails ? 4 : 1),
-                  child: Row(
-                    children: [
-                      Expanded(child: _line(.6, height: showDetails ? 5 : 2)),
-                      SizedBox(width: showDetails ? 6 : 2),
-                      if(!detailed)
-                      _fixedLine(showDetails ? 20 : 6, height: showDetails ? 5 : 2),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.only(bottom: showDetails ? 4 : 1),
-                  child: Row(
-                    children: [
-                      if(detailed)
-                      Expanded(child: _line(0.3, height: showDetails ? 5 : 2)),
-                      SizedBox(width: showDetails ? 6 : 2),
-                      if(detailed)
-                      _fixedLine(showDetails ? 20 : 6, height: showDetails ? 5 : 2),
-                    ],
-                  ),
-                )
-
-              ],
-            )
-            ),
+            ...List.generate(
+                rows,
+                (i) => Column(
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.only(bottom: showDetails ? 4 : 1),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                  child:
+                                      _line(.6, height: showDetails ? 5 : 2)),
+                              SizedBox(width: showDetails ? 6 : 2),
+                              if (!detailed)
+                                _fixedLine(showDetails ? 20 : 6,
+                                    height: showDetails ? 5 : 2),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.only(bottom: showDetails ? 4 : 1),
+                          child: Row(
+                            children: [
+                              if (detailed)
+                                Expanded(
+                                    child: _line(0.3,
+                                        height: showDetails ? 5 : 2)),
+                              SizedBox(width: showDetails ? 6 : 2),
+                              if (detailed)
+                                _fixedLine(showDetails ? 20 : 6,
+                                    height: showDetails ? 5 : 2),
+                            ],
+                          ),
+                        )
+                      ],
+                    )),
             SizedBox(height: showDetails ? 2 : 1),
             _dashedLine(),
             SizedBox(height: showDetails ? 6 : 2),
@@ -674,8 +688,10 @@ class TemplatePreviewSketch extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _fixedLine(showDetails ? 40 : 10, height: showDetails ? 7 : 3, color: themeColor),
-                _fixedLine(showDetails ? 40 : 10, height: showDetails ? 7 : 3, color: themeColor),
+                _fixedLine(showDetails ? 40 : 10,
+                    height: showDetails ? 7 : 3, color: themeColor),
+                _fixedLine(showDetails ? 40 : 10,
+                    height: showDetails ? 7 : 3, color: themeColor),
               ],
             ),
             SizedBox(height: showDetails ? 8 : 2),

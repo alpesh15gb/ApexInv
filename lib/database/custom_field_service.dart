@@ -14,12 +14,14 @@ class CustomFieldService {
   static Future<void> updateCustomField(CustomField field) async {
     final db = await dbHelper.database;
     final updateMap = field.toMap()..remove('id');
-    await db.update('custom_fields', updateMap, where: 'id = ?', whereArgs: [field.id]);
+    await db.update('custom_fields', updateMap,
+        where: 'id = ?', whereArgs: [field.id]);
   }
 
   static Future<CustomField?> getCustomFieldById(String id) async {
     final db = await dbHelper.database;
-    final maps = await db.query('custom_fields', where: 'id = ?', whereArgs: [id]);
+    final maps =
+        await db.query('custom_fields', where: 'id = ?', whereArgs: [id]);
     if (maps.isEmpty) return null;
     return CustomField.fromMap(maps.first);
   }
@@ -37,7 +39,8 @@ class CustomFieldService {
 
   static Future<String> generateNextId() async {
     final db = await dbHelper.database;
-    final result = await db.rawQuery("SELECT MAX(CAST(REPLACE(id, 'cf-', '') AS INTEGER)) FROM custom_fields WHERE id LIKE 'cf-%'");
+    final result = await db.rawQuery(
+        "SELECT MAX(CAST(REPLACE(id, 'cf-', '') AS INTEGER)) FROM custom_fields WHERE id LIKE 'cf-%'");
     final maxId = Sqflite.firstIntValue(result) ?? 0;
     return 'cf-${maxId + 1}';
   }
@@ -50,7 +53,9 @@ class CustomFieldService {
     if (jsonStr == null || jsonStr.isEmpty) return [];
     try {
       final list = jsonDecode(jsonStr) as List;
-      return list.map((e) => CustomFieldValue.fromMap(e as Map<String, dynamic>)).toList();
+      return list
+          .map((e) => CustomFieldValue.fromMap(e as Map<String, dynamic>))
+          .toList();
     } catch (_) {
       return [];
     }

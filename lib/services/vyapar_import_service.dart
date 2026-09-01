@@ -43,7 +43,8 @@ class VyaparImportResult {
 class VyaparImportService {
   /// Parse a .vyb file (which is a ZIP containing a .vyp SQLite database)
   /// and return the path to the extracted .vyp file.
-  static Future<String> extractVypFile(Uint8List vybBytes, String tempDir) async {
+  static Future<String> extractVypFile(
+      Uint8List vybBytes, String tempDir) async {
     final archive = ZipDecoder().decodeBytes(vybBytes);
     for (final file in archive) {
       if (file.isFile && file.name.endsWith('.vyp')) {
@@ -62,14 +63,16 @@ class VyaparImportService {
     try {
       final customerCount = await _count(db, 'kb_names', 'name_type = 1');
       final vendorCount = await _count(db, 'kb_names', 'name_type = 2');
-      final productCount = await _count(db, 'kb_items', 'item_is_active = 1 OR item_is_active IS NULL');
+      final productCount = await _count(
+          db, 'kb_items', 'item_is_active = 1 OR item_is_active IS NULL');
       final txnCount = await _count(db, 'kb_transactions', 'txn_type = 1');
       final firmCount = await _count(db, 'kb_firms', null);
 
       String firmName = '';
       if (firmCount > 0) {
         final firm = await db.query('kb_firms', limit: 1);
-        if (firm.isNotEmpty) firmName = firm.first['firm_name']?.toString() ?? '';
+        if (firm.isNotEmpty)
+          firmName = firm.first['firm_name']?.toString() ?? '';
       }
 
       return VyaparPreview(
@@ -103,21 +106,24 @@ class VyaparImportService {
       final firms = await vyaparDb.query('kb_firms', limit: 1);
       if (firms.isNotEmpty) {
         final firm = firms.first;
-        await invoisoDb.update('company_info', {
-          'name': firm['firm_name'] ?? '',
-          'phone': firm['firm_phone'] ?? '',
-          'email': firm['firm_email'] ?? '',
-          'gstin': firm['firm_gstin_number'] ?? '',
-          'address': firm['firm_address'] ?? '',
-          'pan_number': firm['firm_tin_number'] ?? '',
-          'country': 'India',
-        }, where: 'id = 1');
+        await invoisoDb.update(
+            'company_info',
+            {
+              'name': firm['firm_name'] ?? '',
+              'phone': firm['firm_phone'] ?? '',
+              'email': firm['firm_email'] ?? '',
+              'gstin': firm['firm_gstin_number'] ?? '',
+              'address': firm['firm_address'] ?? '',
+              'pan_number': firm['firm_tin_number'] ?? '',
+              'country': 'India',
+            },
+            where: 'id = 1');
       }
 
       // ── 2. Import Customers (name_type = 1) ──
       onProgress?.call('Importing customers...');
-      final customers = await vyaparDb.query('kb_names',
-          where: 'name_type = 1');
+      final customers =
+          await vyaparDb.query('kb_names', where: 'name_type = 1');
       for (final row in customers) {
         try {
           final phone = row['phone_number']?.toString() ?? '';
@@ -177,13 +183,16 @@ class VyaparImportService {
             continue;
           }
 
-          final salePrice = (row['item_sale_unit_price'] as num?)?.toDouble() ?? 0.0;
-          final purchasePrice = (row['item_purchase_unit_price'] as num?)?.toDouble() ?? 0.0;
+          final salePrice =
+              (row['item_sale_unit_price'] as num?)?.toDouble() ?? 0.0;
+          final purchasePrice =
+              (row['item_purchase_unit_price'] as num?)?.toDouble() ?? 0.0;
           final stock = (row['item_stock_quantity'] as num?)?.toDouble() ?? 0;
           final hsncode = row['item_hsn_sac_code']?.toString() ?? '';
           final description = row['item_description']?.toString() ?? '';
           final mrp = (row['item_mrp'] as num?)?.toDouble();
-          final wholesalePrice = (row['item_wholesale_price'] as num?)?.toDouble();
+          final wholesalePrice =
+              (row['item_wholesale_price'] as num?)?.toDouble();
 
           // Determine tax rate from tax_id mapping
           double taxRate = 0;
@@ -227,8 +236,7 @@ class VyaparImportService {
       // ── 4. Import Invoices (txn_type = 1 = Sale) ──
       onProgress?.call('Importing invoices...');
       final transactions = await vyaparDb.query('kb_transactions',
-          where: 'txn_type = 1',
-          orderBy: 'txn_date ASC');
+          where: 'txn_type = 1', orderBy: 'txn_date ASC');
 
       // Build name_id → customer_id mapping
       final nameIdToCustomerId = <int, String>{};
@@ -240,7 +248,8 @@ class VyaparImportService {
         final vname = vn['full_name']?.toString() ?? '';
         // Find matching invoiso customer
         for (final cr in customerRows) {
-          if ((cr['name']?.toString() ?? '').toLowerCase() == vname.toLowerCase()) {
+          if ((cr['name']?.toString() ?? '').toLowerCase() ==
+              vname.toLowerCase()) {
             nameIdToCustomerId[nid] = cr['id'] as String;
             break;
           }
@@ -251,9 +260,11 @@ class VyaparImportService {
         try {
           final txnId = txn['txn_id'] as int;
           final nameId = txn['txn_name_id'] as int?;
-          final txnDate = txn['txn_date']?.toString() ?? DateTime.now().toIso8601String();
+          final txnDate =
+              txn['txn_date']?.toString() ?? DateTime.now().toIso8601String();
           final totalAmount = (txn['txn_cash_amount'] as num?)?.toDouble() ?? 0;
-          final balanceAmount = (txn['txn_balance_amount'] as num?)?.toDouble() ?? 0;
+          final balanceAmount =
+              (txn['txn_balance_amount'] as num?)?.toDouble() ?? 0;
           final paidAmount = totalAmount - balanceAmount;
           final status = txn['txn_status'] as int?;
           final paymentStatus = txn['txn_payment_status'] as int?;
@@ -346,8 +357,10 @@ class VyaparImportService {
             final liItemId = li['item_id'] as int?;
             final qty = (li['quantity'] as num?)?.toDouble() ?? 1;
             final ppu = (li['priceperunit'] as num?)?.toDouble() ?? 0;
-            final liDiscount = (li['lineitem_discount_amount'] as num?)?.toDouble() ?? 0;
-            final liTaxAmount = (li['lineitem_tax_amount'] as num?)?.toDouble() ?? 0;
+            final liDiscount =
+                (li['lineitem_discount_amount'] as num?)?.toDouble() ?? 0;
+            final liTaxAmount =
+                (li['lineitem_tax_amount'] as num?)?.toDouble() ?? 0;
             final liDesc = li['lineitem_description']?.toString() ?? '';
 
             // Try to find matching product
@@ -466,4 +479,3 @@ class VyaparPreview {
     required this.firmName,
   });
 }
-

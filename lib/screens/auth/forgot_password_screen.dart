@@ -10,7 +10,8 @@ class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
 
   @override
-  ConsumerState<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+  ConsumerState<ForgotPasswordScreen> createState() =>
+      _ForgotPasswordScreenState();
 }
 
 class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
@@ -65,17 +66,20 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     setState(() => _errorMessage = null);
 
     if (username.isEmpty || responseCode.isEmpty) {
-      setState(() => _errorMessage = 'Please enter username and response code.');
+      setState(
+          () => _errorMessage = 'Please enter username and response code.');
       return;
     }
     if (_installationId == null) {
-      setState(() => _errorMessage = 'Please wait, still loading installation info.');
+      setState(() =>
+          _errorMessage = 'Please wait, still loading installation info.');
       return;
     }
 
     setState(() => _isVerifying = true);
 
-    final user = await ref.read(authRepositoryProvider).getUserByUsername(username);
+    final user =
+        await ref.read(authRepositoryProvider).getUserByUsername(username);
     final valid = await ResetCodeVerifier.verifyResetCode(
       installationId: _installationId!,
       responseCode: responseCode,
@@ -106,11 +110,13 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     setState(() => _errorMessage = null);
 
     if (newPassword.length < 8) {
-      setState(() => _errorMessage = 'New password must be at least 8 characters.');
+      setState(
+          () => _errorMessage = 'New password must be at least 8 characters.');
       return;
     }
     if (newPassword.toLowerCase() == _verifiedUsername?.toLowerCase()) {
-      setState(() => _errorMessage = 'Password cannot be the same as your username.');
+      setState(() =>
+          _errorMessage = 'Password cannot be the same as your username.');
       return;
     }
     if (newPassword != confirmPassword) {
@@ -121,8 +127,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      await ref.read(authRepositoryProvider).updatePassword(_verifiedUserId!, newPassword);
-      await ref.read(authRepositoryProvider).markPasswordChanged(_verifiedUserId!);
+      await ref
+          .read(authRepositoryProvider)
+          .updatePassword(_verifiedUserId!, newPassword);
+      await ref
+          .read(authRepositoryProvider)
+          .markPasswordChanged(_verifiedUserId!);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -159,185 +169,185 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
             child: Card(
-          elevation: 8,
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          child: Container(
-            width: cardWidth,
-            padding: EdgeInsets.all(cardPadding),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+              elevation: 8,
+              color: Theme.of(context).colorScheme.surfaceContainer,
+              child: Container(
+                width: cardWidth,
+                padding: EdgeInsets.all(cardPadding),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.password_outlined,
-                      color: Theme.of(context).primaryColor,
-                      size: 32,
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Reset Password',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-
-                if (_verifiedUserId == null) ...[
-                  const Text(
-                    'Share the Installation ID below with support to get a response code.',
-                    style: TextStyle(fontSize: 13),
-                  ),
-
-                  AppSpacing.hMedium,
-
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
+                    Row(
                       children: [
-                        Expanded(
-                          child: Text(
-                            _installationId ?? 'Loading...',
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                          ),
+                        Icon(
+                          Icons.password_outlined,
+                          color: Theme.of(context).primaryColor,
+                          size: 32,
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.copy, size: 18),
-                          tooltip: 'Copy Installation ID',
-                          onPressed: _installationId == null ? null : _copyInstallationId,
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Reset Password',
+                            style: TextStyle(
+                                fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-
-                  AppSpacing.hXlarge,
-
-                  if (_codeJustVerified)
-                    _buildSuccessBox(
-                      'Successfully verified. Enter your new password.',
-                    )
-                  else ...[
-                    TextField(
-                      controller: _usernameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Username',
-                        prefixIcon: Icon(Icons.person),
-                        border: OutlineInputBorder(),
+                    if (_verifiedUserId == null) ...[
+                      const Text(
+                        'Share the Installation ID below with support to get a response code.',
+                        style: TextStyle(fontSize: 13),
                       ),
-                    ),
-                    AppSpacing.hMedium,
-                    TextField(
-                      controller: _responseCodeController,
-                      decoration: const InputDecoration(
-                        labelText: 'Response Code',
-                        prefixIcon: Icon(Icons.vpn_key_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    if (_errorMessage != null) ...[
                       AppSpacing.hMedium,
-                      _buildErrorBox(_errorMessage!),
-                    ],
-                    AppSpacing.hXlarge,
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isVerifying ? null : _verifyCode,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 50),
-                          backgroundColor: Theme.of(context).primaryColor,
-                          foregroundColor: Colors.white,
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        child: _isVerifying
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Verify'),
-                      ),
-                    ),
-                  ],
-                ] else ...[
-                  _buildSuccessBox(
-                    'Successfully verified. Enter your new password.',
-                  ),
-                  AppSpacing.hMedium,
-                  TextField(
-                    controller: _newPasswordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: 'New Password (min 8 characters)',
-                      prefixIcon: const Icon(Icons.lock),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
-                      ),
-                    ),
-                  ),
-                  AppSpacing.hMedium,
-                  TextField(
-                    controller: _confirmPasswordController,
-                    obscureText: _obscurePassword,
-                    decoration: const InputDecoration(
-                      labelText: 'Confirm New Password',
-                      prefixIcon: Icon(Icons.lock),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  if (_errorMessage != null) ...[
-                    AppSpacing.hMedium,
-                    _buildErrorBox(_errorMessage!),
-                  ],
-                  AppSpacing.hXlarge,
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isSubmitting ? null : _submitNewPassword,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 50),
-                        backgroundColor: Theme.of(context).primaryColor,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: _isSubmitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _installationId ?? 'Loading...',
+                                style: const TextStyle(
+                                    fontFamily: 'monospace', fontSize: 13),
                               ),
-                            )
-                          : const Text('Set New Password'),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy, size: 18),
+                              tooltip: 'Copy Installation ID',
+                              onPressed: _installationId == null
+                                  ? null
+                                  : _copyInstallationId,
+                            ),
+                          ],
+                        ),
+                      ),
+                      AppSpacing.hXlarge,
+                      if (_codeJustVerified)
+                        _buildSuccessBox(
+                          'Successfully verified. Enter your new password.',
+                        )
+                      else ...[
+                        TextField(
+                          controller: _usernameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Username',
+                            prefixIcon: Icon(Icons.person),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        AppSpacing.hMedium,
+                        TextField(
+                          controller: _responseCodeController,
+                          decoration: const InputDecoration(
+                            labelText: 'Response Code',
+                            prefixIcon: Icon(Icons.vpn_key_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        if (_errorMessage != null) ...[
+                          AppSpacing.hMedium,
+                          _buildErrorBox(_errorMessage!),
+                        ],
+                        AppSpacing.hXlarge,
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isVerifying ? null : _verifyCode,
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 50),
+                              backgroundColor: Theme.of(context).primaryColor,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: _isVerifying
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Verify'),
+                          ),
+                        ),
+                      ],
+                    ] else ...[
+                      _buildSuccessBox(
+                        'Successfully verified. Enter your new password.',
+                      ),
+                      AppSpacing.hMedium,
+                      TextField(
+                        controller: _newPasswordController,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'New Password (min 8 characters)',
+                          prefixIcon: const Icon(Icons.lock),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
+                          ),
+                        ),
+                      ),
+                      AppSpacing.hMedium,
+                      TextField(
+                        controller: _confirmPasswordController,
+                        obscureText: _obscurePassword,
+                        decoration: const InputDecoration(
+                          labelText: 'Confirm New Password',
+                          prefixIcon: Icon(Icons.lock),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      if (_errorMessage != null) ...[
+                        AppSpacing.hMedium,
+                        _buildErrorBox(_errorMessage!),
+                      ],
+                      AppSpacing.hXlarge,
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isSubmitting ? null : _submitNewPassword,
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 50),
+                            backgroundColor: Theme.of(context).primaryColor,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Set New Password'),
+                        ),
+                      ),
+                    ],
+                    AppSpacing.hMedium,
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Back to Login'),
+                      ),
                     ),
-                  ),
-                ],
-
-                AppSpacing.hMedium,
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Back to Login'),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
           ),
         ),
       ),

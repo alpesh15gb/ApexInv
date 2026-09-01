@@ -6,7 +6,9 @@ class SqliteCompanyInfoRepository implements CompanyInfoRepository {
   @override
   Future<CompanyInfo?> getCompanyInfo() => CompanyInfoService.getCompanyInfo();
   @override
-  Future<int> insertCompanyInfo(CompanyInfo info) => CompanyInfoService.insertCompanyInfo(info);
+  Future<int> insertCompanyInfo(CompanyInfo info) =>
+      CompanyInfoService.insertCompanyInfo(info);
   @override
-  Future<int> updateCompanyInfo(CompanyInfo info) => CompanyInfoService.updateCompanyInfo(info);
+  Future<int> updateCompanyInfo(CompanyInfo info) =>
+      CompanyInfoService.updateCompanyInfo(info);
 }

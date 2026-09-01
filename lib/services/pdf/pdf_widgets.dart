@@ -73,7 +73,8 @@ pw.Widget buildCompanyLogo(pw.MemoryImage image, {double size = 90}) {
 
 double logoSizePx(String sizeKey) => logoSizeFromKey(sizeKey).pixelSize;
 
-double signatureSizePx(String sizeKey) => signatureSizeFromKey(sizeKey).pixelHeight;
+double signatureSizePx(String sizeKey) =>
+    signatureSizeFromKey(sizeKey).pixelHeight;
 
 pw.Widget buildSignatureWidget(
   pw.ImageProvider signatureImage,
@@ -165,7 +166,8 @@ pw.Widget buildBankDetailsSection({
             children: [
               pw.TextSpan(
                 text: '$label: ',
-                style: pw.TextStyle(fontSize: rowFontSize, color: PdfColors.grey600),
+                style: pw.TextStyle(
+                    fontSize: rowFontSize, color: PdfColors.grey600),
               ),
               pw.TextSpan(
                 text: value,
@@ -198,8 +200,7 @@ pw.Widget buildBankDetailsSection({
         pw.SizedBox(height: 5),
         if (bankAccount.label.isNotEmpty)
           row('Account Name', bankAccount.label),
-        if (bankAccount.bankName.isNotEmpty)
-          row('Bank', bankAccount.bankName),
+        if (bankAccount.bankName.isNotEmpty) row('Bank', bankAccount.bankName),
         row('Account No.', bankAccount.accountNumber),
         if (bankAccount.ifscCode.isNotEmpty)
           row('IFSC Code', bankAccount.ifscCode),
@@ -308,12 +309,8 @@ pw.Widget buildUpiQrSection({
   return (rounded: rounded, roundOff: rounded - net);
 }
 
-pw.Widget buildEnhancedTotals(
-    Invoice invoice,
-    PdfColor accentRowColor,
-    PdfColor primaryColor,
-    PdfColor totalHighlightColor,
-    String currencySymbol,
+pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
+    PdfColor primaryColor, PdfColor totalHighlightColor, String currencySymbol,
     {double previousBalanceDue = 0.0,
     double fontSize = 10,
     bool compact = false,
@@ -330,9 +327,8 @@ pw.Widget buildEnhancedTotals(
   final totalWidth = compactStyle?.width ?? 200.0;
   final rowFontSize = compactStyle?.rowFontSize ?? fontSize;
   final highlightFontSize = compactStyle?.highlightFontSize ?? fontSize * 1.05;
-  final highlightHorizontalPadding =
-      compactStyle?.highlightHorizontalPadding ??
-          (fontSize * 0.8).clamp(5.0, 8.0);
+  final highlightHorizontalPadding = compactStyle?.highlightHorizontalPadding ??
+      (fontSize * 0.8).clamp(5.0, 8.0);
   final highlightVerticalPadding = compactStyle?.highlightVerticalPadding ??
       (fontSize * 0.8).clamp(5.0, 8.0);
   final rowHorizontalPadding = compactStyle?.rowHorizontalPadding;
@@ -370,16 +366,19 @@ pw.Widget buildEnhancedTotals(
               horizontalPadding: rowHorizontalPadding,
               verticalPadding: rowVerticalPadding),
         if (invoice.taxMode != TaxMode.none && showIgst)
-          pdfTotalRow("IGST", "$currencySymbol ${invoice.tax.toStringAsFixed(2)}",
+          pdfTotalRow(
+              "IGST", "$currencySymbol ${invoice.tax.toStringAsFixed(2)}",
               fontSize: rowFontSize,
               horizontalPadding: rowHorizontalPadding,
               verticalPadding: rowVerticalPadding),
         if (invoice.taxMode != TaxMode.none && showCgstSgst && !showIgst) ...[
-          pdfTotalRow("CGST", "$currencySymbol ${(invoice.tax / 2).toStringAsFixed(2)}",
+          pdfTotalRow(
+              "CGST", "$currencySymbol ${(invoice.tax / 2).toStringAsFixed(2)}",
               fontSize: rowFontSize,
               horizontalPadding: rowHorizontalPadding,
               verticalPadding: rowVerticalPadding),
-          pdfTotalRow("SGST", "$currencySymbol ${(invoice.tax / 2).toStringAsFixed(2)}",
+          pdfTotalRow(
+              "SGST", "$currencySymbol ${(invoice.tax / 2).toStringAsFixed(2)}",
               fontSize: rowFontSize,
               horizontalPadding: rowHorizontalPadding,
               verticalPadding: rowVerticalPadding),
@@ -411,8 +410,7 @@ pw.Widget buildEnhancedTotals(
             color: totalHighlightColor,
             borderRadius: hasPaid || hasPreviousBalance
                 ? pw.BorderRadius.zero
-                : const pw.BorderRadius.vertical(
-                    bottom: pw.Radius.circular(5)),
+                : const pw.BorderRadius.vertical(bottom: pw.Radius.circular(5)),
           ),
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -485,7 +483,8 @@ pw.Widget buildEnhancedTotals(
               color: totalHighlightColor,
               borderRadius: hasPaid
                   ? pw.BorderRadius.zero
-                  : const pw.BorderRadius.vertical(bottom: pw.Radius.circular(5)),
+                  : const pw.BorderRadius.vertical(
+                      bottom: pw.Radius.circular(5)),
             ),
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -495,7 +494,8 @@ pw.Widget buildEnhancedTotals(
                         fontSize: highlightFontSize,
                         fontWeight: pw.FontWeight.bold,
                         color: PdfColors.white)),
-                pw.Text("$currencySymbol ${netTotal.rounded.toStringAsFixed(2)}",
+                pw.Text(
+                    "$currencySymbol ${netTotal.rounded.toStringAsFixed(2)}",
                     style: pw.TextStyle(
                         fontSize: highlightFontSize,
                         fontWeight: pw.FontWeight.bold,
@@ -519,8 +519,8 @@ pw.Widget buildEnhancedTotals(
             ),
             decoration: pw.BoxDecoration(
               color: isPaidInFull ? PdfColors.green700 : PdfColors.orange,
-              borderRadius: const pw.BorderRadius.vertical(
-                  bottom: pw.Radius.circular(5)),
+              borderRadius:
+                  const pw.BorderRadius.vertical(bottom: pw.Radius.circular(5)),
             ),
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -557,12 +557,12 @@ pw.Widget buildEnhancedTotals(
       pw.SizedBox(height: 6),
       pw.SizedBox(
         width: totalWidth,
-        child: pw.Text(AmountInWords.amount(netTotal.rounded,
+        child: pw.Text(
+            AmountInWords.amount(netTotal.rounded,
                 indian: invoice.currencyCode == 'INR'),
             textAlign: pw.TextAlign.right,
             style: pw.TextStyle(
-                fontSize: rowFontSize - 1,
-                fontStyle: pw.FontStyle.italic)),
+                fontSize: rowFontSize - 1, fontStyle: pw.FontStyle.italic)),
       ),
     ],
   );
@@ -603,27 +603,29 @@ pw.Widget pdfTotalRow(String label, String value,
   );
 }
 
-pw.Widget buildInvoiceTable(Invoice invoice,
-    InvoiceTemplate template,
-    {PdfColor headerColor = PdfColors.grey200,
-    PdfColor textColor = PdfColors.black,
-    bool showGst = true,
-    bool showQuantity = true,
-    bool showDiscount = true,
-    bool showTypeTag = true,
-    bool showAliasName = false,
-    bool showDescription = false,
-    bool descriptionNewLine = false,
-    BusinessType businessType = BusinessType.both,
-    double tableFontSize = 10,
-    double cellPaddingH = 6,
-    double cellPaddingV = 8,
-    String? totalQuantityText,
-    pw.TableBorder? border,
-    Uint8List? watermarkBytes,
-    double watermarkOpacity = 0.12,
-    bool showCgstSgst = false,
-    bool showIgst = false,}) {
+pw.Widget buildInvoiceTable(
+  Invoice invoice,
+  InvoiceTemplate template, {
+  PdfColor headerColor = PdfColors.grey200,
+  PdfColor textColor = PdfColors.black,
+  bool showGst = true,
+  bool showQuantity = true,
+  bool showDiscount = true,
+  bool showTypeTag = true,
+  bool showAliasName = false,
+  bool showDescription = false,
+  bool descriptionNewLine = false,
+  BusinessType businessType = BusinessType.both,
+  double tableFontSize = 10,
+  double cellPaddingH = 6,
+  double cellPaddingV = 8,
+  String? totalQuantityText,
+  pw.TableBorder? border,
+  Uint8List? watermarkBytes,
+  double watermarkOpacity = 0.12,
+  bool showCgstSgst = false,
+  bool showIgst = false,
+}) {
   final bool showItemTax = invoice.taxMode == TaxMode.perItem;
   final bool isGlobalTaxMode = invoice.taxMode == TaxMode.global;
   final bool splitCgstSgst =
@@ -707,7 +709,9 @@ pw.Widget buildInvoiceTable(Invoice invoice,
   }
 
   final headerRow = pw.TableRow(
-    decoration: (template == InvoiceTemplate.gridClassic) ? null : pw.BoxDecoration(color: headerColor),
+    decoration: (template == InvoiceTemplate.gridClassic)
+        ? null
+        : pw.BoxDecoration(color: headerColor),
     children: [
       buildTableCell('Sl No',
           isHeader: true,
@@ -799,113 +803,113 @@ pw.Widget buildInvoiceTable(Invoice invoice,
     final hasDescription = showDescription && description.isNotEmpty;
     final showItemDescription = hasDescription && !descriptionNewLine;
     final newLineDescription = hasDescription && descriptionNewLine;
-    itemWidgets.add(rowTable(pw.TableRow(
-      decoration: rowDecoration(rowColor),
-      children: [
-        buildTableCell('${index + 1}',
-            fontSize: tableFontSize,
-            cellPaddingH: cellPaddingH,
-            cellPaddingV: cellPaddingV),
-        pw.Padding(
-          padding: pw.EdgeInsets.symmetric(
-            horizontal: cellPaddingH,
-            vertical: (showItemDescription ||
-                    showTypeTag && businessType == BusinessType.both ||
-                    showDiscount &&
-                        item.discountPerUnit &&
-                        item.discount > 0)
-                ? cellPaddingV * 0.5
-                : cellPaddingV,
-          ),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            mainAxisAlignment: pw.MainAxisAlignment.center,
-            children: [
-              pw.Text(item.product.displayName(showAliasName),
-                  style: pw.TextStyle(fontSize: tableFontSize * 0.9)),
-              if (showItemDescription)
-                pw.Text(
-                  description,
-                  style: pw.TextStyle(
-                    fontSize: tableFontSize * 0.75,
-                    fontStyle: pw.FontStyle.italic,
-                    color: PdfColors.grey700,
-                  ),
-                ),
-              if (showTypeTag && businessType == BusinessType.both)
-                pw.Text(
-                  item.product.type == 'service' ? 'Service' : 'Product',
-                  style: pw.TextStyle(
-                    fontSize: tableFontSize * 0.7,
-                    color: item.product.type == 'service'
-                        ? PdfColors.purple700
-                        : PdfColors.indigo700,
-                  ),
-                ),
-              if (showDiscount &&
-                  item.discountPerUnit &&
-                  item.discount > 0)
-                pw.Text(
-                  '(${item.effectivePrice.toStringAsFixed(2)} - ${item.discount.toStringAsFixed(2)} = ${(item.effectivePrice - item.discount).toStringAsFixed(2)}/item)',
-                  style: pw.TextStyle(
-                      fontSize: tableFontSize * 0.7,
-                      color: PdfColors.teal700),
-                ),
-            ],
-          ),
+    itemWidgets.add(rowTable(
+        pw.TableRow(
+          decoration: rowDecoration(rowColor),
+          children: [
+            buildTableCell('${index + 1}',
+                fontSize: tableFontSize,
+                cellPaddingH: cellPaddingH,
+                cellPaddingV: cellPaddingV),
+            pw.Padding(
+              padding: pw.EdgeInsets.symmetric(
+                horizontal: cellPaddingH,
+                vertical: (showItemDescription ||
+                        showTypeTag && businessType == BusinessType.both ||
+                        showDiscount &&
+                            item.discountPerUnit &&
+                            item.discount > 0)
+                    ? cellPaddingV * 0.5
+                    : cellPaddingV,
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  pw.Text(item.product.displayName(showAliasName),
+                      style: pw.TextStyle(fontSize: tableFontSize * 0.9)),
+                  if (showItemDescription)
+                    pw.Text(
+                      description,
+                      style: pw.TextStyle(
+                        fontSize: tableFontSize * 0.75,
+                        fontStyle: pw.FontStyle.italic,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  if (showTypeTag && businessType == BusinessType.both)
+                    pw.Text(
+                      item.product.type == 'service' ? 'Service' : 'Product',
+                      style: pw.TextStyle(
+                        fontSize: tableFontSize * 0.7,
+                        color: item.product.type == 'service'
+                            ? PdfColors.purple700
+                            : PdfColors.indigo700,
+                      ),
+                    ),
+                  if (showDiscount && item.discountPerUnit && item.discount > 0)
+                    pw.Text(
+                      '(${item.effectivePrice.toStringAsFixed(2)} - ${item.discount.toStringAsFixed(2)} = ${(item.effectivePrice - item.discount).toStringAsFixed(2)}/item)',
+                      style: pw.TextStyle(
+                          fontSize: tableFontSize * 0.7,
+                          color: PdfColors.teal700),
+                    ),
+                ],
+              ),
+            ),
+            if (showGst)
+              buildTableCell(item.product.hsncode,
+                  fontSize: tableFontSize,
+                  cellPaddingH: cellPaddingH,
+                  cellPaddingV: cellPaddingV),
+            if (showQuantity)
+              buildTableCell(
+                  '${item.quantity == item.quantity.roundToDouble() ? item.quantity.toInt().toString() : item.quantity.toString()}'
+                  '${item.effectiveUnit.trim().isEmpty ? '' : ' ${item.effectiveUnit}'}',
+                  fontSize: tableFontSize,
+                  cellPaddingH: cellPaddingH,
+                  cellPaddingV: cellPaddingV),
+            buildTableCell(
+                showDiscount
+                    ? item.effectivePrice.toStringAsFixed(2)
+                    : (item.total / item.quantity).toStringAsFixed(2),
+                fontSize: tableFontSize,
+                cellPaddingH: cellPaddingH,
+                cellPaddingV: cellPaddingV),
+            if (splitCgstSgst) ...[
+              buildTableCell(
+                  '${(isGlobalTaxMode ? (invoice.subtotal > 0 ? invoice.tax * (item.total / invoice.subtotal) / 2 : 0.0) : item.taxAmount / 2).toStringAsFixed(2)}\n(${(isGlobalTaxMode ? globalTaxRatePercent : item.product.tax_rate) / 2}%)',
+                  fontSize: tableFontSize,
+                  cellPaddingH: cellPaddingH,
+                  cellPaddingV: cellPaddingV),
+              buildTableCell(
+                  '${(isGlobalTaxMode ? (invoice.subtotal > 0 ? invoice.tax * (item.total / invoice.subtotal) / 2 : 0.0) : item.taxAmount / 2).toStringAsFixed(2)}\n(${(isGlobalTaxMode ? globalTaxRatePercent : item.product.tax_rate) / 2}%)',
+                  fontSize: tableFontSize,
+                  cellPaddingH: cellPaddingH,
+                  cellPaddingV: cellPaddingV),
+            ] else if (showIgstCol)
+              buildTableCell(
+                  '${(isGlobalTaxMode ? (invoice.subtotal > 0 ? invoice.tax * (item.total / invoice.subtotal) : 0.0) : item.taxAmount).toStringAsFixed(2)}\n(${isGlobalTaxMode ? globalTaxRatePercent : item.product.tax_rate}%)',
+                  fontSize: tableFontSize,
+                  cellPaddingH: cellPaddingH,
+                  cellPaddingV: cellPaddingV)
+            else if (showItemTax)
+              buildTableCell('${item.product.tax_rate}%',
+                  fontSize: tableFontSize,
+                  cellPaddingH: cellPaddingH,
+                  cellPaddingV: cellPaddingV),
+            if (showDiscount)
+              buildTableCell(item.totalDiscount.toStringAsFixed(2),
+                  fontSize: tableFontSize,
+                  cellPaddingH: cellPaddingH,
+                  cellPaddingV: cellPaddingV),
+            buildTableCell(item.total.toStringAsFixed(2),
+                fontSize: tableFontSize,
+                cellPaddingH: cellPaddingH,
+                cellPaddingV: cellPaddingV),
+          ],
         ),
-        if (showGst)
-          buildTableCell(item.product.hsncode,
-              fontSize: tableFontSize,
-              cellPaddingH: cellPaddingH,
-              cellPaddingV: cellPaddingV),
-        if (showQuantity)
-          buildTableCell(
-              '${item.quantity == item.quantity.roundToDouble() ? item.quantity.toInt().toString() : item.quantity.toString()}'
-              '${item.effectiveUnit.trim().isEmpty ? '' : ' ${item.effectiveUnit}'}',
-              fontSize: tableFontSize,
-              cellPaddingH: cellPaddingH,
-              cellPaddingV: cellPaddingV),
-        buildTableCell(
-            showDiscount
-                ? item.effectivePrice.toStringAsFixed(2)
-                : (item.total / item.quantity).toStringAsFixed(2),
-            fontSize: tableFontSize,
-            cellPaddingH: cellPaddingH,
-            cellPaddingV: cellPaddingV),
-        if (splitCgstSgst) ...[
-          buildTableCell(
-              '${(isGlobalTaxMode ? (invoice.subtotal > 0 ? invoice.tax * (item.total / invoice.subtotal) / 2 : 0.0) : item.taxAmount / 2).toStringAsFixed(2)}\n(${(isGlobalTaxMode ? globalTaxRatePercent : item.product.tax_rate) / 2}%)',
-              fontSize: tableFontSize,
-              cellPaddingH: cellPaddingH,
-              cellPaddingV: cellPaddingV),
-          buildTableCell(
-              '${(isGlobalTaxMode ? (invoice.subtotal > 0 ? invoice.tax * (item.total / invoice.subtotal) / 2 : 0.0) : item.taxAmount / 2).toStringAsFixed(2)}\n(${(isGlobalTaxMode ? globalTaxRatePercent : item.product.tax_rate) / 2}%)',
-              fontSize: tableFontSize,
-              cellPaddingH: cellPaddingH,
-              cellPaddingV: cellPaddingV),
-        ] else if (showIgstCol)
-          buildTableCell(
-              '${(isGlobalTaxMode ? (invoice.subtotal > 0 ? invoice.tax * (item.total / invoice.subtotal) : 0.0) : item.taxAmount).toStringAsFixed(2)}\n(${isGlobalTaxMode ? globalTaxRatePercent : item.product.tax_rate}%)',
-              fontSize: tableFontSize,
-              cellPaddingH: cellPaddingH,
-              cellPaddingV: cellPaddingV)
-        else if (showItemTax)
-          buildTableCell('${item.product.tax_rate}%',
-              fontSize: tableFontSize,
-              cellPaddingH: cellPaddingH,
-              cellPaddingV: cellPaddingV),
-        if (showDiscount)
-          buildTableCell(item.totalDiscount.toStringAsFixed(2),
-              fontSize: tableFontSize,
-              cellPaddingH: cellPaddingH,
-              cellPaddingV: cellPaddingV),
-        buildTableCell(item.total.toStringAsFixed(2),
-            fontSize: tableFontSize,
-            cellPaddingH: cellPaddingH,
-            cellPaddingV: cellPaddingV),
-      ],
-    ), borderOverride: newLineDescription ? itemBorderNoBottom : null));
+        borderOverride: newLineDescription ? itemBorderNoBottom : null));
 
     if (newLineDescription) {
       // Its own single-row Table on the Sl No / rest flex split. The table
@@ -939,8 +943,11 @@ pw.Widget buildInvoiceTable(Invoice invoice,
                 decoration: border == null
                     ? null
                     : pw.BoxDecoration(border: pw.Border(top: border.top)),
-                padding: pw.EdgeInsets.fromLTRB(cellPaddingH,
-                    border == null ? 0 : cellPaddingV * 0.5, cellPaddingH, cellPaddingV),
+                padding: pw.EdgeInsets.fromLTRB(
+                    cellPaddingH,
+                    border == null ? 0 : cellPaddingV * 0.5,
+                    cellPaddingH,
+                    cellPaddingV),
                 child: pw.Text(
                   description,
                   style: pw.TextStyle(
@@ -1015,7 +1022,8 @@ pw.Widget buildInvoiceTable(Invoice invoice,
                 cellPaddingV: cellPaddingV),
           ],
         )),
-      if (totalQuantityText != null && template != InvoiceTemplate.gridClassic) dividerLine(),
+      if (totalQuantityText != null && template != InvoiceTemplate.gridClassic)
+        dividerLine(),
     ],
   );
 }

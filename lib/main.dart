@@ -52,7 +52,9 @@ Future<void> main() async {
             ),
             const SizedBox(height: 8),
             Text(
-              kDebugMode ? details.exceptionAsString() : 'Please restart the app.',
+              kDebugMode
+                  ? details.exceptionAsString()
+                  : 'Please restart the app.',
               style: const TextStyle(fontSize: 14, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
@@ -68,12 +70,11 @@ Future<void> main() async {
   }
   WidgetsFlutterBinding.ensureInitialized();
   BackendServices.configure(
-    settings: SqliteSettingsRepository(),
-    companyInfo: SqliteCompanyInfoRepository(),
-    invoices: SqliteInvoiceRepository(),
-    payments: SqlitePaymentRepository(),
-    installation: SqliteInstallationRepository()
-  );
+      settings: SqliteSettingsRepository(),
+      companyInfo: SqliteCompanyInfoRepository(),
+      invoices: SqliteInvoiceRepository(),
+      payments: SqlitePaymentRepository(),
+      installation: SqliteInstallationRepository());
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
@@ -93,9 +94,7 @@ Future<void> main() async {
   }
 
   runApp(ProviderScope(
-    overrides: sqliteRepositoryOverrides,
-    child: const MyApp()
-  ));
+      overrides: sqliteRepositoryOverrides, child: const MyApp()));
 }
 
 class MyApp extends ConsumerStatefulWidget {
@@ -149,9 +148,12 @@ class _MyAppState extends ConsumerState<MyApp> {
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
         AppLocalizations.delegate,
-        FallbackLocalizationsDelegate<MaterialLocalizations>(GlobalMaterialLocalizations.delegate),
-        FallbackLocalizationsDelegate<WidgetsLocalizations>(GlobalWidgetsLocalizations.delegate),
-        FallbackLocalizationsDelegate<CupertinoLocalizations>(GlobalCupertinoLocalizations.delegate),
+        FallbackLocalizationsDelegate<MaterialLocalizations>(
+            GlobalMaterialLocalizations.delegate),
+        FallbackLocalizationsDelegate<WidgetsLocalizations>(
+            GlobalWidgetsLocalizations.delegate),
+        FallbackLocalizationsDelegate<CupertinoLocalizations>(
+            GlobalCupertinoLocalizations.delegate),
       ],
       home: const SplashScreen(),
     );

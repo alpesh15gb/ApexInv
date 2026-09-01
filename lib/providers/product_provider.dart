@@ -10,7 +10,8 @@ class ProductNotifier extends AsyncNotifier<List<Product>> {
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => ref.read(productRepositoryProvider).getAllProducts());
+    state = await AsyncValue.guard(
+        () => ref.read(productRepositoryProvider).getAllProducts());
   }
 }
 

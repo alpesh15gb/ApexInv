@@ -81,6 +81,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   StatusBreakdown _status = StatusBreakdown.empty;
   List<AgedReceivable> _aged = [];
   List<TaxBucket> _taxBuckets = [];
+  List<DayBookEntry> _dayBook = [];
+  PnlSummary? _pnl;
+  List<ExpiryRow> _expiries = [];
+  List<ChequeEntry> _cheques = [];
   bool _isExportingGstr = false;
   bool _gstrExportError = false;
   String? _gstrExportStatus;
@@ -424,6 +428,22 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             _missingCostItemCount = r[1] as int;
             _dailyPage = 0;
           });
+        case 8:
+          final dayRows = await ReportService.getDayBook(from, to);
+          if (!mounted) return;
+          setState(() => _dayBook = dayRows);
+        case 9:
+          final pnl = await ReportService.getPnl(from, to);
+          if (!mounted) return;
+          setState(() => _pnl = pnl);
+        case 10:
+          final expiryRows = await ReportService.getExpiringBatches(days: 90);
+          if (!mounted) return;
+          setState(() => _expiries = expiryRows);
+        case 11:
+          final chequeRows = await ReportService.getCheques();
+          if (!mounted) return;
+          setState(() => _cheques = chequeRows);
       }
       if (mounted) {
         setState(() {
@@ -736,6 +756,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     (Icons.request_quote_outlined, Icons.request_quote),
     (Icons.list_alt_outlined, Icons.list_alt),
     (Icons.calendar_today_outlined, Icons.calendar_today),
+    (Icons.menu_book_outlined, Icons.menu_book),
+    (Icons.trending_up_outlined, Icons.trending_up),
+    (Icons.science_outlined, Icons.science),
+    (Icons.credit_score_outlined, Icons.credit_score),
   ];
 
   String _presetLabel(_DatePreset preset) {
@@ -761,7 +785,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       4 => l10n.navProducts,
       5 => l10n.navQuotations,
       6 => l10n.reportsNavInvoiceStatusLabel,
-      _ => l10n.reportsNavDailyReportLabel,
+      8 => 'Day Book',
+      9 => 'Profit & Loss',
+      10 => 'Expiries',
+      _ => 'Cheques',
     };
   }
 
@@ -1160,8 +1187,264 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       5 => _buildQuotations(),
       6 => _buildInvoiceStatus(),
       7 => _buildDailyReport(),
+      8 => _buildDayBook(),
+      9 => _buildPnl(),
+      10 => _buildExpiries(),
+      11 => _buildCheques(),
       _ => const SizedBox.shrink(),
     };
+  }
+
+  Widget _buildDayBook() {
+    final df = DateFormat('dd MMM yyyy');
+    if (_dayBook.isEmpty) {
+      return _sectionCard(
+          child: _emptyState('No money movement in this period'));
+    }
+    final moneyIn = _dayBook.fold(0.0, (s, e) => s + e.moneyIn);
+    final moneyOut = _dayBook.fold(0.0, (s, e) => s + e.moneyOut);
+    return Column(children: [
+      _kpiGrid([
+        _kpiCard('Money In', _money(moneyIn), const Color(0xFF16A34A),
+            Icons.south_west),
+        _kpiCard('Money Out', _money(moneyOut), const Color(0xFFDC2626),
+            Icons.north_east),
+        _kpiCard(
+            'Net',
+            _money(moneyIn - moneyOut),
+            moneyIn - moneyOut >= 0
+                ? const Color(0xFF002E78)
+                : const Color(0xFFDC2626),
+            Icons.balance),
+      ]),
+      _sectionCard(
+        padding: EdgeInsets.zero,
+        child: Column(children: [
+          _statementTableHeaderless(['Date', 'Description', 'In', 'Out']),
+          ..._dayBook.map((e) => Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                    border: Border(
+                        bottom: BorderSide(
+                            color:
+                                Theme.of(context).colorScheme.outlineVariant))),
+                child: Row(children: [
+                  SizedBox(
+                      width: 92,
+                      child: Text(df.format(e.date),
+                          style: const TextStyle(fontSize: 12.5))),
+                  Expanded(
+                      child: Text(e.description,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13))),
+                  SizedBox(
+                      width: 100,
+                      child: Text(
+                        e.moneyIn > 0 ? _money(e.moneyIn) : '',
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF16A34A),
+                            fontWeight: FontWeight.w600),
+                      )),
+                  SizedBox(
+                      width: 100,
+                      child: Text(
+                        e.moneyOut > 0 ? _money(e.moneyOut) : '',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.red[700],
+                            fontWeight: FontWeight.w600),
+                      )),
+                ]),
+              )),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _statementTableHeaderless(List<String> labels) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              flex: i == 1 ? 4 : 2,
+              child: Text(labels[i],
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPnl() {
+    final pnl = _pnl;
+    if (pnl == null) {
+      return _sectionCard(
+          child: _emptyState('Sync could not load P&L — refresh the tab'));
+    }
+    return _kpiGrid([
+      _kpiCard('Revenue (billed)', _money(pnl.revenue), const Color(0xFF002E78),
+          Icons.receipt_long),
+      _kpiCard('Collected (cash)', _money(pnl.collected),
+          const Color(0xFF16A34A), Icons.south_west),
+      _kpiCard('Expenses', _money(pnl.expenses), const Color(0xFFDC2626),
+          Icons.north_east),
+      _kpiCard('Purchases', _money(pnl.purchases), const Color(0xFFF59E0B),
+          Icons.shopping_cart),
+      _kpiCard(
+          'Profit',
+          _money(pnl.profit),
+          pnl.profit >= 0 ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+          Icons.savings_outlined),
+    ]);
+  }
+
+  Widget _buildExpiries() {
+    final df = DateFormat('dd MMM yyyy');
+    if (_expiries.isEmpty) {
+      return _sectionCard(
+          child: _emptyState('No batches expiring in the next 90 days'));
+    }
+    return _sectionCard(
+      padding: EdgeInsets.zero,
+      child: Column(children: [
+        _statementTableHeaderless(['Product', 'Batch', 'Expiry', 'Location']),
+        ..._expiries.map((e) {
+          final expired =
+              e.expiryDate != null && e.expiryDate!.isBefore(DateTime.now());
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+                border: Border(
+                    bottom: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant))),
+            child: Row(children: [
+              Expanded(
+                  flex: 4,
+                  child: Text(e.productName,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13))),
+              Expanded(
+                  flex: 2,
+                  child: Text(e.batchNumber.isEmpty ? '—' : e.batchNumber,
+                      style: const TextStyle(fontSize: 12.5))),
+              Expanded(
+                  flex: 2,
+                  child: Text(
+                    e.expiryDate == null ? '—' : df.format(e.expiryDate!),
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        color: expired ? Colors.red[700] : null,
+                        fontWeight:
+                            expired ? FontWeight.w600 : FontWeight.normal),
+                  )),
+              Expanded(
+                  flex: 2,
+                  child: Text(
+                      e.storageLocation.isEmpty ? '—' : e.storageLocation,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12.5))),
+            ]),
+          );
+        }),
+      ]),
+    );
+  }
+
+  Widget _buildCheques() {
+    final df = DateFormat('dd MMM yyyy');
+    if (_cheques.isEmpty) {
+      return _sectionCard(child: _emptyState('No cheque payments recorded'));
+    }
+    final pending = _cheques.where((c) => !c.cleared).toList();
+    return Column(children: [
+      _kpiGrid([
+        _kpiCard(
+            'Uncleared cheques',
+            '${pending.length}',
+            pending.isEmpty ? const Color(0xFF16A34A) : const Color(0xFFF59E0B),
+            Icons.credit_score),
+        _kpiCard(
+            'Uncleared value',
+            _money(pending.fold(0.0, (s, c) => s + c.amount)),
+            const Color(0xFF002E78),
+            Icons.account_balance),
+      ]),
+      _sectionCard(
+        padding: EdgeInsets.zero,
+        child: Column(children: [
+          _statementTableHeaderless(
+              ['Cheque #', 'Invoice', 'Customer', 'Date', 'Amount', '']),
+          ..._cheques.map((c) => Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                    border: Border(
+                        bottom: BorderSide(
+                            color:
+                                Theme.of(context).colorScheme.outlineVariant))),
+                child: Row(children: [
+                  Expanded(
+                      flex: 2,
+                      child: Text(c.chequeNumber,
+                          style: const TextStyle(fontSize: 12.5))),
+                  Expanded(
+                      flex: 2,
+                      child: Text('#${c.invoiceNumber}',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12.5))),
+                  Expanded(
+                      flex: 3,
+                      child: Text(c.customerName,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12.5))),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                        c.chequeDate == null ? '—' : df.format(c.chequeDate!)),
+                  ),
+                  Expanded(
+                      flex: 2,
+                      child: Text(_money(c.amount),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600))),
+                  Expanded(
+                    flex: 2,
+                    child: c.cleared
+                        ? const Text('Cleared',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF16A34A)))
+                        : Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () async {
+                                await ReportService.markChequeCleared(
+                                    c.invoiceId, c.chequeNumber);
+                                _loadTab(11);
+                              },
+                              child: const Text('Mark cleared'),
+                            ),
+                          ),
+                  ),
+                ]),
+              )),
+        ]),
+      ),
+    ]);
   }
 
   // ─── Shared widgets ─────────────────────────────────────────────────────────
@@ -2043,13 +2326,29 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                           onPressed: _isExportingGstr ? null : _exportGstr1,
                           icon: const Icon(Icons.file_download_outlined,
                               size: 16),
-                          label: const Text('GSTR-1 (B2B + B2C + HSN)'),
+                          label: const Text('GSTR-1 CSVs'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _isExportingGstr ? null : _exportGstr1Json,
+                          icon: const Icon(Icons.code_outlined, size: 16),
+                          label: const Text('GSTR-1 JSON'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _isExportingGstr ? null : _exportGstr2,
+                          icon: const Icon(Icons.inventory_outlined, size: 16),
+                          label: const Text('GSTR-2 purchases'),
                         ),
                         OutlinedButton.icon(
                           onPressed:
                               _isExportingGstr ? null : _exportGstr3bSummary,
                           icon: const Icon(Icons.summarize_outlined, size: 16),
                           label: const Text('GSTR-3B summary'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed:
+                              _isExportingGstr ? null : _exportGstr3bJson,
+                          icon: const Icon(Icons.code, size: 16),
+                          label: const Text('GSTR-3B JSON'),
                         ),
                       ],
                     ),
@@ -2095,6 +2394,86 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
         _gstrExportStatus =
             'Saved ${files.map((f) => f.section).join(', ')} — import each '
             'file into the Offline Tool\'s matching section.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = true;
+        _gstrExportStatus = e.toString();
+      });
+    }
+  }
+
+  Future<void> _exportGstr1Json() async {
+    setState(() {
+      _isExportingGstr = true;
+      _gstrExportError = false;
+      _gstrExportStatus = 'Building GSTR-1 JSON…';
+    });
+    try {
+      final (from, to) = _range;
+      final f = await GstrExportService.buildGstr1Json(from: from, to: to);
+      await _saveCsv(f.csv, f.filename);
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = false;
+        _gstrExportStatus =
+            'Saved ${f.filename} — upload via GST portal → Returns → '
+            'Offline Tools, or import into the Offline Tool.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = true;
+        _gstrExportStatus = e.toString();
+      });
+    }
+  }
+
+  Future<void> _exportGstr3bJson() async {
+    setState(() {
+      _isExportingGstr = true;
+      _gstrExportError = false;
+      _gstrExportStatus = 'Building GSTR-3B JSON…';
+    });
+    try {
+      final (from, to) = _range;
+      final f = await GstrExportService.buildGstr3bJson(from: from, to: to);
+      await _saveCsv(f.csv, f.filename);
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = false;
+        _gstrExportStatus = 'Saved ${f.filename}.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = true;
+        _gstrExportStatus = e.toString();
+      });
+    }
+  }
+
+  Future<void> _exportGstr2() async {
+    setState(() {
+      _isExportingGstr = true;
+      _gstrExportError = false;
+      _gstrExportStatus = 'Building GSTR-2 purchase export…';
+    });
+    try {
+      final (from, to) = _range;
+      final f = await GstrExportService.buildGstr2Csv(from: from, to: to);
+      await _saveCsv(f.csv, f.filename);
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = false;
+        _gstrExportStatus = 'Saved ${f.filename}.';
       });
     } catch (e) {
       if (!mounted) return;

@@ -52,7 +52,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _login(AppEditionConfig cfg) async {
-
     // for cloud the username will be email
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
@@ -70,13 +69,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    final user = await ref.read(authRepositoryProvider).getUser(username, password);
+    final user =
+        await ref.read(authRepositoryProvider).getUser(username, password);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if(user == null)
-    {
+    if (user == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid credentials')),
@@ -88,12 +87,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _afterLoginNavigate(AppEditionConfig cfg, User user) async {
-    if(cfg.isCloud)
-    {
+    if (cfg.isCloud) {
       if (!mounted) return;
       await navigateAfterAuth(context, ref, user);
-    }
-    else if (!user.passwordChanged && !cfg.isCloud) {
+    } else if (!user.passwordChanged && !cfg.isCloud) {
       // Force password change
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -102,15 +99,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           builder: (context) => ChangePasswordScreen(user: user, forced: true),
         ),
       );
-    }
-    else{
+    } else {
       if (!mounted) return;
       await navigateAfterAuth(context, ref, user);
     }
-
   }
-
-
 
   @override
   Widget build(BuildContext context) {

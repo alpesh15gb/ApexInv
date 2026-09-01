@@ -8,18 +8,21 @@ import 'invoice_payment.dart';
 
 class Invoice {
   String id;
-  String? invoiceNumber; // per-type sequential display number; null on legacy rows (falls back to id)
+  String?
+      invoiceNumber; // per-type sequential display number; null on legacy rows (falls back to id)
   Customer customer;
   List<InvoiceItem> items;
   DateTime date;
   String? notes;
   double taxRate;
   String type;
-  String? invoiceTitle; // GST document title override (e.g. "Tax Invoice", "Bill of Supply"); null = use type
+  String?
+      invoiceTitle; // GST document title override (e.g. "Tax Invoice", "Bill of Supply"); null = use type
   String currencyCode;
   String currencySymbol;
   TaxMode taxMode;
-  bool isInterState; // India: interstate supply → show IGST instead of CGST/SGST
+  bool
+      isInterState; // India: interstate supply → show IGST instead of CGST/SGST
   List<InvoicePayment> payments;
   String? upiId; // selected UPI account for this invoice
   String? bankAccountId; // selected bank account label key for this invoice
@@ -29,10 +32,12 @@ class Invoice {
   List<AdditionalCost>
       additionalCosts; // e.g. Shipping, Packaging (zero tax, added after tax)
   double previousBalance;
-  InvoiceDiscountType invoiceDiscountType; // invoice-level discount, applied after tax
+  InvoiceDiscountType
+      invoiceDiscountType; // invoice-level discount, applied after tax
   double invoiceDiscountValue;
   bool hideInvoiceNumber; // hide real invoice number in PDF output only
-  String? customInvoiceNumber; // shown instead of invoiceNumber in PDF when hideInvoiceNumber is true
+  String?
+      customInvoiceNumber; // shown instead of invoiceNumber in PDF when hideInvoiceNumber is true
   String paymentTermId; // linked payment term ID
   String? customFields; // JSON string of custom field values
 

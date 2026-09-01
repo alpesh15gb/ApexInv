@@ -5,7 +5,8 @@ class AppLogger {
     if (kDebugMode) debugPrint('[$tag] $message');
   }
 
-  static void e(String tag, String message, [Object? error, StackTrace? stack]) {
+  static void e(String tag, String message,
+      [Object? error, StackTrace? stack]) {
     if (kDebugMode) {
       debugPrint('[$tag] ERROR: $message');
       if (error != null) debugPrint('  Error: $error');

@@ -7,8 +7,8 @@ class SupportedCurrencies {
 
   static CurrencyOption fromCode(String code) {
     return all.firstWhere(
-          (c) => c.code == code,
-          orElse: () => all.first,
+      (c) => c.code == code,
+      orElse: () => all.first,
     );
   }
 }

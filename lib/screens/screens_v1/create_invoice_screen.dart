@@ -50,7 +50,8 @@ class CreateInvoiceScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<CreateInvoiceScreen> createState() => _CreateInvoiceScreenState();
+  ConsumerState<CreateInvoiceScreen> createState() =>
+      _CreateInvoiceScreenState();
 }
 
 class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
@@ -113,7 +114,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
 
   bool _isTaxEnabled = true;
   bool _isPerItem = false;
-  bool _isInterState = false; // India: interstate supply → IGST instead of CGST/SGST
+  bool _isInterState =
+      false; // India: interstate supply → IGST instead of CGST/SGST
   bool isEditing = false;
   bool isLoading = false;
 
@@ -268,18 +270,22 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     } else if (!forceDefault && widget.cloneFrom != null) {
       addNote = widget.cloneFrom!.notes ?? '';
     } else {
-      if(!mounted) return;
-      addNote = await ref.read(settingsRepositoryProvider).getSetting(SettingKey.additionalInfo) ??
+      if (!mounted) return;
+      addNote = await ref
+              .read(settingsRepositoryProvider)
+              .getSetting(SettingKey.additionalInfo) ??
           ref.read(appEditionConfigProvider).additionalNote;
     }
-    if(!mounted) return;
-    final taxRateSetting = await ref.read(settingsRepositoryProvider).getSetting(SettingKey.defaultTaxRate);
+    if (!mounted) return;
+    final taxRateSetting = await ref
+        .read(settingsRepositoryProvider)
+        .getSetting(SettingKey.defaultTaxRate);
     final parsedRate = double.tryParse(taxRateSetting ?? '') ?? 18.0;
     if (widget.invoiceToEdit == null && widget.cloneFrom == null) {
       taxRate = parsedRate / 100.0;
       taxRateController.text = parsedRate.toStringAsFixed(1);
     }
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() {
       notesController.text = addNote;
     });
@@ -436,19 +442,23 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
   }
 
   Future<void> _loadCustomersAndProducts(bool isEditing) async {
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() => isLoading = true);
 
     try {
       final settingsRepo = ref.read(settingsRepositoryProvider);
       final results = await Future.wait([
-        ref.read(customerRepositoryProvider).getCustomersPaginated(
-            offset: 0, limit: _customerFetchLimit), // 0
+        ref
+            .read(customerRepositoryProvider)
+            .getCustomersPaginated(offset: 0, limit: _customerFetchLimit), // 0
         ref.read(productRepositoryProvider).getProductsPaginated(
             offset: 0, limit: _productFetchLimit, type: _businessType.key), // 1
         isEditing
-            ? Future.value(widget.invoiceToEdit?.invoiceNumber ?? widget.invoiceToEdit?.id)
-            : ref.read(invoiceRepositoryProvider).peekNextInvoiceNumber(invoiceType), // 2
+            ? Future.value(
+                widget.invoiceToEdit?.invoiceNumber ?? widget.invoiceToEdit?.id)
+            : ref
+                .read(invoiceRepositoryProvider)
+                .peekNextInvoiceNumber(invoiceType), // 2
         settingsRepo.getCurrency(), // 3 — discarded below when editing/cloning
         settingsRepo.getUpiIds(), // 4
         settingsRepo.getBankAccounts(), // 5
@@ -550,7 +560,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                 item.product.id.startsWith('custom-') && item.isProductSaved)
             .map((item) => item.product.id),
       );
-      if(!mounted) return;
+      if (!mounted) return;
       setState(() {
         customers = c;
         filteredCustomers = List.from(c);
@@ -612,20 +622,22 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       }
       _completeInitialLoad();
     } catch (e) {
-      if(!mounted) return;
+      if (!mounted) return;
       setState(() => isLoading = false);
       _completeInitialLoad();
       if (mounted) {
-        if(kDebugMode) print(e);
+        if (kDebugMode) print(e);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: $e'),showCloseIcon: true,),
+          SnackBar(
+            content: Text('Error loading data: $e'),
+            showCloseIcon: true,
+          ),
         );
       }
     }
   }
 
-  void addInvoiceProductPrompt(Product product)
-  {
+  void addInvoiceProductPrompt(Product product) {
     final quantityController = TextEditingController();
     final discountController = TextEditingController(
         text: product.defaultDiscount > 0
@@ -645,28 +657,22 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     String dialogUnit = product.unit;
     int insertAt = invoiceItems.length + 1;
 
-    Future<void> addInvoiceProductImpl() async
-    {
+    Future<void> addInvoiceProductImpl() async {
       final qty = !_showQuantity
           ? 1.0
           : _fractionalQuantity
-          ? (double.tryParse(quantityController.text) ?? 1.0)
-          : (int.tryParse(quantityController.text) ?? 1)
-          .toDouble();
-      final discount =
-          double.tryParse(discountController.text) ?? 0.0;
-      final parsedUnitPrice =
-      double.tryParse(unitPriceController.text);
-      final unitPrice = (parsedUnitPrice != null &&
-          parsedUnitPrice != product.price)
-          ? parsedUnitPrice
-          : null;
+              ? (double.tryParse(quantityController.text) ?? 1.0)
+              : (int.tryParse(quantityController.text) ?? 1).toDouble();
+      final discount = double.tryParse(discountController.text) ?? 0.0;
+      final parsedUnitPrice = double.tryParse(unitPriceController.text);
+      final unitPrice =
+          (parsedUnitPrice != null && parsedUnitPrice != product.price)
+              ? parsedUnitPrice
+              : null;
       final extraCost = double.tryParse(extraCostController.text);
 
       // Check stock
-      if (!product.unlimitedStock &&
-          product.stock > 0 &&
-          qty > product.stock) {
+      if (!product.unlimitedStock && product.stock > 0 && qty > product.stock) {
         // Insufficient stock — ask user if they want to add anyway
         Navigator.pop(context);
         final addAnyway = await showDialog<bool>(
@@ -683,8 +689,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                 child: const Text('Add Anyway'),
               ),
             ],
@@ -710,8 +715,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Out of Stock'),
-            content:
-            Text('${product.name} is out of stock. Add anyway?'),
+            content: Text('${product.name} is out of stock. Add anyway?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
@@ -719,8 +723,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                 child: const Text('Add Anyway'),
               ),
             ],
@@ -759,8 +762,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) =>
-        AlertDialog(
+        builder: (context, setDialogState) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
@@ -851,7 +853,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                     ),
                   ),
                 Builder(builder: (context) {
-                  if (!_columnsConfig.productMetadata) return const SizedBox.shrink();
+                  if (!_columnsConfig.productMetadata)
+                    return const SizedBox.shrink();
                   final meta = _productMetadata[product.id];
                   final expiryDate = (_columnsConfig.metaExpiryDate &&
                           (meta?.expiryDate?.isNotEmpty ?? false))
@@ -859,8 +862,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                       : null;
                   final isExpired =
                       expiryDate != null && expiryDate.isBefore(DateTime.now());
-                  final storageLocation =
-                      _columnsConfig.metaStorageLocation ? meta?.storageLocation : null;
+                  final storageLocation = _columnsConfig.metaStorageLocation
+                      ? meta?.storageLocation
+                      : null;
                   if ((storageLocation == null || storageLocation.isEmpty) &&
                       expiryDate == null) {
                     return const SizedBox.shrink();
@@ -871,30 +875,39 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                       spacing: 6,
                       runSpacing: 4,
                       children: [
-                        if (storageLocation != null && storageLocation.isNotEmpty)
+                        if (storageLocation != null &&
+                            storageLocation.isNotEmpty)
                           Chip(
                             avatar: const Icon(Icons.place_outlined,
                                 size: 14, color: Colors.blueGrey),
                             label: Text(storageLocation,
-                                style: const TextStyle(fontSize: AppFontSize.xsmall)),
+                                style: const TextStyle(
+                                    fontSize: AppFontSize.xsmall)),
                             visualDensity: VisualDensity.compact,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
                             backgroundColor: Colors.blueGrey[50],
                           ),
                         if (expiryDate != null)
                           Chip(
                             avatar: Icon(
-                                isExpired ? Icons.error_outline : Icons.event_outlined,
+                                isExpired
+                                    ? Icons.error_outline
+                                    : Icons.event_outlined,
                                 size: 14,
-                                color: isExpired ? Colors.red : Colors.orange[800]),
+                                color: isExpired
+                                    ? Colors.red
+                                    : Colors.orange[800]),
                             label: Text(
                                 '${isExpired ? 'Expired ' : 'Exp '}${DateFormat(_datePattern).format(expiryDate)}',
                                 style: TextStyle(
                                     fontSize: AppFontSize.xsmall,
                                     color: isExpired ? Colors.red : null)),
                             visualDensity: VisualDensity.compact,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            backgroundColor: isExpired ? Colors.red[50] : Colors.orange[50],
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            backgroundColor:
+                                isExpired ? Colors.red[50] : Colors.orange[50],
                           ),
                       ],
                     ),
@@ -914,7 +927,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       prefixIcon: const Icon(Icons.numbers),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     keyboardType: _fractionalQuantity
                         ? const TextInputType.numberWithOptions(decimal: true)
@@ -934,7 +948,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                if (_columnsConfig.defaultDiscount || product.defaultDiscount > 0) ...[
+                if (_columnsConfig.defaultDiscount ||
+                    product.defaultDiscount > 0) ...[
                   TextField(
                     controller: discountController,
                     decoration: InputDecoration(
@@ -944,7 +959,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       prefixIcon: const Icon(Icons.discount),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [
@@ -967,7 +983,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             BorderRadius.circular(AppBorderRadius.xsmall)),
                     prefixText: '$_currencySymbol ',
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    fillColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
@@ -987,9 +1004,11 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                       border: OutlineInputBorder(
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
-                      prefixIcon: const Icon(Icons.add_circle_outline, size: 18),
+                      prefixIcon:
+                          const Icon(Icons.add_circle_outline, size: 18),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
@@ -1009,10 +1028,16 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                   Row(
                     children: [
                       Icon(Icons.format_list_numbered,
-                          size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          size: 16,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                       const SizedBox(width: 8),
                       Text('Insert at position',
-                          style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant)),
                       const Spacer(),
                       IconButton(
                         icon: const Icon(Icons.remove_circle_outline),
@@ -1089,7 +1114,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       );
     } else {
       final isAppend = insertAt == null || insertAt >= invoiceItems.length + 1;
-      if(!mounted) return;
+      if (!mounted) return;
       setState(() {
         if (!isAppend) {
           invoiceItems.insert(insertAt - 1, invoiceItem);
@@ -1189,7 +1214,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       return false;
     }
 
-    if(!mounted) return false;
+    if (!mounted) return false;
     setState(() => isLoading = true);
 
     try {
@@ -1255,7 +1280,10 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       if (!mounted) return false;
       setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error creating invoice: $e'),showCloseIcon: true,),
+        SnackBar(
+          content: Text('Error creating invoice: $e'),
+          showCloseIcon: true,
+        ),
       );
       return false;
     }
@@ -1276,7 +1304,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     final extraCostController = TextEditingController(
         text: item.extraCost != null ? item.extraCost.toString() : '');
     bool discountPerUnit = item.discountPerUnit;
-    final unitController = TextEditingController(text: item.effectiveUnit.toString());
+    final unitController =
+        TextEditingController(text: item.effectiveUnit.toString());
     final descriptionController =
         TextEditingController(text: item.effectiveDescription);
     String dialogUnit = item.effectiveUnit.toString();
@@ -1354,7 +1383,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                   ),
                 ),
                 Builder(builder: (context) {
-                  if (!_columnsConfig.productMetadata) return const SizedBox.shrink();
+                  if (!_columnsConfig.productMetadata)
+                    return const SizedBox.shrink();
                   final meta = _productMetadata[item.product.id];
                   final expiryDate = (_columnsConfig.metaExpiryDate &&
                           (meta?.expiryDate?.isNotEmpty ?? false))
@@ -1362,8 +1392,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                       : null;
                   final isExpired =
                       expiryDate != null && expiryDate.isBefore(DateTime.now());
-                  final storageLocation =
-                      _columnsConfig.metaStorageLocation ? meta?.storageLocation : null;
+                  final storageLocation = _columnsConfig.metaStorageLocation
+                      ? meta?.storageLocation
+                      : null;
                   if ((storageLocation == null || storageLocation.isEmpty) &&
                       expiryDate == null) {
                     return const SizedBox.shrink();
@@ -1374,30 +1405,39 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                       spacing: 6,
                       runSpacing: 4,
                       children: [
-                        if (storageLocation != null && storageLocation.isNotEmpty)
+                        if (storageLocation != null &&
+                            storageLocation.isNotEmpty)
                           Chip(
                             avatar: const Icon(Icons.place_outlined,
                                 size: 14, color: Colors.blueGrey),
                             label: Text(storageLocation,
-                                style: const TextStyle(fontSize: AppFontSize.xsmall)),
+                                style: const TextStyle(
+                                    fontSize: AppFontSize.xsmall)),
                             visualDensity: VisualDensity.compact,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
                             backgroundColor: Colors.blueGrey[50],
                           ),
                         if (expiryDate != null)
                           Chip(
                             avatar: Icon(
-                                isExpired ? Icons.error_outline : Icons.event_outlined,
+                                isExpired
+                                    ? Icons.error_outline
+                                    : Icons.event_outlined,
                                 size: 14,
-                                color: isExpired ? Colors.red : Colors.orange[800]),
+                                color: isExpired
+                                    ? Colors.red
+                                    : Colors.orange[800]),
                             label: Text(
                                 '${isExpired ? 'Expired ' : 'Exp '}${DateFormat(_datePattern).format(expiryDate)}',
                                 style: TextStyle(
                                     fontSize: AppFontSize.xsmall,
                                     color: isExpired ? Colors.red : null)),
                             visualDensity: VisualDensity.compact,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            backgroundColor: isExpired ? Colors.red[50] : Colors.orange[50],
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            backgroundColor:
+                                isExpired ? Colors.red[50] : Colors.orange[50],
                           ),
                       ],
                     ),
@@ -1416,7 +1456,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       prefixIcon: const Icon(Icons.numbers),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     keyboardType: _fractionalQuantity
                         ? const TextInputType.numberWithOptions(decimal: true)
@@ -1434,7 +1475,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                     onUnitChanged: (v) => setDialogState(() => dialogUnit = v),
                   ),
                 ],
-                if (_columnsConfig.defaultDiscount || item.product.defaultDiscount > 0 || item.discount > 0) ...[
+                if (_columnsConfig.defaultDiscount ||
+                    item.product.defaultDiscount > 0 ||
+                    item.discount > 0) ...[
                   const SizedBox(height: 16),
                   TextField(
                     controller: discountController,
@@ -1445,7 +1488,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       prefixIcon: const Icon(Icons.discount),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [
@@ -1468,7 +1512,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             BorderRadius.circular(AppBorderRadius.xsmall)),
                     prefixText: '$_currencySymbol ',
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    fillColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
@@ -1487,9 +1532,11 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                       border: OutlineInputBorder(
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
-                      prefixIcon: const Icon(Icons.add_circle_outline, size: 18),
+                      prefixIcon:
+                          const Icon(Icons.add_circle_outline, size: 18),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
@@ -1518,7 +1565,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
               onPressed: () {
-                final parsedUnitPrice = double.tryParse(unitPriceController.text);
+                final parsedUnitPrice =
+                    double.tryParse(unitPriceController.text);
                 final unitPrice = (parsedUnitPrice != null &&
                         parsedUnitPrice != item.product.price)
                     ? parsedUnitPrice
@@ -1544,7 +1592,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                   description: descriptionController.text.trim(),
                   discountPerUnit: discountPerUnit,
                 );
-                if(!mounted) return;
+                if (!mounted) return;
                 setState(() {
                   invoiceItems[index] = updatedItem;
                 });
@@ -1602,7 +1650,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                 (highlightedIndex + 1).clamp(0, dialogResults.length - 1);
           }
         });
-        WidgetsBinding.instance.addPostFrameCallback((_) => ensureHighlightedVisible());
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => ensureHighlightedVisible());
         return true;
       }
       if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -1612,7 +1661,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                 (highlightedIndex - 1).clamp(0, dialogResults.length - 1);
           }
         });
-        WidgetsBinding.instance.addPostFrameCallback((_) => ensureHighlightedVisible());
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => ensureHighlightedVisible());
         return true;
       }
       if (event.logicalKey == LogicalKeyboardKey.enter) {
@@ -1634,8 +1684,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
             dialogSearchDebounce =
                 Timer(const Duration(milliseconds: 400), () async {
               final requestId = ++dialogSearchRequestId;
-              final results =
-                  await ref.read(productRepositoryProvider).getProductsPaginated(
+              final results = await ref
+                  .read(productRepositoryProvider)
+                  .getProductsPaginated(
                       offset: 0,
                       limit: _productFetchLimit,
                       query: query,
@@ -1649,77 +1700,83 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           }
 
           return AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.search, color: Colors.deepPurple),
-              SizedBox(width: 12),
-              Text('Add Product'),
-            ],
-          ),
-          content: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.35,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
               children: [
-                TextField(
-                  controller: dialogSearchController,
-                  autofocus: true,
-                  onChanged: runSearch,
-                  decoration: InputDecoration(
-                    labelText: 'Search Product',
-                    border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppBorderRadius.xsmall)),
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.4,
-                  child: dialogResults.isEmpty
-                      ? Center(
-                          child: Text('No products found',
-                              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                        )
-                      : ListView.builder(
-                          controller: scrollController,
-                          shrinkWrap: true,
-                          itemExtent: itemHeight,
-                          itemCount: dialogResults.length,
-                          itemBuilder: (context, index) {
-                            final product = dialogResults[index];
-                            return ListTile(
-                              selected: index == highlightedIndex,
-                              selectedTileColor:
-                                  Colors.deepPurple.withValues(alpha: 0.08),
-                              leading: Icon(Icons.inventory_2,
-                                  color: product.stock <= 0
-                                      ? Colors.red
-                                      : Theme.of(context).colorScheme.onSurfaceVariant),
-                              title: Text(product.name),
-                              subtitle: Text(
-                                  '$_currencySymbol${product.price.toStringAsFixed(2)}  ·  Stock: ${product.stock}'),
-                              onTap: () {
-                                Navigator.pop(context);
-                                addInvoiceProductPrompt(product);
-                              },
-                            );
-                          },
-                        ),
-                ),
+                Icon(Icons.search, color: Colors.deepPurple),
+                SizedBox(width: 12),
+                Text('Add Product'),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.35,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: dialogSearchController,
+                    autofocus: true,
+                    onChanged: runSearch,
+                    decoration: InputDecoration(
+                      labelText: 'Search Product',
+                      border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppBorderRadius.xsmall)),
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.4,
+                    child: dialogResults.isEmpty
+                        ? Center(
+                            child: Text('No products found',
+                                style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant)),
+                          )
+                        : ListView.builder(
+                            controller: scrollController,
+                            shrinkWrap: true,
+                            itemExtent: itemHeight,
+                            itemCount: dialogResults.length,
+                            itemBuilder: (context, index) {
+                              final product = dialogResults[index];
+                              return ListTile(
+                                selected: index == highlightedIndex,
+                                selectedTileColor:
+                                    Colors.deepPurple.withValues(alpha: 0.08),
+                                leading: Icon(Icons.inventory_2,
+                                    color: product.stock <= 0
+                                        ? Colors.red
+                                        : Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant),
+                                title: Text(product.name),
+                                subtitle: Text(
+                                    '$_currencySymbol${product.price.toStringAsFixed(2)}  ·  Stock: ${product.stock}'),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  addInvoiceProductPrompt(product);
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
           );
         },
       ),
@@ -1796,8 +1853,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                   ? 1.0
                   : _fractionalQuantity
                       ? (double.tryParse(quantityController.text) ?? 1.0)
-                      : (int.tryParse(quantityController.text) ?? 1)
-                          .toDouble(),
+                      : (int.tryParse(quantityController.text) ?? 1).toDouble(),
               discount: double.tryParse(discountController.text) ?? 0.0,
               extraCost: extraCost,
               unit: selectedUnit.trim(),
@@ -1809,260 +1865,283 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           }
 
           return AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.add_box, color: Colors.deepPurple),
-              SizedBox(width: 12),
-              Text('Custom Item',
-                  style: TextStyle(fontSize: AppFontSize.xlarge)),
-            ],
-          ),
-          content: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.3,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
               children: [
-                if (_businessType == BusinessType.both &&
-                    _columnsConfig.type) ...[
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                          value: 'product',
-                          label: Text('Product'),
-                          icon: Icon(Icons.inventory_2_outlined, size: 16)),
-                      ButtonSegment(
-                          value: 'service',
-                          label: Text('Service'),
-                          icon: Icon(Icons.design_services_outlined, size: 16)),
-                    ],
-                    selected: {dialogItemType},
-                    onSelectionChanged: (val) =>
-                        setDialogState(() => dialogItemType = val.first),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                TextField(
-                  controller: nameController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: 'Item Name',
-                    errorText: nameError,
-                    border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppBorderRadius.xsmall)),
-                    prefixIcon: const Icon(Icons.label),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  ),
-                  onChanged: (_) {
-                    if (nameError != null) setDialogState(() => nameError = null);
-                  },
-                  onSubmitted: (_) => submitAdHocItem(),
-                ),
-                if (_columnsConfig.aliasName) ...[
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: aliasNameController,
-                    decoration: InputDecoration(
-                      labelText: 'Alias (for PDF)',
-                      border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppBorderRadius.xsmall)),
-                      prefixIcon: const Icon(Icons.translate),
-                      filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                Icon(Icons.add_box, color: Colors.deepPurple),
+                SizedBox(width: 12),
+                Text('Custom Item',
+                    style: TextStyle(fontSize: AppFontSize.xlarge)),
+              ],
+            ),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.3,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_businessType == BusinessType.both &&
+                      _columnsConfig.type) ...[
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                            value: 'product',
+                            label: Text('Product'),
+                            icon: Icon(Icons.inventory_2_outlined, size: 16)),
+                        ButtonSegment(
+                            value: 'service',
+                            label: Text('Service'),
+                            icon:
+                                Icon(Icons.design_services_outlined, size: 16)),
+                      ],
+                      selected: {dialogItemType},
+                      onSelectionChanged: (val) =>
+                          setDialogState(() => dialogItemType = val.first),
                     ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                TextField(
-                  controller: priceController,
-                  decoration: InputDecoration(
-                    labelText: _showQuantity ? 'Unit Price' : 'Rate',
-                    errorText: priceError,
-                    border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppBorderRadius.xsmall)),
-                    prefixText: '$_currencySymbol ',
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    const SizedBox(height: 16),
                   ],
-                  onChanged: (_) {
-                    if (priceError != null) setDialogState(() => priceError = null);
-                  },
-                  onSubmitted: (_) => submitAdHocItem(),
-                ),
-                if (_showQuantity) ...[
-                  const SizedBox(height: 16),
                   TextField(
-                    controller: quantityController,
+                    controller: nameController,
+                    autofocus: true,
                     decoration: InputDecoration(
-                      labelText: _quantityLabel.trim().isNotEmpty
-                          ? _quantityLabel.trim()
-                          : 'Quantity',
-                      hintText: '1',
+                      labelText: 'Item Name',
+                      errorText: nameError,
                       border: OutlineInputBorder(
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
-                      prefixIcon: const Icon(Icons.numbers),
+                      prefixIcon: const Icon(Icons.label),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
-                    keyboardType: _fractionalQuantity
-                        ? const TextInputType.numberWithOptions(decimal: true)
-                        : TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                    ],
+                    onChanged: (_) {
+                      if (nameError != null)
+                        setDialogState(() => nameError = null);
+                    },
+                    onSubmitted: (_) => submitAdHocItem(),
                   ),
-                ],
-                if (_showQuantity && _columnsConfig.unit) ...[
-                  const SizedBox(height: 16),
-                  _buildUnitPicker(
-                    selectedUnit: selectedUnit,
-                    customController: unitController,
-                    onUnitChanged: (v) => setDialogState(() => selectedUnit = v),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                TextField(
-                  controller: discountController,
-                  decoration: InputDecoration(
-                    labelText: 'Discount',
-                    border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppBorderRadius.xsmall)),
-                    prefixIcon: const Icon(Icons.discount),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  if (_columnsConfig.aliasName) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: aliasNameController,
+                      decoration: InputDecoration(
+                        labelText: 'Alias (for PDF)',
+                        border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall)),
+                        prefixIcon: const Icon(Icons.translate),
+                        filled: true,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                      ),
+                    ),
                   ],
-                ),
-                const SizedBox(height: 8),
-                _buildDiscountPerUnitToggle(discountPerUnit,
-                    (val) => setDialogState(() => discountPerUnit = val)),
-                if (_columnsConfig.extraCost) ...[
                   const SizedBox(height: 16),
                   TextField(
-                    controller: extraCostController,
+                    controller: priceController,
                     decoration: InputDecoration(
-                      labelText: 'Extra Cost (optional)',
-                      hintText: '0.00',
-                      helperText: 'Flat fee added on top of the line total',
+                      labelText: _showQuantity ? 'Unit Price' : 'Rate',
+                      errorText: priceError,
                       border: OutlineInputBorder(
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
-                      prefixIcon: const Icon(Icons.add_circle_outline, size: 18),
+                      prefixText: '$_currencySymbol ',
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     ],
+                    onChanged: (_) {
+                      if (priceError != null)
+                        setDialogState(() => priceError = null);
+                    },
+                    onSubmitted: (_) => submitAdHocItem(),
                   ),
-                ],
-                if (_showDescriptionInPdf) ...[
-                  const SizedBox(height: 16),
-                  _buildItemDescriptionField(descriptionController),
-                ],
-                if (_taxMode == TaxMode.perItem && _columnsConfig.taxRate) ...[
+                  if (_showQuantity) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: quantityController,
+                      decoration: InputDecoration(
+                        labelText: _quantityLabel.trim().isNotEmpty
+                            ? _quantityLabel.trim()
+                            : 'Quantity',
+                        hintText: '1',
+                        border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall)),
+                        prefixIcon: const Icon(Icons.numbers),
+                        filled: true,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                      ),
+                      keyboardType: _fractionalQuantity
+                          ? const TextInputType.numberWithOptions(decimal: true)
+                          : TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      ],
+                    ),
+                  ],
+                  if (_showQuantity && _columnsConfig.unit) ...[
+                    const SizedBox(height: 16),
+                    _buildUnitPicker(
+                      selectedUnit: selectedUnit,
+                      customController: unitController,
+                      onUnitChanged: (v) =>
+                          setDialogState(() => selectedUnit = v),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   TextField(
-                    controller: taxRateController,
+                    controller: discountController,
                     decoration: InputDecoration(
-                      labelText: 'Tax Rate (%)',
+                      labelText: 'Discount',
                       border: OutlineInputBorder(
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
-                      prefixIcon: const Icon(Icons.percent),
+                      prefixIcon: const Icon(Icons.discount),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     keyboardType: TextInputType.number,
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     ],
                   ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text('Price includes tax'),
-                    value: dialogPriceIncludesTax,
-                    onChanged: (val) => setDialogState(
-                        () => dialogPriceIncludesTax = val ?? false),
-                  ),
-                ],
-                if (invoiceItems.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  const Divider(height: 1),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Icon(Icons.format_list_numbered,
-                          size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      const SizedBox(width: 8),
-                      Text('Insert at position',
-                          style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.remove_circle_outline),
-                        onPressed: insertAt > 1
-                            ? () => setDialogState(() => insertAt--)
-                            : null,
-                        iconSize: 20,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
+                  const SizedBox(height: 8),
+                  _buildDiscountPerUnitToggle(discountPerUnit,
+                      (val) => setDialogState(() => discountPerUnit = val)),
+                  if (_columnsConfig.extraCost) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: extraCostController,
+                      decoration: InputDecoration(
+                        labelText: 'Extra Cost (optional)',
+                        hintText: '0.00',
+                        helperText: 'Flat fee added on top of the line total',
+                        border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall)),
+                        prefixIcon:
+                            const Icon(Icons.add_circle_outline, size: 18),
+                        filled: true,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                       ),
-                      const SizedBox(width: 12),
-                      Text('$insertAt',
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle_outline),
-                        onPressed: insertAt < invoiceItems.length + 1
-                            ? () => setDialogState(() => insertAt++)
-                            : null,
-                        iconSize: 20,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      ],
+                    ),
+                  ],
+                  if (_showDescriptionInPdf) ...[
+                    const SizedBox(height: 16),
+                    _buildItemDescriptionField(descriptionController),
+                  ],
+                  if (_taxMode == TaxMode.perItem &&
+                      _columnsConfig.taxRate) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: taxRateController,
+                      decoration: InputDecoration(
+                        labelText: 'Tax Rate (%)',
+                        border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall)),
+                        prefixIcon: const Icon(Icons.percent),
+                        filled: true,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                       ),
-                    ],
-                  ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      ],
+                    ),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: const Text('Price includes tax'),
+                      value: dialogPriceIncludesTax,
+                      onChanged: (val) => setDialogState(
+                          () => dialogPriceIncludesTax = val ?? false),
+                    ),
+                  ],
+                  if (invoiceItems.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Divider(height: 1),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(Icons.format_list_numbered,
+                            size: 16,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Text('Insert at position',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant)),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: insertAt > 1
+                              ? () => setDialogState(() => insertAt--)
+                              : null,
+                          iconSize: 20,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 12),
+                        Text('$insertAt',
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 12),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: insertAt < invoiceItems.length + 1
+                              ? () => setDialogState(() => insertAt++)
+                              : null,
+                          iconSize: 20,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
-              onPressed: submitAdHocItem,
-              child: const Text('Add', style: TextStyle(color: Colors.white)),
             ),
-          ],
-        );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                onPressed: submitAdHocItem,
+                child: const Text('Add', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
         },
       ),
     );
@@ -2087,9 +2166,12 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       final requestId = ++_productSearchRequestId;
       final repo = ref.read(productRepositoryProvider);
       final results = await repo.getProductsPaginated(
-          offset: 0, limit: _productFetchLimit, query: query, type: _businessType.key);
-      final metadata =
-          await repo.getProductMetadataForIds(results.map((e) => e.id).toList());
+          offset: 0,
+          limit: _productFetchLimit,
+          query: query,
+          type: _businessType.key);
+      final metadata = await repo
+          .getProductMetadataForIds(results.map((e) => e.id).toList());
       if (requestId != _productSearchRequestId || !mounted) return;
       setState(() {
         filteredProducts = results;
@@ -2101,10 +2183,13 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
   void _filterCustomers(String query) {
     if (!mounted) return;
     _customerSearchDebounce?.cancel();
-    _customerSearchDebounce = Timer(const Duration(milliseconds: 400), () async {
+    _customerSearchDebounce =
+        Timer(const Duration(milliseconds: 400), () async {
       final requestId = ++_customerSearchRequestId;
-      final results = await ref.read(customerRepositoryProvider).getCustomersPaginated(
-          offset: 0, limit: _customerFetchLimit, query: query);
+      final results = await ref
+          .read(customerRepositoryProvider)
+          .getCustomersPaginated(
+              offset: 0, limit: _customerFetchLimit, query: query);
       if (requestId != _customerSearchRequestId || !mounted) return;
       setState(() {
         filteredCustomers = results;
@@ -2113,7 +2198,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
   }
 
   Future<void> _selectCustomer(Customer? customer) async {
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() {
       selectedCustomer = customer;
       nameController.text = customer?.name ?? '';
@@ -2132,8 +2217,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     if (!_showPreviousBalance ||
         customer == null ||
         customer.id.trim().isEmpty ||
-        invoiceType != 'Invoice')
-    {
+        invoiceType != 'Invoice') {
       if (!mounted) return;
       setState(() {
         _previousBalanceDue = 0.0;
@@ -2141,17 +2225,19 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       });
       return;
     }
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() => _isPreviousBalanceLoading = true);
     try {
-      final balance = await ref.read(invoiceRepositoryProvider).getPreviousBalanceDueForCustomer(
-        customerId: customer.id,
-        currencyCode: _currencyCode,
-        asOfDate: _selectedOrderDate,
-        currentInvoiceId: currentInvoiceNumber.isNotEmpty
-            ? currentInvoiceNumber
-            : _invoice?.id,
-      );
+      final balance = await ref
+          .read(invoiceRepositoryProvider)
+          .getPreviousBalanceDueForCustomer(
+            customerId: customer.id,
+            currencyCode: _currencyCode,
+            asOfDate: _selectedOrderDate,
+            currentInvoiceId: currentInvoiceNumber.isNotEmpty
+                ? currentInvoiceNumber
+                : _invoice?.id,
+          );
       if (!mounted || requestId != _previousBalanceRequestSerial) return;
       setState(() {
         _previousBalanceDue = balance;
@@ -2177,13 +2263,15 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.visibility_off, color: Theme.of(context).primaryColor),
+                Icon(Icons.visibility_off,
+                    color: Theme.of(context).primaryColor),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
                     'Hide Invoice Number In PDF',
                     style: TextStyle(
-                        fontSize: AppFontSize.small, fontWeight: FontWeight.bold),
+                        fontSize: AppFontSize.small,
+                        fontWeight: FontWeight.bold),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -2206,9 +2294,11 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                   hintText: 'e.g. QUO-2026-014 — shown in PDF instead',
                   labelStyle: TextStyle(fontSize: AppFontSize.medium),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+                      borderRadius:
+                          BorderRadius.circular(AppBorderRadius.xsmall)),
                   filled: true,
-                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  fillColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
               ),
             ],
@@ -2258,7 +2348,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             BorderRadius.circular(AppBorderRadius.xsmall)),
                     prefixIcon: const Icon(Icons.search),
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    fillColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: AppPadding.small,
                         vertical: AppPadding.xsmall),
@@ -2275,10 +2366,15 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.search_off,
-                            size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            size: 48,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
                         const SizedBox(height: 8),
                         Text('No customers found',
-                            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                            style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant)),
                       ],
                     ),
                   )
@@ -2391,7 +2487,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                         'Out of stock items are shown in red',
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            fontSize: AppFontSize.xsmall, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            fontSize: AppFontSize.xsmall,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ),
                   ],
@@ -2408,7 +2506,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             BorderRadius.circular(AppBorderRadius.xsmall)),
                     prefixIcon: const Icon(Icons.search),
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    fillColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: AppPadding.small,
                         vertical: AppPadding.xsmall),
@@ -2448,10 +2547,15 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.search_off,
-                            size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            size: 40,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
                         const SizedBox(height: 8),
                         Text('No products found',
-                            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                            style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant)),
                       ],
                     ),
                   )
@@ -2472,11 +2576,12 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                 (meta?.expiryDate?.isNotEmpty ?? false))
                             ? DateTime.tryParse(meta!.expiryDate!)
                             : null;
-                        final isExpired =
-                            expiryDate != null && expiryDate.isBefore(DateTime.now());
-                        final storageLocation = _columnsConfig.metaStorageLocation
-                            ? meta?.storageLocation
-                            : null;
+                        final isExpired = expiryDate != null &&
+                            expiryDate.isBefore(DateTime.now());
+                        final storageLocation =
+                            _columnsConfig.metaStorageLocation
+                                ? meta?.storageLocation
+                                : null;
                         return Container(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
@@ -2484,16 +2589,20 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             leading: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: (!product.unlimitedStock && product.stock <= 0)
+                                color: (!product.unlimitedStock &&
+                                        product.stock <= 0)
                                     ? Colors.red.withValues(alpha: 0.1)
                                     : Colors.blue.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(
                                 Icons.inventory_2,
-                                color: (!product.unlimitedStock && product.stock <= 0)
+                                color: (!product.unlimitedStock &&
+                                        product.stock <= 0)
                                     ? Colors.red
-                                    : Theme.of(context).colorScheme.onSurfaceVariant,
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                 size: AppFontSize.xlarge,
                               ),
                             ),
@@ -2567,11 +2676,14 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                       if (storageLocation != null &&
                                           storageLocation.isNotEmpty)
                                         Chip(
-                                          avatar: const Icon(Icons.place_outlined,
-                                              size: 14, color: Colors.blueGrey),
+                                          avatar: const Icon(
+                                              Icons.place_outlined,
+                                              size: 14,
+                                              color: Colors.blueGrey),
                                           label: Text(storageLocation,
                                               style: const TextStyle(
-                                                  fontSize: AppFontSize.xsmall)),
+                                                  fontSize:
+                                                      AppFontSize.xsmall)),
                                           visualDensity: VisualDensity.compact,
                                           materialTapTargetSize:
                                               MaterialTapTargetSize.shrinkWrap,
@@ -2680,7 +2792,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                       suffixIcon: const Icon(Icons.calendar_today, size: 18),
                     ),
                     onTap: () async {
@@ -2691,7 +2804,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                         lastDate: DateTime(2100),
                       );
                       if (picked != null) {
-                        if(!mounted) return;
+                        if (!mounted) return;
                         setState(() {
                           _selectedOrderDate = picked;
                           dateController.text =
@@ -2715,12 +2828,13 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                       suffixIcon: dueDateController.text.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear, size: 18),
                               onPressed: () {
-                                if(!mounted) return;
+                                if (!mounted) return;
                                 setState(() {
                                   _selectedDueDate = null;
                                   dueDateController.clear();
@@ -2737,7 +2851,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                         lastDate: DateTime(2100),
                       );
                       if (picked != null) {
-                        if(!mounted) return;
+                        if (!mounted) return;
                         setState(() {
                           _selectedDueDate = picked;
                           dueDateController.text =
@@ -2766,7 +2880,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     items: const [
                       DropdownMenuItem(
@@ -2801,44 +2916,54 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             borderRadius:
                                 BorderRadius.circular(AppBorderRadius.xsmall)),
                         filled: true,
-                        fillColor:
-                            Theme.of(context).colorScheme.surfaceContainerHighest,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                       ),
                       items: const [
                         DropdownMenuItem(
                             value: null,
                             child: Text('Invoice',
-                                style: TextStyle(fontSize: AppFontSize.medium))),
+                                style:
+                                    TextStyle(fontSize: AppFontSize.medium))),
                         DropdownMenuItem(
                             value: 'Tax Invoice',
                             child: Text('Tax Invoice',
-                                style: TextStyle(fontSize: AppFontSize.medium))),
+                                style:
+                                    TextStyle(fontSize: AppFontSize.medium))),
                         DropdownMenuItem(
                             value: 'Bill of Supply',
                             child: Text('Bill of Supply',
-                                style: TextStyle(fontSize: AppFontSize.medium))),
+                                style:
+                                    TextStyle(fontSize: AppFontSize.medium))),
                         DropdownMenuItem(
                             value: 'Invoice-cum-Bill of Supply',
                             child: Text('Invoice-cum-Bill of Supply',
-                                style: TextStyle(fontSize: AppFontSize.medium))),
+                                style:
+                                    TextStyle(fontSize: AppFontSize.medium))),
                         DropdownMenuItem(
                             value: 'Cash Bill',
                             child: Text('Cash Bill',
-                                style: TextStyle(fontSize: AppFontSize.medium))),
+                                style:
+                                    TextStyle(fontSize: AppFontSize.medium))),
                         DropdownMenuItem(
                             value: 'Credit Note',
                             child: Text('Credit Note',
-                                style: TextStyle(fontSize: AppFontSize.medium))),
+                                style:
+                                    TextStyle(fontSize: AppFontSize.medium))),
                         DropdownMenuItem(
                             value: 'Debit Note',
                             child: Text('Debit Note',
-                                style: TextStyle(fontSize: AppFontSize.medium))),
+                                style:
+                                    TextStyle(fontSize: AppFontSize.medium))),
                         DropdownMenuItem(
                             value: 'Revised Invoice',
                             child: Text('Revised Invoice',
-                                style: TextStyle(fontSize: AppFontSize.medium))),
+                                style:
+                                    TextStyle(fontSize: AppFontSize.medium))),
                       ],
-                      onChanged: (value) => setState(() => invoiceTitle = value),
+                      onChanged: (value) =>
+                          setState(() => invoiceTitle = value),
                     ),
                   ),
                 ],
@@ -2855,7 +2980,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               borderRadius: BorderRadius.circular(
                                   AppBorderRadius.xsmall)),
                           filled: true,
-                          fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          fillColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                         ),
                         child: Text(
                           _quantityLabel.trim(),
@@ -2876,7 +3003,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
   }
 
   Future<void> resetInvoiceType(String invoiceType_) async {
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() {
       invoiceType = invoiceType_;
       if (invoiceType_ != 'Invoice') invoiceTitle = null;
@@ -2890,9 +3017,10 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
   }
 
   Future<void> resetValues(String invoiceType_) async {
-    if(!mounted) return;
-    final invType = await InvoicePdfServices.peekNextInvoiceNumber(invoiceType_);
-    if(!mounted) return;
+    if (!mounted) return;
+    final invType =
+        await InvoicePdfServices.peekNextInvoiceNumber(invoiceType_);
+    if (!mounted) return;
     setState(() {
       invoiceType = invoiceType_;
       currentInvoiceNumber = invType;
@@ -2953,80 +3081,185 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
 
   Future<void> _saveCustomer() async {
     if (_isSavingCustomer) return;
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() => _isSavingCustomer = true);
     try {
-    final name = nameController.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.white),
-              SizedBox(width: 12),
-              Text('Please enter a customer name before saving'),
+      final name = nameController.text.trim();
+      if (name.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Please enter a customer name before saving'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            showCloseIcon: true,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+        return;
+      }
+
+      final phone = phoneController.text.trim();
+
+      // Editing an already-selected customer whose phone changed: ask whether
+      // to overwrite that customer's record or split off a new one, instead
+      // of silently matching/creating based on phone alone.
+      var forceNew = false;
+      final sel = selectedCustomer;
+      if (sel != null && sel.id.isNotEmpty && phone != sel.phone) {
+        if (!mounted) return;
+        final choice = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.phone_forwarded, color: Colors.orange),
+                SizedBox(width: 12),
+                Text('Phone Number Changed'),
+              ],
+            ),
+            content: Text(
+              'The phone number for "${sel.name}" was changed.\n\nUpdate their existing record, or save these details as a new customer?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, null),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, 'new'),
+                child: const Text('Save as New'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                onPressed: () => Navigator.pop(ctx, 'update'),
+                child: const Text('Update Existing',
+                    style: TextStyle(color: Colors.white)),
+              ),
             ],
           ),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-          showCloseIcon: true,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-      );
-      return;
-    }
-
-    final phone = phoneController.text.trim();
-
-    // Editing an already-selected customer whose phone changed: ask whether
-    // to overwrite that customer's record or split off a new one, instead
-    // of silently matching/creating based on phone alone.
-    var forceNew = false;
-    final sel = selectedCustomer;
-    if (sel != null && sel.id.isNotEmpty && phone != sel.phone) {
-      if (!mounted) return;
-      final choice = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.phone_forwarded, color: Colors.orange),
-              SizedBox(width: 12),
-              Text('Phone Number Changed'),
-            ],
-          ),
-          content: Text(
-            'The phone number for "${sel.name}" was changed.\n\nUpdate their existing record, or save these details as a new customer?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'new'),
-              child: const Text('Save as New'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              onPressed: () => Navigator.pop(ctx, 'update'),
-              child: const Text('Update Existing',
-                  style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      );
-      if (choice == null) return;
-      if (choice == 'update') {
-        final phoneOwner = await ref.read(customerRepositoryProvider).findByPhone(phone);
-        if (phoneOwner != null && phoneOwner.id != sel.id) {
-          await _showPhoneTakenError(phoneOwner.name);
+        );
+        if (choice == null) return;
+        if (choice == 'update') {
+          final phoneOwner =
+              await ref.read(customerRepositoryProvider).findByPhone(phone);
+          if (phoneOwner != null && phoneOwner.id != sel.id) {
+            await _showPhoneTakenError(phoneOwner.name);
+            return;
+          }
+          final updated = Customer(
+            id: sel.id,
+            name: name,
+            email: emailController.text.trim(),
+            phone: phone,
+            address: addressController.text.trim(),
+            gstin: gstinController.text.trim(),
+            businessName: businessNameController.text.trim(),
+          );
+          await ref.read(customerRepositoryProvider).updateCustomer(updated);
+          final reloaded =
+              await ref.read(customerRepositoryProvider).getAllCustomers();
+          if (!mounted) return;
+          setState(() {
+            selectedCustomer = updated;
+            customers = reloaded;
+            filteredCustomers = reloaded;
+          });
+          await _loadPreviousBalanceDue(updated);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${updated.name} updated in customer list'),
+                behavior: SnackBarBehavior.floating,
+                showCloseIcon: true,
+              ),
+            );
+          }
           return;
         }
+        // choice == 'new': fall through to the phone-lookup flow below,
+        // which still guards against colliding with a *different* customer's phone.
+        forceNew = true;
+      }
+
+      final existing =
+          await ref.read(customerRepositoryProvider).findByPhone(phone);
+
+      if (existing != null && forceNew) {
+        // User explicitly chose "Save as New" above, but this phone number
+        // is already used by a different customer. Phone numbers must be
+        // unique — block instead of creating a duplicate.
+        await _showPhoneTakenError(existing.name);
+        return;
+      }
+
+      if (existing != null) {
+        if (!mounted) return;
+        final choice = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.person_search, color: Colors.orange),
+                SizedBox(width: 12),
+                Text('Customer Already Exists'),
+              ],
+            ),
+            content: Text(
+              '"${existing.name}" is already saved with this phone number.\n\nUse their existing details, or update their record with the current information?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, 'use'),
+                child: const Text('Use Existing'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                onPressed: () => Navigator.pop(ctx, 'update'),
+                child:
+                    const Text('Update', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+        if (choice == null) return;
+
+        if (choice == 'use') {
+          if (!mounted) return;
+          setState(() {
+            selectedCustomer = existing;
+            nameController.text = existing.name;
+            emailController.text = existing.email;
+            phoneController.text = existing.phone;
+            addressController.text = existing.address;
+            gstinController.text = existing.gstin;
+            businessNameController.text = existing.businessName;
+          });
+          await _loadPreviousBalanceDue(existing);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Using existing customer "${existing.name}"'),
+                behavior: SnackBarBehavior.floating,
+                showCloseIcon: true,
+              ),
+            );
+          }
+          return;
+        }
+
         final updated = Customer(
-          id: sel.id,
+          id: existing.id,
           name: name,
           email: emailController.text.trim(),
           phone: phone,
@@ -3035,7 +3268,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           businessName: businessNameController.text.trim(),
         );
         await ref.read(customerRepositoryProvider).updateCustomer(updated);
-        final reloaded = await ref.read(customerRepositoryProvider).getAllCustomers();
+        final reloaded =
+            await ref.read(customerRepositoryProvider).getAllCustomers();
         if (!mounted) return;
         setState(() {
           selectedCustomer = updated;
@@ -3052,136 +3286,36 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
             ),
           );
         }
-        return;
-      }
-      // choice == 'new': fall through to the phone-lookup flow below,
-      // which still guards against colliding with a *different* customer's phone.
-      forceNew = true;
-    }
-
-    final existing = await ref.read(customerRepositoryProvider).findByPhone(phone);
-
-    if (existing != null && forceNew) {
-      // User explicitly chose "Save as New" above, but this phone number
-      // is already used by a different customer. Phone numbers must be
-      // unique — block instead of creating a duplicate.
-      await _showPhoneTakenError(existing.name);
-      return;
-    }
-
-    if (existing != null) {
-      if (!mounted) return;
-      final choice = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.person_search, color: Colors.orange),
-              SizedBox(width: 12),
-              Text('Customer Already Exists'),
-            ],
-          ),
-          content: Text(
-            '"${existing.name}" is already saved with this phone number.\n\nUse their existing details, or update their record with the current information?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'use'),
-              child: const Text('Use Existing'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-              onPressed: () => Navigator.pop(ctx, 'update'),
-              child:
-                  const Text('Update', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      );
-      if (choice == null) return;
-
-      if (choice == 'use') {
+      } else {
+        final newCustomer = Customer(
+          id: const Uuid().v4(),
+          name: name,
+          email: emailController.text.trim(),
+          phone: phone,
+          address: addressController.text.trim(),
+          gstin: gstinController.text.trim(),
+          businessName: businessNameController.text.trim(),
+        );
+        await ref.read(customerRepositoryProvider).insertCustomer(newCustomer);
+        final reloaded =
+            await ref.read(customerRepositoryProvider).getAllCustomers();
         if (!mounted) return;
         setState(() {
-          selectedCustomer = existing;
-          nameController.text = existing.name;
-          emailController.text = existing.email;
-          phoneController.text = existing.phone;
-          addressController.text = existing.address;
-          gstinController.text = existing.gstin;
-          businessNameController.text = existing.businessName;
+          selectedCustomer = newCustomer;
+          customers = reloaded;
+          filteredCustomers = reloaded;
         });
-        await _loadPreviousBalanceDue(existing);
+        await _loadPreviousBalanceDue(newCustomer);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Using existing customer "${existing.name}"'),
+              content: Text('${newCustomer.name} saved to customer list'),
               behavior: SnackBarBehavior.floating,
               showCloseIcon: true,
             ),
           );
         }
-        return;
       }
-
-      final updated = Customer(
-        id: existing.id,
-        name: name,
-        email: emailController.text.trim(),
-        phone: phone,
-        address: addressController.text.trim(),
-        gstin: gstinController.text.trim(),
-        businessName: businessNameController.text.trim(),
-      );
-      await ref.read(customerRepositoryProvider).updateCustomer(updated);
-      final reloaded = await ref.read(customerRepositoryProvider).getAllCustomers();
-      if(!mounted) return;
-      setState(() {
-        selectedCustomer = updated;
-        customers = reloaded;
-        filteredCustomers = reloaded;
-      });
-      await _loadPreviousBalanceDue(updated);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${updated.name} updated in customer list'),
-            behavior: SnackBarBehavior.floating,
-            showCloseIcon: true,
-          ),
-        );
-      }
-    } else {
-      final newCustomer = Customer(
-        id: const Uuid().v4(),
-        name: name,
-        email: emailController.text.trim(),
-        phone: phone,
-        address: addressController.text.trim(),
-        gstin: gstinController.text.trim(),
-        businessName: businessNameController.text.trim(),
-      );
-      await ref.read(customerRepositoryProvider).insertCustomer(newCustomer);
-      final reloaded = await ref.read(customerRepositoryProvider).getAllCustomers();
-      if(!mounted) return;
-      setState(() {
-        selectedCustomer = newCustomer;
-        customers = reloaded;
-        filteredCustomers = reloaded;
-      });
-      await _loadPreviousBalanceDue(newCustomer);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${newCustomer.name} saved to customer list'),
-            behavior: SnackBarBehavior.floating,
-            showCloseIcon: true,
-          ),
-        );
-      }
-    }
     } finally {
       if (mounted) setState(() => _isSavingCustomer = false);
     }
@@ -3194,15 +3328,19 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
   Future<void> _refreshCustomerFromRecord() async {
     final current = selectedCustomer;
     if (current == null || current.id.trim().isEmpty) return;
-    final latest = await ref.read(customerRepositoryProvider).getCustomerById(current.id);
+    final latest =
+        await ref.read(customerRepositoryProvider).getCustomerById(current.id);
     if (!mounted) return;
     if (latest == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Customer record no longer exists'),showCloseIcon: true,),
+        const SnackBar(
+          content: Text('Customer record no longer exists'),
+          showCloseIcon: true,
+        ),
       );
       return;
     }
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() {
       selectedCustomer = latest;
       nameController.text = latest.name;
@@ -3212,11 +3350,12 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       gstinController.text = latest.gstin;
       businessNameController.text = latest.businessName;
     });
-    if(!mounted) return;
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-          content: Text('Customer details refreshed'),
-      showCloseIcon: true,),
+        content: Text('Customer details refreshed'),
+        showCloseIcon: true,
+      ),
     );
   }
 
@@ -3263,88 +3402,104 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                (selectedCustomer != null && _customerFormMatchesSelected)
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check_circle,
-                                size: 16,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Saved',
-                              style: TextStyle(
-                                fontSize: AppFontSize.small,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      (selectedCustomer != null && _customerFormMatchesSelected)
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle,
+                                      size: 16,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Saved',
+                                    style: TextStyle(
+                                      fontSize: AppFontSize.small,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Tooltip(
+                              message: 'Save customer to customer list',
+                              child: OutlinedButton.icon(
+                                onPressed:
+                                    _isSavingCustomer ? null : _saveCustomer,
+                                icon: _isSavingCustomer
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2))
+                                    : Icon(
+                                        Icons.person_add_outlined,
+                                        size: 16,
+                                        color: Theme.of(context).primaryColor,
+                                      ),
+                                label: Text(
+                                  _isSavingCustomer
+                                      ? 'Saving...'
+                                      : 'Save Customer',
+                                  style: TextStyle(
+                                    fontSize: AppFontSize.small,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  side: BorderSide(
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                      )
-                    : Tooltip(
-                        message: 'Save customer to customer list',
-                        child: OutlinedButton.icon(
-                          onPressed: _isSavingCustomer ? null : _saveCustomer,
-                          icon: _isSavingCustomer
-                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                              : Icon(
-                            Icons.person_add_outlined,
-                            size: 16,
-                            color: Theme.of(context).primaryColor,
-                          ),
-                          label: Text(
-                            _isSavingCustomer ? 'Saving...' : 'Save Customer',
-                            style: TextStyle(
-                              fontSize: AppFontSize.small,
-                              color: Theme.of(context).primaryColor,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            side: BorderSide(
-                              color: Theme.of(context).primaryColor,
+                      if (selectedCustomer != null &&
+                          selectedCustomer!.id.trim().isNotEmpty) ...[
+                        Tooltip(
+                          message:
+                              'Reload this customer\'s latest saved details '
+                              '(name, address, phone, etc.) — this invoice keeps its '
+                              'own snapshot until you refresh',
+                          child: OutlinedButton.icon(
+                            onPressed: _refreshCustomerFromRecord,
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('Refresh',
+                                style: TextStyle(fontSize: AppFontSize.small)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
                             ),
                           ),
                         ),
-                      ),
-                if (selectedCustomer != null && selectedCustomer!.id.trim().isNotEmpty) ...[
-                  Tooltip(
-                    message: 'Reload this customer\'s latest saved details '
-                        '(name, address, phone, etc.) — this invoice keeps its '
-                        'own snapshot until you refresh',
-                    child: OutlinedButton.icon(
-                      onPressed: _refreshCustomerFromRecord,
-                      icon: const Icon(Icons.refresh, size: 16),
-                      label: const Text('Refresh',
-                          style: TextStyle(fontSize: AppFontSize.small)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                      ),
-                    ),
-                  ),
-                  Tooltip(
-                    message: 'Clear customer selection and enter a new one',
-                    child: OutlinedButton.icon(
-                      onPressed: _clearCustomerSelection,
-                      icon: const Icon(Icons.clear, size: 16),
-                      label: const Text('Clear',
-                          style: TextStyle(fontSize: AppFontSize.small)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                      ),
-                    ),
-                  ),
-                ],
+                        Tooltip(
+                          message:
+                              'Clear customer selection and enter a new one',
+                          child: OutlinedButton.icon(
+                            onPressed: _clearCustomerSelection,
+                            icon: const Icon(Icons.clear, size: 16),
+                            label: const Text('Clear',
+                                style: TextStyle(fontSize: AppFontSize.small)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -3366,7 +3521,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                   ),
                 ),
@@ -3383,7 +3539,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                   ),
                 ),
@@ -3400,7 +3557,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                   ),
                 ),
@@ -3422,7 +3580,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                   ),
                 ),
@@ -3439,7 +3598,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
                       filled: true,
-                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      fillColor:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                   ),
                 ),
@@ -3457,7 +3617,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             borderRadius:
                                 BorderRadius.circular(AppBorderRadius.xsmall)),
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                       ),
                     ),
                   ),
@@ -3502,7 +3664,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
             borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(AppBorderRadius.xsmall)),
             onTap: () {
-              if(!mounted) return;
+              if (!mounted) return;
               setState(() => _showAdditionalCosts = !_showAdditionalCosts);
             },
             child: Padding(
@@ -3570,9 +3732,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             child: TextField(
                               controller: row.label,
                               onChanged: (_) {
-                                if(!mounted) return;
+                                if (!mounted) return;
                                 setState(() {});
-                                },
+                              },
                               decoration: InputDecoration(
                                 labelText: 'Label',
                                 hintText: 'e.g. Shipping',
@@ -3582,7 +3744,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                       AppBorderRadius.xsmall),
                                 ),
                                 filled: true,
-                                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                fillColor: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest,
                               ),
                             ),
                           ),
@@ -3592,7 +3756,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                             child: TextField(
                               controller: row.amount,
                               onChanged: (_) {
-                                if(!mounted) return;
+                                if (!mounted) return;
                                 setState(() {});
                               },
                               keyboardType:
@@ -3607,7 +3771,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                       AppBorderRadius.xsmall),
                                 ),
                                 filled: true,
-                                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                fillColor: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest,
                               ),
                             ),
                           ),
@@ -3617,7 +3783,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                 color: Colors.red, size: 20),
                             tooltip: 'Remove',
                             onPressed: () {
-                              if(!mounted) return;
+                              if (!mounted) return;
                               setState(() {
                                 _additionalCostControllers[i].label.dispose();
                                 _additionalCostControllers[i].amount.dispose();
@@ -3633,7 +3799,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
                       onPressed: () {
-                        if(!mounted) return;
+                        if (!mounted) return;
                         setState(() {
                           _additionalCostControllers.add((
                             label: TextEditingController(),
@@ -3685,22 +3851,22 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                 if (!mounted) return;
                 setState(() {});
               },
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 isDense: true,
-                prefixText:
-                    _invoiceDiscountType == InvoiceDiscountType.amount
-                        ? '$_currencySymbol '
-                        : null,
-                suffixText:
-                    _invoiceDiscountType == InvoiceDiscountType.percent
-                        ? '%'
-                        : null,
+                prefixText: _invoiceDiscountType == InvoiceDiscountType.amount
+                    ? '$_currencySymbol '
+                    : null,
+                suffixText: _invoiceDiscountType == InvoiceDiscountType.percent
+                    ? '%'
+                    : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
                 ),
                 filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                fillColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
               ),
             ),
           ),
@@ -3709,7 +3875,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+              border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(12),
             ),
             child: DropdownButtonHideUnderline(
@@ -3723,9 +3890,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                 items: const [
                   DropdownMenuItem(
                     value: InvoiceDiscountType.percent,
-                    child: Align(
-                      alignment: Alignment.center,
-                        child: Text('%')),
+                    child: Align(alignment: Alignment.center, child: Text('%')),
                   ),
                   DropdownMenuItem(
                     value: InvoiceDiscountType.amount,
@@ -3769,7 +3934,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             Text(
               value ? '(price − discount) × qty' : '(price × qty) − discount',
-              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
         ),
@@ -3845,7 +4012,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           style: TextStyle(
             fontSize: isTotal ? 18 : 14,
             fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-            color: isTotal ? Colors.green : Theme.of(context).colorScheme.onSurface,
+            color: isTotal
+                ? Colors.green
+                : Theme.of(context).colorScheme.onSurface,
           ),
         ),
         const SizedBox(width: 8),
@@ -3857,7 +4026,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
             style: TextStyle(
               fontSize: isTotal ? 20 : 14,
               fontWeight: FontWeight.bold,
-              color: isTotal ? Colors.green : Theme.of(context).colorScheme.onSurface,
+              color: isTotal
+                  ? Colors.green
+                  : Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -4069,8 +4240,13 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     );
   }
 
-  Widget _invoiceItems(double tax, double subtotal, double total,
-      double grossSubtotal, double totalDiscount, double invoiceDiscountAmount) {
+  Widget _invoiceItems(
+      double tax,
+      double subtotal,
+      double total,
+      double grossSubtotal,
+      double totalDiscount,
+      double invoiceDiscountAmount) {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -4174,18 +4350,26 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.shopping_cart_outlined,
-                            size: 64, color: Theme.of(context).colorScheme.outlineVariant),
+                            size: 64,
+                            color:
+                                Theme.of(context).colorScheme.outlineVariant),
                         const SizedBox(height: 16),
                         Text(
                           'No items added yet',
-                          style:
-                              TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          style: TextStyle(
+                              fontSize: 16,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Add products from the right panel',
-                          style:
-                              TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -4203,10 +4387,14 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               horizontal: AppMargin.small,
                               vertical: AppMargin.xxxsmall),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceContainer,
+                            color:
+                                Theme.of(context).colorScheme.surfaceContainer,
                             borderRadius:
                                 BorderRadius.circular(AppBorderRadius.xsmall),
-                            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                            border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant),
                           ),
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(
@@ -4244,7 +4432,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                   ),
                                 ),
                                 AppSpacing.wMedium,
-                                if (_columnsConfig.type && _businessType == BusinessType.both)
+                                if (_columnsConfig.type &&
+                                    _businessType == BusinessType.both)
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 6, vertical: 2),
@@ -4300,7 +4489,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                         ),
                                       ),
                                     ),
-                                  if(item.unitPrice != null)
+                                  if (item.unitPrice != null)
                                     _buildItemDetail('Price',
                                         '$_currencySymbol${item.effectivePrice.toStringAsFixed(2)} *',
                                         color: Colors.orange[700])
@@ -4310,16 +4499,20 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                   if (_taxMode == TaxMode.perItem)
                                     _buildItemDetail(
                                         'Tax', '${item.product.tax_rate}%'),
-                                  if(item.product.priceIncludesTax)...[
+                                  if (item.product.priceIncludesTax) ...[
                                     _buildItemDetail(
-                                        _taxMode == TaxMode.perItem ? '' : 'Tax', 'Inclusive',color: Colors.teal[700]),
+                                        _taxMode == TaxMode.perItem
+                                            ? ''
+                                            : 'Tax',
+                                        'Inclusive',
+                                        color: Colors.teal[700]),
                                     _buildItemDetail('Net Price',
                                         '$_currencySymbol${InvoiceTotalsCalculator.netPrice(price: item.effectivePrice, taxRatePercent: item.product.tax_rate.toDouble(), priceIncludesTax: true).toStringAsFixed(2)}',
                                         color: Colors.teal[700]),
                                   ],
                                   if (_columnsConfig.hsncode)
-                                  _buildItemDetail(
-                                      'HSN/SAC', item.product.hsncode.toString()),
+                                    _buildItemDetail('HSN/SAC',
+                                        item.product.hsncode.toString()),
                                   if (_showQuantity)
                                     _buildItemDetail(
                                         _quantityLabel.trim().isNotEmpty
@@ -4327,7 +4520,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                             : 'Qty',
                                         '${item.quantity == item.quantity.roundToDouble() ? item.quantity.toInt().toString() : item.quantity.toString()}'
                                         '${item.effectiveUnit.trim().isEmpty ? '' : ' ${item.effectiveUnit}'}'),
-                                  if(_columnsConfig.defaultDiscount || item.discount > 0)
+                                  if (_columnsConfig.defaultDiscount ||
+                                      item.discount > 0)
                                     _buildItemDetail('Discount',
                                         '$_currencySymbol${item.discount.toStringAsFixed(2)}${item.discountPerUnit ? ' ×qty' : ''}'),
                                   if (item.discountPerUnit && item.discount > 0)
@@ -4421,13 +4615,16 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                           priceIncludesTax:
                                               item.product.priceIncludesTax,
                                         );
-                                        await ref.read(productRepositoryProvider).insertProduct(
-                                            newProduct);
+                                        await ref
+                                            .read(productRepositoryProvider)
+                                            .insertProduct(newProduct);
                                         item.isProductSaved = true;
                                         // Persist immediately so the flag survives
                                         // even if the user closes without saving the invoice.
                                         if (isEditing && _invoice != null) {
-                                          await ref.read(invoiceItemRepositoryProvider)
+                                          await ref
+                                              .read(
+                                                  invoiceItemRepositoryProvider)
                                               .markProductSaved(_invoice!.id,
                                                   item.product.id);
                                         }
@@ -4462,7 +4659,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                   icon: const Icon(Icons.delete, size: 20),
                                   color: Colors.red,
                                   onPressed: () {
-                                    if(!mounted) return;
+                                    if (!mounted) return;
                                     setState(() {
                                       invoiceItems.removeAt(index);
                                     });
@@ -4503,7 +4700,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               borderRadius: BorderRadius.circular(
                                   AppBorderRadius.xsmall)),
                           filled: true,
-                          fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          fillColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                         ),
                         maxLines: 3,
                       ),
@@ -4527,37 +4726,44 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                       borderRadius: BorderRadius.circular(
                                           AppBorderRadius.xsmall)),
                                   filled: true,
-                                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  fillColor: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest,
                                   contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 14),
                                 ),
                                 items: [
                                   DropdownMenuItem<UpiEntry?>(
                                     value: null,
-                                    child: Text('None',
-                                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                            fontSize: 12),),
+                                    child: Text(
+                                      'None',
+                                      style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          fontSize: 12),
+                                    ),
                                   ),
-                                  ..._upiEntries
-                                      .map((e) => DropdownMenuItem<UpiEntry?>(
-                                            value: e,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                if (e.isDefault) ...[
-                                                  Icon(Icons.star_rounded,
-                                                      size: 12,
-                                                      color: Colors.amber[700]),
-                                                  const SizedBox(width: 4),
-                                                ],
-                                                Text(e.displayLabel,
-                                                    style: TextStyle(fontSize: 12)),
-                                              ],
-                                            ),
-                                          )),
+                                  ..._upiEntries.map((e) =>
+                                      DropdownMenuItem<UpiEntry?>(
+                                        value: e,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (e.isDefault) ...[
+                                              Icon(Icons.star_rounded,
+                                                  size: 12,
+                                                  color: Colors.amber[700]),
+                                              const SizedBox(width: 4),
+                                            ],
+                                            Text(e.displayLabel,
+                                                style: TextStyle(fontSize: 12)),
+                                          ],
+                                        ),
+                                      )),
                                 ],
                                 onChanged: (val) {
-                                  if(!mounted) return;
+                                  if (!mounted) return;
                                   setState(() => _selectedUpi = val);
                                 },
                               ),
@@ -4577,7 +4783,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                       borderRadius: BorderRadius.circular(
                                           AppBorderRadius.xsmall)),
                                   filled: true,
-                                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  fillColor: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest,
                                   contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 14),
                                 ),
@@ -4585,29 +4793,32 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                   DropdownMenuItem<BankAccount?>(
                                     value: null,
                                     child: Text('None',
-                                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant,fontSize: 12)),
+                                        style: TextStyle(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                            fontSize: 12)),
                                   ),
-                                  ..._bankAccounts.map(
-                                      (e) => DropdownMenuItem<BankAccount?>(
-                                            value: e,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                if (e.isDefault) ...[
-                                                  Icon(Icons.star_rounded,
-                                                      size: 12,
-                                                      color: Colors.amber[700]),
-                                                  const SizedBox(width: 4),
-                                                ],
-                                                Text(e.displayLabel,
-                                                style: TextStyle(fontSize: 12)
-                                                ),
-                                              ],
-                                            ),
-                                          )),
+                                  ..._bankAccounts.map((e) =>
+                                      DropdownMenuItem<BankAccount?>(
+                                        value: e,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (e.isDefault) ...[
+                                              Icon(Icons.star_rounded,
+                                                  size: 12,
+                                                  color: Colors.amber[700]),
+                                              const SizedBox(width: 4),
+                                            ],
+                                            Text(e.displayLabel,
+                                                style: TextStyle(fontSize: 12)),
+                                          ],
+                                        ),
+                                      )),
                                 ],
                                 onChanged: (val) {
-                                  if(!mounted) return;
+                                  if (!mounted) return;
                                   setState(() => _selectedBankAccount = val);
                                 },
                               ),
@@ -4623,30 +4834,29 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                              //mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Flexible(
-                                  child: Text(
-                                    'Enable Tax',
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w600),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                            //mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Flexible(
+                                child: Text(
+                                  'Enable Tax',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                Transform.scale(
-                                  scale: 0.7,
-                                  child: Switch(
-                                    value: _isTaxEnabled,
-                                    onChanged: (value) {
-                                      if(!mounted) return;
-                                      setState(() {
-                                        _isTaxEnabled = value;
-                                      });
-                                    },
-                                  ),
+                              ),
+                              Transform.scale(
+                                scale: 0.7,
+                                child: Switch(
+                                  value: _isTaxEnabled,
+                                  onChanged: (value) {
+                                    if (!mounted) return;
+                                    setState(() {
+                                      _isTaxEnabled = value;
+                                    });
+                                  },
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
+                          ),
                           if (_isTaxEnabled) ...[
                             const SizedBox(height: 8),
                             // Global / Per Item selector
@@ -4665,7 +4875,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               ],
                               selected: {_isPerItem},
                               onSelectionChanged: (selection) {
-                                if(!mounted) return;
+                                if (!mounted) return;
                                 setState(() {
                                   _isPerItem = selection.first;
                                 });
@@ -4686,11 +4896,13 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                           AppBorderRadius.xsmall)),
                                   suffixText: '%',
                                   filled: true,
-                                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  fillColor: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest,
                                 ),
                                 keyboardType: TextInputType.number,
                                 onChanged: (value) {
-                                  if(!mounted) return;
+                                  if (!mounted) return;
                                   setState(() {
                                     taxRate = (double.tryParse(value) ??
                                             (taxRate * 100)) /
@@ -4764,7 +4976,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           color: Theme.of(context).colorScheme.surfaceContainer,
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall),
-                          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                          border: Border.all(
+                              color:
+                                  Theme.of(context).colorScheme.outlineVariant),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
@@ -4880,7 +5094,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           ),
           child: IconButton(
             icon: Icon(icon),
-            color: onPressed != null ? color : Theme.of(context).colorScheme.onSurfaceVariant,
+            color: onPressed != null
+                ? color
+                : Theme.of(context).colorScheme.onSurfaceVariant,
             iconSize: 28,
             onPressed: onPressed,
             tooltip: tooltip ?? label,
@@ -4891,7 +5107,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: onPressed != null ? color : Theme.of(context).colorScheme.onSurfaceVariant,
+            color: onPressed != null
+                ? color
+                : Theme.of(context).colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -4913,37 +5131,38 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
             Tooltip(
               message: 'Shortcut: Ctrl+s',
               child: ElevatedButton.icon(
-              onPressed: invoiceItems.isNotEmpty && !isLoading
-                  ? (isEditMode ? _updateInvoice : _createInvoice)
-                  : null,
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(MediaQuery.of(context).size.width * 0.25, 56),
-                backgroundColor: Theme.of(context).primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppBorderRadius.xsmall)),
-                elevation: 2,
-              ),
-              icon: isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : Icon(isEditMode ? Icons.update : Icons.save),
-              label: Text(
-                isLoading
-                    ? 'Processing...'
-                    : (isEditMode
-                        ? 'Update $invoiceType (Shortcut: Ctrl+s)'
-                        : 'Create $invoiceType (Shortcut: Ctrl+s)'),
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+                onPressed: invoiceItems.isNotEmpty && !isLoading
+                    ? (isEditMode ? _updateInvoice : _createInvoice)
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  minimumSize:
+                      Size(MediaQuery.of(context).size.width * 0.25, 56),
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppBorderRadius.xsmall)),
+                  elevation: 2,
+                ),
+                icon: isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Icon(isEditMode ? Icons.update : Icons.save),
+                label: Text(
+                  isLoading
+                      ? 'Processing...'
+                      : (isEditMode
+                          ? 'Update $invoiceType (Shortcut: Ctrl+s)'
+                          : 'Create $invoiceType (Shortcut: Ctrl+s)'),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             const SizedBox(width: 16),
@@ -5033,7 +5252,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       );
       return false;
     }
-    if(!mounted) return false;
+    if (!mounted) return false;
     setState(() => isLoading = true);
 
     try {
@@ -5067,8 +5286,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
 
       await ref.read(invoiceRepositoryProvider).updateInvoice(updatedInvoice);
 
-      final refreshedInvoice =
-          await ref.read(invoiceRepositoryProvider).getInvoiceById(updatedInvoice.id);
+      final refreshedInvoice = await ref
+          .read(invoiceRepositoryProvider)
+          .getInvoiceById(updatedInvoice.id);
 
       if (!mounted) return true;
       setState(() {
@@ -5099,7 +5319,10 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       if (!mounted) return false;
       setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating invoice: $e'),showCloseIcon: true,),
+        SnackBar(
+          content: Text('Error updating invoice: $e'),
+          showCloseIcon: true,
+        ),
       );
       return false;
     }
@@ -5280,7 +5503,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                           onPressed: () async {
                             final phone = phoneController.text.trim();
                             final existing = phone.isNotEmpty
-                                ? await ref.read(customerRepositoryProvider).findByPhone(phone)
+                                ? await ref
+                                    .read(customerRepositoryProvider)
+                                    .findByPhone(phone)
                                 : null;
                             final newCustomer = existing ??
                                 Customer(
@@ -5294,10 +5519,13 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                       businessNameController.text.trim(),
                                 );
                             if (existing == null) {
-                              await ref.read(customerRepositoryProvider).insertCustomer(newCustomer);
+                              await ref
+                                  .read(customerRepositoryProvider)
+                                  .insertCustomer(newCustomer);
                             }
-                            final reloaded =
-                                await ref.read(customerRepositoryProvider).getAllCustomers();
+                            final reloaded = await ref
+                                .read(customerRepositoryProvider)
+                                .getAllCustomers();
                             if (mounted) {
                               setState(() {
                                 selectedCustomer = newCustomer;
@@ -5319,22 +5547,22 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                         ),
                         TextButton(
                           style: TextButton.styleFrom(
-                            foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                            foregroundColor:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 8),
                           ),
                           onPressed: () {
-                            if(!mounted) return;
-                            setState(() =>
-                            selectedCustomer = Customer(
-                              id: '',
-                              name: nameController.text.trim(),
-                              email: '',
-                              phone: '',
-                              address: '',
-                              gstin: '',
-                              businessName: '',
-                            ));
+                            if (!mounted) return;
+                            setState(() => selectedCustomer = Customer(
+                                  id: '',
+                                  name: nameController.text.trim(),
+                                  email: '',
+                                  phone: '',
+                                  address: '',
+                                  gstin: '',
+                                  businessName: '',
+                                ));
                           },
                           child: const Text('Dismiss'),
                         ),
@@ -5442,25 +5670,23 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
             widget.invoiceToEdit != null ? _updateInvoice() : _createInvoice();
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Add at least one item before creating the invoice.')),
+              const SnackBar(
+                  content: Text(
+                      'Add at least one item before creating the invoice.')),
             );
           }
         },
-        const SingleActivator(LogicalKeyboardKey.keyQ, control: true): () async {
-          if (showingSuccessScreen)
-          {
-            if(mounted) await resetValues('Invoice');
-          }
-          else if(isEditing)
-          {
+        const SingleActivator(LogicalKeyboardKey.keyQ, control: true):
+            () async {
+          if (showingSuccessScreen) {
+            if (mounted) await resetValues('Invoice');
+          } else if (isEditing) {
             if (await _confirmLeaveIfDirty() && mounted) {
               widget.onCreateNewInvoice?.call();
               await resetValues('Invoice');
             }
-          }
-          else
-          {
-            if(kDebugMode) print("already in create invoice page !");
+          } else {
+            if (kDebugMode) print("already in create invoice page !");
           }
         },
         const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
@@ -5487,121 +5713,144 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           behavior: HitTestBehavior.translucent,
           onTap: () => _screenFocusNode.requestFocus(),
           child: _withUnsavedChangesPopScope(Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _invoice != null && !isEditing
-                      ? '$invoiceType Created'
-                      : widget.invoiceToEdit != null
-                          ? 'Edit $invoiceType'
-                          : widget.cloneFrom != null
-                              ? 'Duplicate as $invoiceType'
-                              : 'Create New $invoiceType',
-                ),
-                if (isEditing) ...[
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      if (await _confirmLeaveIfDirty() && mounted) {
-                        widget.onCreateNewInvoice?.call();
-                        await resetValues('Invoice');
-                      }
-                    },
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('New Invoice (Shortcut: Ctrl+q)',
-                        style: TextStyle(fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
-                      foregroundColor: Theme.of(context).primaryColor,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            Text(DateFormat(_datePattern).format(DateTime.now())),
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+            appBar: AppBar(
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    style: TextStyle(fontSize: 24),
-                    '$invoiceType Number : #[$currentInvoiceNumber]',
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _invoice != null && !isEditing
+                            ? '$invoiceType Created'
+                            : widget.invoiceToEdit != null
+                                ? 'Edit $invoiceType'
+                                : widget.cloneFrom != null
+                                    ? 'Duplicate as $invoiceType'
+                                    : 'Create New $invoiceType',
+                      ),
+                      if (isEditing) ...[
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            if (await _confirmLeaveIfDirty() && mounted) {
+                              widget.onCreateNewInvoice?.call();
+                              await resetValues('Invoice');
+                            }
+                          },
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('New Invoice (Shortcut: Ctrl+q)',
+                              style: TextStyle(fontSize: 13)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.surfaceContainer,
+                            foregroundColor: Theme.of(context).primaryColor,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Tooltip(
-                    message: 'Invoice numbers are auto-generated.\n'
-                        'The next number is calculated from the last\n'
-                        'invoice in the database (including deleted ones).\n'
-                        'Manual editing is not supported.',
-                    child: const Icon(Icons.info_outline,
-                        size: 16, color: Colors.white70),
+                  Text(DateFormat(_datePattern).format(DateTime.now())),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          style: TextStyle(fontSize: 24),
+                          '$invoiceType Number : #[$currentInvoiceNumber]',
+                        ),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: 'Invoice numbers are auto-generated.\n'
+                              'The next number is calculated from the last\n'
+                              'invoice in the database (including deleted ones).\n'
+                              'Manual editing is not supported.',
+                          child: const Icon(Icons.info_outline,
+                              size: 16, color: Colors.white70),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
+              backgroundColor: Theme.of(context).appBarTheme.backgroundColor ??
+                  Theme.of(context).primaryColor,
+              foregroundColor: Colors.white,
+              elevation: 0,
             ),
-          ],
-        ),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ??
-            Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: !isEditing && _invoice != null
-          ? buildInvoiceSuccessScreen()
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                bool isDesktop = constraints.maxWidth > 1200;
-                bool isTablet =
-                    constraints.maxWidth > 800 && constraints.maxWidth <= 1200;
+            body: !isEditing && _invoice != null
+                ? buildInvoiceSuccessScreen()
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      bool isDesktop = constraints.maxWidth > 1200;
+                      bool isTablet = constraints.maxWidth > 800 &&
+                          constraints.maxWidth <= 1200;
 
-                return Container(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(AppPadding.xsmall),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                            maxWidth: AppLayout.maxWidthWide),
-                        child: Column(
-                          children: [
-                            if (isDesktop)
-                              _buildDesktopLayout(tax, subtotal, total,
-                                  grossSubtotal, totalDiscount, invoiceDiscountAmount)
-                            else if (isTablet)
-                              _buildTabletLayout(tax, subtotal, total,
-                                  grossSubtotal, totalDiscount, invoiceDiscountAmount)
-                            else
-                              _buildMobileLayout(tax, subtotal, total,
-                                  grossSubtotal, totalDiscount, invoiceDiscountAmount),
-                          ],
+                      return Container(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(AppPadding.xsmall),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                  maxWidth: AppLayout.maxWidthWide),
+                              child: Column(
+                                children: [
+                                  if (isDesktop)
+                                    _buildDesktopLayout(
+                                        tax,
+                                        subtotal,
+                                        total,
+                                        grossSubtotal,
+                                        totalDiscount,
+                                        invoiceDiscountAmount)
+                                  else if (isTablet)
+                                    _buildTabletLayout(
+                                        tax,
+                                        subtotal,
+                                        total,
+                                        grossSubtotal,
+                                        totalDiscount,
+                                        invoiceDiscountAmount)
+                                  else
+                                    _buildMobileLayout(
+                                        tax,
+                                        subtotal,
+                                        total,
+                                        grossSubtotal,
+                                        totalDiscount,
+                                        invoiceDiscountAmount),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
-    )),
+          )),
         ),
       ),
     );
   }
 
-  Widget _buildDesktopLayout(double tax, double subtotal, double total,
-      double grossSubtotal, double totalDiscount, double invoiceDiscountAmount) {
+  Widget _buildDesktopLayout(
+      double tax,
+      double subtotal,
+      double total,
+      double grossSubtotal,
+      double totalDiscount,
+      double invoiceDiscountAmount) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -5655,8 +5904,13 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     );
   }
 
-  Widget _buildTabletLayout(double tax, double subtotal, double total,
-      double grossSubtotal, double totalDiscount, double invoiceDiscountAmount) {
+  Widget _buildTabletLayout(
+      double tax,
+      double subtotal,
+      double total,
+      double grossSubtotal,
+      double totalDiscount,
+      double invoiceDiscountAmount) {
     return Column(
       children: [
         Row(
@@ -5702,8 +5956,13 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     );
   }
 
-  Widget _buildMobileLayout(double tax, double subtotal, double total,
-      double grossSubtotal, double totalDiscount, double invoiceDiscountAmount) {
+  Widget _buildMobileLayout(
+      double tax,
+      double subtotal,
+      double total,
+      double grossSubtotal,
+      double totalDiscount,
+      double invoiceDiscountAmount) {
     return Column(
       children: [
         _pdfNumberOverrideSection(),

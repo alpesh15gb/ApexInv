@@ -21,7 +21,8 @@ class OnboardingStepDone extends StatelessWidget {
                 color: primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.check_circle_rounded, size: 56, color: primaryColor),
+              child: Icon(Icons.check_circle_rounded,
+                  size: 56, color: primaryColor),
             ),
             const SizedBox(height: 24),
             Text(

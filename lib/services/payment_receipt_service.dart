@@ -50,8 +50,8 @@ class PaymentReceiptService {
         base64Logo != null ? pw.MemoryImage(base64Decode(base64Logo)) : null;
     final sym = invoice.currencySymbol;
     final dateFmt = (await BackendServices.settings.getDateFormat()).key;
-    final leadingZerosStr =
-        await BackendServices.settings.getSetting(SettingKey.invoiceLeadingZeros);
+    final leadingZerosStr = await BackendServices.settings
+        .getSetting(SettingKey.invoiceLeadingZeros);
     final showLeadingZeros = leadingZerosStr != 'false';
 
     pdf.addPage(
@@ -124,7 +124,8 @@ class PaymentReceiptService {
                         style: const pw.TextStyle(
                             fontSize: 9, color: PdfColors.grey700)),
                   if ((company?.panNumber ?? '').isNotEmpty)
-                    pw.Text('${panLabel(company?.country)}: ${company!.panNumber}',
+                    pw.Text(
+                        '${panLabel(company?.country)}: ${company!.panNumber}',
                         style: const pw.TextStyle(
                             fontSize: 9, color: PdfColors.grey700)),
                   if ((company?.fssaiCode ?? '').isNotEmpty)
@@ -181,7 +182,8 @@ class PaymentReceiptService {
                   _metaRow(
                       'Invoice #',
                       formatInvoiceNumberForDisplay(
-                          invoice.invoiceNumber ?? invoice.id, showLeadingZeros)),
+                          invoice.invoiceNumber ?? invoice.id,
+                          showLeadingZeros)),
                 ],
               ),
               pw.Column(

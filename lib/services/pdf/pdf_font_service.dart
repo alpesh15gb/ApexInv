@@ -125,7 +125,6 @@ class PdfFontService {
       bold: bold,
       italic: italic,
       boldItalic: boldItalic,
-
       fontFallback: [
         // Unicode symbols / currency symbols
         symbols,

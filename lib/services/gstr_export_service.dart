@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:intl/intl.dart';
 
 import 'package:apexbooks/common/common.dart';
@@ -115,7 +117,6 @@ class GstrExportService {
         List<
             double>>{}; // 'hsn|rate' -> [qty, value, taxable, igst, cgst, sgst, cess]
     final hsnDesc = <String, String>{};
-    var exemptTaxable = 0.0;
 
     for (final inv in data.invoices) {
       final interstate = (inv['is_interstate'] as int? ?? 0) == 1;
@@ -130,7 +131,7 @@ class GstrExportService {
         final amount = item['amount'] as InvoiceLineAmount;
         final rate = amount.taxRatePercent;
         if (rate <= 0) {
-          exemptTaxable += amount.lineTotal;
+          continue; // zero-rated: reported via exempt summary, not sections
         } else {
           rates[rate.toInt()] = (rates[rate.toInt()] ?? 0) + amount.lineTotal;
         }
@@ -273,8 +274,9 @@ class GstrExportService {
   }
 
   /// GSTR-3B is filed as a summary (no offline-tool CSV import) — this
-  /// produces the outward-supply figures for Table 3.1 so they can be keyed
-  /// into the portal or cross-checked.
+  /// produces the outward-supply figures for Table 3.1 plus real ITC from
+  /// purchase bills for Table 4, so they can be keyed into the portal or
+  /// cross-checked.
   static Future<GstrFile> buildGstr3bSummary({
     required DateTime from,
     required DateTime to,
@@ -305,6 +307,8 @@ class GstrExportService {
       }
     }
 
+    final itc = await _loadItc(from, to);
+
     final rows = <List<dynamic>>[
       ['GSTR-3B Summary', _fmtDate(from), 'to', _fmtDate(to)],
       [],
@@ -320,16 +324,20 @@ class GstrExportService {
       ],
       ['(b) Unregistered/composition/exempt', _n2(exempt), '', '', '', ''],
       [],
-      ['Table 4 — Input Tax Credit'],
+      ['Table 4 — Eligible ITC (from purchase bills)'],
+      ['ITC Type', 'IGST', 'CGST', 'SGST', 'Cess'],
+      ['Import of goods', _n2(0), '0', '0', '0'],
+      ['Import of services', _n2(0), '0', '0', '0'],
       [
-        'Purchases/inward supplies with GSTIN are not tracked as tax '
-            'invoices in this app; enter ITC from supplier invoices in the '
-            'portal directly.',
-        '0',
-        '0',
-        '0',
+        'Inward supplies liable to reverse charge',
+        _n2(itc.rcIgst),
+        _n2(itc.rcCgst),
+        _n2(itc.rcSgst),
         '0'
       ],
+      ['All other ITC', _n2(itc.igst), _n2(itc.cgst), _n2(itc.sgst), '0'],
+      [],
+      ['Note: enter ITC from invoices missing in the app via the portal.'],
     ];
 
     return GstrFile(
@@ -339,9 +347,119 @@ class GstrExportService {
     );
   }
 
+  /// Inward supplies (purchase bills) as a GSTR-2 B2B-format CSV for the
+  /// Offline Tool's invoice-import (for ITC claim records / reconciliation).
+  static Future<GstrFile> buildGstr2Csv({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final itc = await _loadItc(from, to, withRows: true);
+    final rows = <List<dynamic>>[
+      [
+        'GSTIN of Supplier',
+        'Supplier Name',
+        'Invoice Number',
+        'Invoice date',
+        'Invoice Value',
+        'Place of Supply',
+        'Reverse Charge',
+        'Rate',
+        'Taxable Value',
+        'IGST',
+        'CGST',
+        'SGST',
+        'Cess',
+        'ITC Eligible'
+      ],
+      for (final r in itc.rows)
+        [
+          r.gstin,
+          r.supplierName,
+          r.billNumber,
+          _fmtDate(r.date),
+          _n2(r.total),
+          r.placeOfSupply,
+          r.reverseCharge ? 'Y' : 'N',
+          r.rate,
+          _n2(r.taxable),
+          _n2(r.igst),
+          _n2(r.cgst),
+          _n2(r.sgst),
+          '0',
+          r.itcEligible ? (r.reverseCharge ? 'Y (RC)' : 'Y') : 'N',
+        ],
+    ];
+    return GstrFile(
+      filename: _name('gstr2_purchase_bills', from, to),
+      csv: _toCsv(rows),
+      section: 'GSTR-2 purchase bills',
+    );
+  }
+
+  static Future<ItcTotals> _loadItc(DateTime from, DateTime to,
+      {bool withRows = false}) async {
+    final db = await DatabaseHelper().database;
+    final billRows = await db.rawQuery(
+      'SELECT b.*, i.igst, i.cgst, i.sgst, i.taxable_value, i.tax_rate '
+      'FROM purchase_bills b '
+      'JOIN purchase_bill_items i ON i.purchase_bill_id = b.id '
+      'WHERE b.date >= ? AND b.date <= ?',
+      [from.toIso8601String(), to.toIso8601String()],
+    );
+    double igst = 0, cgst = 0, sgst = 0, rcIgst = 0, rcCgst = 0, rcSgst = 0;
+    final rows = <ItcRow>[];
+    for (final r in billRows) {
+      final eligible = (r['itc_eligible'] as int? ?? 1) == 1;
+      final rc = (r['reverse_charge'] as int? ?? 0) == 1;
+      final iIgst = (r['igst'] as num?)?.toDouble() ?? 0;
+      final iCgst = (r['cgst'] as num?)?.toDouble() ?? 0;
+      final iSgst = (r['sgst'] as num?)?.toDouble() ?? 0;
+      if (eligible) {
+        if (rc) {
+          rcIgst += iIgst;
+          rcCgst += iCgst;
+          rcSgst += iSgst;
+        } else {
+          igst += iIgst;
+          cgst += iCgst;
+          sgst += iSgst;
+        }
+      }
+      if (withRows) {
+        rows.add(ItcRow(
+          gstin: r['supplier_gstin'] as String? ?? '',
+          supplierName: r['supplier_name'] as String? ?? '',
+          billNumber: r['bill_number'] as String? ?? '',
+          date: DateTime.tryParse(r['date'] as String? ?? '') ?? DateTime.now(),
+          total: (r['total_amount'] as num?)?.toDouble() ?? 0,
+          taxable: (r['taxable_value'] as num?)?.toDouble() ?? 0,
+          igst: iIgst,
+          cgst: iCgst,
+          sgst: iSgst,
+          rate: (r['tax_rate'] as num?)?.toDouble() ?? 0,
+          placeOfSupply: ((r['supplier_gstin'] as String? ?? '')).length >= 2
+              ? (r['supplier_gstin'] as String).substring(0, 2)
+              : '',
+          itcEligible: eligible,
+          reverseCharge: rc,
+        ));
+      }
+    }
+    return ItcTotals(
+      igst: igst,
+      cgst: cgst,
+      sgst: sgst,
+      rcIgst: rcIgst,
+      rcCgst: rcCgst,
+      rcSgst: rcSgst,
+      rows: rows,
+    );
+  }
+
   // ── Data loading ──
 
-  static Future<_PeriodData> _loadPeriod(DateTime from, DateTime to) async {
+  static Future<_PeriodData> _loadPeriod(DateTime from, DateTime to,
+      {bool withNotes = false}) async {
     final db = await DatabaseHelper().database;
     final info = await BackendServices.companyInfo.getCompanyInfo();
     final companyGstin = (info?.gstin ?? '').trim().toUpperCase();
@@ -354,6 +472,15 @@ class GstrExportService {
       "AND date >= ? AND date <= ? ORDER BY date",
       [from.toIso8601String(), to.toIso8601String()],
     );
+    if (withNotes) {
+      final noteRows = await db.rawQuery(
+        "SELECT * FROM invoices "
+        "WHERE deleted_at IS NULL AND type IN ('Credit Note', 'Debit Note') "
+        "AND date >= ? AND date <= ? ORDER BY date",
+        [from.toIso8601String(), to.toIso8601String()],
+      );
+      invRows.addAll(noteRows);
+    }
 
     final result = <Map<String, dynamic>>[];
     for (final inv in invRows) {
@@ -375,7 +502,10 @@ class GstrExportService {
       }
       result.add({...inv, 'items': items});
     }
-    return _PeriodData(invoices: result, supplierStateCode: supplierState);
+    return _PeriodData(
+        invoices: result,
+        supplierStateCode: supplierState,
+        companyGstin: companyGstin);
   }
 
   static String? _stateFromGstin(String gstin) {
@@ -411,6 +541,275 @@ class GstrExportService {
       '${prefix}_${DateFormat('yyyyMMdd').format(from)}_'
       '${DateFormat('yyyyMMdd').format(to)}.csv';
 
+  /// Portal-uploadable GSTR-1 JSON (offline-import format): sections b2b,
+  /// b2cl, b2cs, cdnr (credit/debit notes), hsn.
+  static Future<GstrFile> buildGstr1Json({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final data = await _loadPeriod(from, to, withNotes: true);
+    if (data.supplierStateCode == null) {
+      throw GstrExportException(
+          'Set your company GSTIN in Company Info first.');
+    }
+    final pos = data.supplierStateCode!;
+    String fp() => '${from.month.toString().padLeft(2, '0')}'
+        '${from.year}';
+
+    final b2b = <Map<String, dynamic>>[];
+    final b2cl = <Map<String, dynamic>>[];
+    final b2csList = <Map<String, dynamic>>[];
+    final cdnr = <Map<String, dynamic>>[];
+    final hsn = <Map<String, dynamic>>[];
+    final b2csAgg = <String, List<double>>{};
+    double exemptVal = 0;
+
+    void addItemTaxLines(
+        Map<String, dynamic> inv, bool interstate, bool interStateOverride) {
+      var lineNum = 1;
+      final custGstin =
+          (inv['customer_gstin'] as String? ?? '').trim().toUpperCase();
+      for (final item in inv['items']) {
+        final amount = item['amount'] as InvoiceLineAmount;
+        final rate = amount.taxRatePercent;
+        final tax = amount.itemTax;
+        final lineItms = <String, dynamic>{
+          'num': lineNum++,
+          'rt': rate,
+          'txval': _r2(amount.lineTotal),
+          'csamt': 0,
+        };
+        final useIgst = interstate || interStateOverride;
+        if (useIgst) {
+          lineItms['iamt'] = _r2(tax);
+        } else {
+          lineItms['camt'] = _r2(tax / 2);
+          lineItms['samt'] = _r2(tax / 2);
+        }
+        final hsnCode = ((item['row']['hsncode'] as String? ?? '')).trim();
+        hsn.add({
+          'num': hsnCode.length,
+          'hsn': hsnCode.isEmpty ? '999999' : hsnCode,
+          'desc': item['row']['product_name'] ?? '',
+          'uqc': _uqc(item['row']['unit'] as String? ?? ''),
+          'qty': _r2((item['row']['quantity'] as num?)?.toDouble() ?? 0),
+          'val': _r2(amount.lineTotal + tax),
+          'txval': _r2(amount.lineTotal),
+          'iamt': useIgst ? _r2(tax) : 0,
+          'camt': !useIgst ? _r2(tax / 2) : 0,
+          'samt': !useIgst ? _r2(tax / 2) : 0,
+          'csamt': 0,
+        });
+        if (rate <= 0) {
+          exemptVal += amount.lineTotal;
+          continue;
+        }
+        if (custGstin.isNotEmpty) {
+          _appendLine(b2b, custGstin, inv, lineItms, pos);
+        } else if ((inv['is_interstate'] as int? ?? 0) == 1 &&
+            ((inv['total'] as num?)?.toDouble() ?? 0) > 250000) {
+          _appendLine(b2cl, '', inv, lineItms, pos);
+        } else {
+          final key = '$pos|${rate.toInt()}';
+          final agg = b2csAgg.putIfAbsent(key, () => [0, 0, 0]);
+          agg[0] += amount.lineTotal;
+          agg[1] = useIgst ? agg[1] + tax : agg[1];
+          agg[2] = !useIgst ? agg[2] + tax / 2 : agg[2];
+        }
+      }
+    }
+
+    for (final inv in data.invoices) {
+      final type = inv['type'] as String? ?? 'Invoice';
+      if (type == 'Credit Note' || type == 'Debit Note') {
+        final custGstin =
+            (inv['customer_gstin'] as String? ?? '').trim().toUpperCase();
+        if (custGstin.isNotEmpty) {
+          final ntItems = <Map<String, dynamic>>[];
+          var ntNum = 1;
+          for (final item in inv['items']) {
+            final amount = item['amount'] as InvoiceLineAmount;
+            final tax = amount.itemTax;
+            final itms = <String, dynamic>{
+              'num': ntNum++,
+              'rt': amount.taxRatePercent,
+              'txval': _r2(amount.lineTotal),
+              'csamt': 0,
+            };
+            if ((inv['is_interstate'] as int? ?? 0) == 1) {
+              itms['iamt'] = _r2(tax);
+            } else {
+              itms['camt'] = _r2(tax / 2);
+              itms['samt'] = _r2(tax / 2);
+            }
+            ntItems.add(itms);
+          }
+          cdnr.add({
+            'ctin': custGstin,
+            'gstin': data.supplierStateCode,
+            'nt': [
+              {
+                'nt_num': inv['invoice_number'] ?? '',
+                'nt_dt': _fmtDate(inv['date']),
+                'val': _r2((inv['total'] as num?)?.toDouble() ?? 0),
+                'ntty': type == 'Credit Note' ? 'C' : 'D',
+                'pos': _stateFromGstin(custGstin) ?? pos,
+                'rchrg': 'N',
+                'inv_typ': 'B2B',
+                'itms': ntItems,
+              }
+            ],
+          });
+        }
+        continue; // CDNR handled; not in B2B/B2C
+      }
+      if (type != 'Invoice') continue; // challan/proforma/receipts excluded
+      final interstate = (inv['is_interstate'] as int? ?? 0) == 1;
+      addItemTaxLines(inv, interstate, false);
+    }
+
+    for (final entry in b2csAgg.entries) {
+      final parts = entry.key.split('|');
+      final rate = num.parse(parts[1]);
+      final agg = entry.value;
+      b2csList.add({
+        'sply_ty': 'INTRA',
+        'pos': parts[0],
+        'typ': 'OE',
+        'txval': _r2(agg[0]),
+        'iamt': _r2(agg[1]),
+        'camt': _r2(agg[2]),
+        'samt': _r2(agg[2]),
+        'csamt': 0,
+        'rt': rate,
+      });
+    }
+
+    final json = <String, dynamic>{
+      'version': '1.1',
+      'fp': fp(),
+      'gstin': data.companyGstin,
+      'b2b': b2b,
+      'b2cl': b2cl,
+      'b2cs': b2csList,
+      'cdnr': cdnr,
+      'exempted': exemptVal,
+      'hsn': {'data': hsn},
+    };
+    return GstrFile(
+      filename: _name('gstr1', from, to).replaceFirst('.csv', '.json'),
+      csv: const JsonEncoder.withIndent(' ').convert(json),
+      section: 'GSTR-1 JSON',
+    );
+  }
+
+  /// Portal-uploadable GSTR-3B JSON (outward supplies + ITC).
+  static Future<GstrFile> buildGstr3bJson({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final data = await _loadPeriod(from, to);
+    if (data.supplierStateCode == null) {
+      throw GstrExportException(
+          'Set your company GSTIN in Company Info first.');
+    }
+    final pos = data.supplierStateCode!;
+    double taxable = 0, igst = 0, cgst = 0, sgst = 0;
+    for (final inv in data.invoices) {
+      if ((inv['type'] as String? ?? 'Invoice') != 'Invoice') continue;
+      final interstate = (inv['is_interstate'] as int? ?? 0) == 1;
+      for (final item in inv['items']) {
+        final amount = item['amount'] as InvoiceLineAmount;
+        if (amount.taxRatePercent <= 0) continue;
+        taxable += amount.lineTotal;
+        final tax = amount.itemTax;
+        if (interstate) {
+          igst += tax;
+        } else {
+          cgst += tax / 2;
+          sgst += tax / 2;
+        }
+      }
+    }
+    final itc = await _loadItc(from, to);
+    String fp() => '${from.month.toString().padLeft(2, '0')}${from.year}';
+    final json = <String, dynamic>{
+      'gstin': data.companyGstin,
+      'ret_period': fp(),
+      'inward_sup': [
+        {
+          'ty': 'GST',
+          'pos': pos,
+          'txval': _r2(taxable),
+          'iamt': _r2(igst),
+          'camt': _r2(cgst),
+          'samt': _r2(sgst),
+          'csamt': 0,
+        }
+      ],
+      'itc_elg': {
+        'itc_avld': [
+          {
+            'ty': 'ITC_ALL_OTHER',
+            'iamt': _r2(itc.igst + itc.rcIgst),
+            'camt': _r2(itc.cgst + itc.rcCgst),
+            'samt': _r2(itc.sgst + itc.rcSgst),
+            'csamt': 0,
+          }
+        ]
+      },
+    };
+    return GstrFile(
+      filename: _name('gstr3b', from, to).replaceFirst('.csv', '.json'),
+      csv: const JsonEncoder.withIndent(' ').convert(json),
+      section: 'GSTR-3B JSON',
+    );
+  }
+
+  static double _r2(num v) => double.parse(v.toStringAsFixed(2));
+
+  static void _appendLine(List<Map<String, dynamic>> section, String ctin,
+      Map<String, dynamic> inv, Map<String, dynamic> itms, String pos) {
+    final inum = inv['invoice_number']?.toString() ?? '';
+    Map<String, dynamic>? doc;
+    for (final d in section) {
+      if (ctin.isEmpty ? d['pos'] == pos : d['ctin'] == ctin) {
+        doc = d;
+        break;
+      }
+    }
+    doc ??= () {
+      final d = <String, dynamic>{
+        if (ctin.isNotEmpty) 'ctin': ctin,
+        'inv': <Map<String, dynamic>>[],
+      };
+      section.add(d);
+      return d;
+    }();
+    final invList = (doc['inv'] as List).cast<Map<String, dynamic>>();
+    Map<String, dynamic>? invEntry;
+    for (final e in invList) {
+      if (e['inum'] == inum) {
+        invEntry = e;
+        break;
+      }
+    }
+    invEntry ??= () {
+      final e = <String, dynamic>{
+        'inum': inum,
+        'idt': _fmtDate(inv['date']),
+        'val': _r2((inv['total'] as num?)?.toDouble() ?? 0),
+        'pos': ctin.isNotEmpty ? (_stateFromGstin(ctin) ?? pos) : pos,
+        'rchrg': 'N',
+        'inv_typ': 'B2B',
+        'itms': <Map<String, dynamic>>[],
+      };
+      invList.add(e);
+      return e;
+    }();
+    (invEntry['itms'] as List).add(itms);
+  }
+
   static String _toCsv(List<List<dynamic>> rows) {
     return rows.map((row) {
       return row.map((cell) {
@@ -428,7 +827,12 @@ class GstrExportService {
 class _PeriodData {
   final List<Map<String, dynamic>> invoices;
   final String? supplierStateCode;
-  const _PeriodData({required this.invoices, required this.supplierStateCode});
+  final String companyGstin;
+  const _PeriodData({
+    required this.invoices,
+    required this.supplierStateCode,
+    this.companyGstin = '',
+  });
 }
 
 class GstrFile {
@@ -439,6 +843,57 @@ class GstrFile {
     required this.filename,
     required this.csv,
     required this.section,
+  });
+}
+
+/// ITC rollup from purchase bills for a period.
+class ItcTotals {
+  final double igst;
+  final double cgst;
+  final double sgst;
+  final double rcIgst;
+  final double rcCgst;
+  final double rcSgst;
+  final List<ItcRow> rows;
+  const ItcTotals({
+    required this.igst,
+    required this.cgst,
+    required this.sgst,
+    required this.rcIgst,
+    required this.rcCgst,
+    required this.rcSgst,
+    this.rows = const [],
+  });
+}
+
+class ItcRow {
+  final String gstin;
+  final String supplierName;
+  final String billNumber;
+  final DateTime date;
+  final double total;
+  final double taxable;
+  final double igst;
+  final double cgst;
+  final double sgst;
+  final double rate;
+  final String placeOfSupply;
+  final bool itcEligible;
+  final bool reverseCharge;
+  const ItcRow({
+    required this.gstin,
+    required this.supplierName,
+    required this.billNumber,
+    required this.date,
+    required this.total,
+    required this.taxable,
+    required this.igst,
+    required this.cgst,
+    required this.sgst,
+    required this.rate,
+    required this.placeOfSupply,
+    required this.itcEligible,
+    this.reverseCharge = false,
   });
 }
 

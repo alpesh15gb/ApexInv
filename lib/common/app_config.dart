@@ -1,6 +1,5 @@
 // app_config.dart
-class AppConfig
-{
+class AppConfig {
   static const kIsCloud = false;
   static const name = "Apex Books";
   static const version = "v1.0.0";
@@ -10,5 +9,6 @@ class AppConfig
   static const website = "https://apexbooks.in";
   static const appUrl = "https://app.apexbooks.in";
   static const license = "MIT";
-  static const description = "ApexBooks is a modern invoice and billing management app for freelancers and small businesses.";
+  static const description =
+      "ApexBooks is a modern invoice and billing management app for freelancers and small businesses.";
 }

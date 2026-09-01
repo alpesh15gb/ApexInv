@@ -9,10 +9,12 @@ class ExpenseManagementScreen extends ConsumerStatefulWidget {
   const ExpenseManagementScreen({super.key});
 
   @override
-  ConsumerState<ExpenseManagementScreen> createState() => _ExpenseManagementScreenState();
+  ConsumerState<ExpenseManagementScreen> createState() =>
+      _ExpenseManagementScreenState();
 }
 
-class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScreen> {
+class _ExpenseManagementScreenState
+    extends ConsumerState<ExpenseManagementScreen> {
   List<Expense> _expenses = [];
   List<ExpenseCategory> _categories = [];
   bool _isLoading = true;
@@ -164,9 +166,9 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
                               child: Text('All Categories'),
                             ),
                             ..._categories.map((c) => DropdownMenuItem(
-                              value: c.id,
-                              child: Text(c.name),
-                            )),
+                                  value: c.id,
+                                  child: Text(c.name),
+                                )),
                           ],
                           onChanged: (value) {
                             _selectedCategoryId = value;
@@ -211,9 +213,9 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
                           child: Text('All Categories'),
                         ),
                         ..._categories.map((c) => DropdownMenuItem(
-                          value: c.id,
-                          child: Text(c.name),
-                        )),
+                              value: c.id,
+                              child: Text(c.name),
+                            )),
                       ],
                       onChanged: (value) {
                         _selectedCategoryId = value;
@@ -236,13 +238,17 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.receipt_long, size: 64, color: colorScheme.outlineVariant),
+                            Icon(Icons.receipt_long,
+                                size: 64, color: colorScheme.outlineVariant),
                             const SizedBox(height: 16),
                             Text(
                               'No expenses found',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
                             ),
                             const SizedBox(height: 8),
                             FilledButton.tonal(
@@ -282,10 +288,13 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
                                 children: [
                                   Text(
                                     currencyFormat.format(expense.amount),
-                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: colorScheme.error,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.error,
+                                        ),
                                   ),
                                   PopupMenuButton<String>(
                                     itemBuilder: (context) => [
@@ -303,16 +312,21 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
                                         value: 'delete',
                                         child: Row(
                                           children: [
-                                            Icon(Icons.delete, size: 18, color: Colors.red),
+                                            Icon(Icons.delete,
+                                                size: 18, color: Colors.red),
                                             SizedBox(width: 8),
-                                            Text('Delete', style: TextStyle(color: Colors.red)),
+                                            Text('Delete',
+                                                style: TextStyle(
+                                                    color: Colors.red)),
                                           ],
                                         ),
                                       ),
                                     ],
                                     onSelected: (action) {
-                                      if (action == 'edit') _showEditExpenseDialog(expense);
-                                      if (action == 'delete') _deleteExpense(expense);
+                                      if (action == 'edit')
+                                        _showEditExpenseDialog(expense);
+                                      if (action == 'delete')
+                                        _deleteExpense(expense);
                                     },
                                   ),
                                 ],
@@ -360,7 +374,8 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
     );
   }
 
-  Widget _buildStatChip(String label, String value, IconData icon, Color color) {
+  Widget _buildStatChip(
+      String label, String value, IconData icon, Color color) {
     return Container(
       width: 200,
       padding: const EdgeInsets.all(12),
@@ -379,14 +394,17 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
               children: [
                 Text(
                   label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: color),
                 ),
                 Text(
                   value,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
                 ),
               ],
             ),
@@ -405,12 +423,14 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
   }
 
   Future<void> _showExpenseDialog({Expense? expense}) async {
-    final descriptionController = TextEditingController(text: expense?.description ?? '');
+    final descriptionController =
+        TextEditingController(text: expense?.description ?? '');
     final amountController = TextEditingController(
       text: expense != null ? expense.amount.toStringAsFixed(2) : '',
     );
     final notesController = TextEditingController(text: expense?.notes ?? '');
-    String selectedCategoryId = expense?.categoryId ?? (_categories.isNotEmpty ? _categories.first.id : '');
+    String selectedCategoryId = expense?.categoryId ??
+        (_categories.isNotEmpty ? _categories.first.id : '');
     DateTime selectedDate = expense?.date ?? DateTime.now();
     String paymentMethod = expense?.paymentMethod ?? '';
 
@@ -444,17 +464,21 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
                 DropdownButtonFormField<String>(
                   value: selectedCategoryId,
                   decoration: const InputDecoration(labelText: 'Category *'),
-                  items: _categories.map((c) => DropdownMenuItem(
-                    value: c.id,
-                    child: Text(c.name),
-                  )).toList(),
-                  onChanged: (v) => setDialogState(() => selectedCategoryId = v ?? ''),
+                  items: _categories
+                      .map((c) => DropdownMenuItem(
+                            value: c.id,
+                            child: Text(c.name),
+                          ))
+                      .toList(),
+                  onChanged: (v) =>
+                      setDialogState(() => selectedCategoryId = v ?? ''),
                 ),
                 const SizedBox(height: 12),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Date'),
-                  subtitle: Text(DateFormat('dd MMM yyyy').format(selectedDate)),
+                  subtitle:
+                      Text(DateFormat('dd MMM yyyy').format(selectedDate)),
                   trailing: const Icon(Icons.calendar_today),
                   onTap: () async {
                     final picked = await showDatePicker(
@@ -463,7 +487,8 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now().add(const Duration(days: 1)),
                     );
-                    if (picked != null) setDialogState(() => selectedDate = picked);
+                    if (picked != null)
+                      setDialogState(() => selectedDate = picked);
                   },
                 ),
                 const SizedBox(height: 12),
@@ -485,9 +510,11 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
             ),
             FilledButton(
               onPressed: () {
-                if (descriptionController.text.isEmpty || amountController.text.isEmpty) {
+                if (descriptionController.text.isEmpty ||
+                    amountController.text.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Description and amount are required')),
+                    const SnackBar(
+                        content: Text('Description and amount are required')),
                   );
                   return;
                 }
@@ -541,7 +568,8 @@ class _ExpenseManagementScreenState extends ConsumerState<ExpenseManagementScree
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Expense'),
-        content: Text('Are you sure you want to delete "${expense.description}"?'),
+        content:
+            Text('Are you sure you want to delete "${expense.description}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),

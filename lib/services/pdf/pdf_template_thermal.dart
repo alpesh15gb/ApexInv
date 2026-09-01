@@ -77,7 +77,8 @@ pw.Page buildThermalTemplate(
     );
   }
 
-  pw.Widget labelValue(String label, String value, {double fontSize = bodyFs,bool valueIsBold = false}) {
+  pw.Widget labelValue(String label, String value,
+      {double fontSize = bodyFs, bool valueIsBold = false}) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
@@ -85,7 +86,9 @@ pw.Page buildThermalTemplate(
             style: pw.TextStyle(fontSize: fontSize, color: PdfColors.grey800)),
         pw.Text(value,
             style: pw.TextStyle(
-                fontSize: fontSize, fontWeight: valueIsBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+                fontSize: fontSize,
+                fontWeight:
+                    valueIsBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
       ],
     );
   }
@@ -96,7 +99,8 @@ pw.Page buildThermalTemplate(
     final rows = <pw.Widget>[];
     for (var i = 0; i < invoice.items.length; i++) {
       final item = invoice.items[i];
-      final qty = '${item.quantity == item.quantity.roundToDouble() ? item.quantity.toInt().toString() : item.quantity.toStringAsFixed(2)}'
+      final qty =
+          '${item.quantity == item.quantity.roundToDouble() ? item.quantity.toInt().toString() : item.quantity.toStringAsFixed(2)}'
           '${item.effectiveUnit.trim().isEmpty ? '' : ' ${item.effectiveUnit}'}';
       totalQuantity += item.quantity;
       final rate = item.effectivePrice.toStringAsFixed(2);
@@ -120,8 +124,7 @@ pw.Page buildThermalTemplate(
                   pw.Expanded(
                     child: pw.Text(item.product.displayName(showAliasName),
                         style: pw.TextStyle(
-                            fontSize: smallFs,
-                            fontWeight: pw.FontWeight.bold)),
+                            fontSize: smallFs, fontWeight: pw.FontWeight.bold)),
                   ),
                 ],
               ),
@@ -143,8 +146,7 @@ pw.Page buildThermalTemplate(
                     ],
                     pw.Text(total,
                         style: pw.TextStyle(
-                            fontSize: smallFs,
-                            fontWeight: pw.FontWeight.bold)),
+                            fontSize: smallFs, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
               ),
@@ -196,8 +198,8 @@ pw.Page buildThermalTemplate(
                   ),
                   pw.SizedBox(
                     width: 30,
-                    child: pw.Text(rate,
-                        style: pw.TextStyle(fontSize: smallFs)),
+                    child:
+                        pw.Text(rate, style: pw.TextStyle(fontSize: smallFs)),
                   ),
                   if (showItemTax)
                     pw.SizedBox(
@@ -250,16 +252,18 @@ pw.Page buildThermalTemplate(
       pw.SizedBox(height: 4),
       centerText('=== TAX SUMMARY ===', fontSize: smallFs, bold: true),
       pw.SizedBox(height: 2),
-      labelValue('Taxable Amt:',
-          '$currencySymbol ${totalTaxable.toStringAsFixed(2)}',
+      labelValue(
+          'Taxable Amt:', '$currencySymbol ${totalTaxable.toStringAsFixed(2)}',
           fontSize: smallFs),
       if (isIndia && invoice.isInterState)
         labelValue('IGST:', '$currencySymbol ${totalTax.toStringAsFixed(2)}',
             fontSize: smallFs)
       else if (isIndia) ...[
-        labelValue('SGST:', '$currencySymbol ${(totalTax / 2).toStringAsFixed(2)}',
+        labelValue(
+            'SGST:', '$currencySymbol ${(totalTax / 2).toStringAsFixed(2)}',
             fontSize: smallFs),
-        labelValue('CGST:', '$currencySymbol ${(totalTax / 2).toStringAsFixed(2)}',
+        labelValue(
+            'CGST:', '$currencySymbol ${(totalTax / 2).toStringAsFixed(2)}',
             fontSize: smallFs),
       ],
       labelValue('Total Tax:', '$currencySymbol ${totalTax.toStringAsFixed(2)}',
@@ -273,7 +277,8 @@ pw.Page buildThermalTemplate(
     final netTotal = roundNetTotal(invoice.total + previousBalanceDue);
     return [
       // ── Business Header ──
-      centerText(showCompanyName ? (company?.name ?? '') : '', fontSize: titleFs, bold: true),
+      centerText(showCompanyName ? (company?.name ?? '') : '',
+          fontSize: titleFs, bold: true),
       pw.SizedBox(height: 2),
       if (showAddress && (company?.address ?? '').isNotEmpty)
         centerText(company!.address, fontSize: smallFs),
@@ -284,14 +289,17 @@ pw.Page buildThermalTemplate(
             fontSize: smallFs),
       pw.SizedBox(height: 3),
       sp(),
-      centerText((invoice.invoiceTitle ?? invoice.type).toUpperCase(), fontSize: boldFs, bold: true),
+      centerText((invoice.invoiceTitle ?? invoice.type).toUpperCase(),
+          fontSize: boldFs, bold: true),
       sp(),
       pw.SizedBox(height: 3),
       // ── Invoice meta ──
       pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          if (invoice.pdfNumberText(invoicePrefix, showLeadingZeros: showLeadingZeros) != null)
+          if (invoice.pdfNumberText(invoicePrefix,
+                  showLeadingZeros: showLeadingZeros) !=
+              null)
             pw.Text(
                 'Inv No: ${invoice.pdfNumberText(invoicePrefix, showLeadingZeros: showLeadingZeros)}',
                 style: const pw.TextStyle(fontSize: bodyFs)),
@@ -313,8 +321,8 @@ pw.Page buildThermalTemplate(
 
       // ── Customer ──
       pw.Text('Name: ${invoice.customer.name}',
-          style: pw.TextStyle(
-              fontSize: bodyFs, fontWeight: pw.FontWeight.bold)),
+          style:
+              pw.TextStyle(fontSize: bodyFs, fontWeight: pw.FontWeight.bold)),
       if (showCustomerBusinessName && invoice.customer.businessName.isNotEmpty)
         pw.Text(invoice.customer.businessName,
             style: const pw.TextStyle(fontSize: smallFs)),
@@ -403,10 +411,12 @@ pw.Page buildThermalTemplate(
         labelValue(c.label.isEmpty ? 'Extra Cost' : c.label,
             '$currencySymbol ${c.amount.toStringAsFixed(2)}'),
       if (invoice.invoiceDiscountAmount > 0)
-        labelValue(invoice.invoiceDiscountType == InvoiceDiscountType.percent
-            ? "Extra Discount (${invoice.invoiceDiscountValue.toStringAsFixed(1)}%)"
-            : "Extra Discount ",
-          "-$currencySymbol ${invoice.invoiceDiscountAmount.toStringAsFixed(2)}",),
+        labelValue(
+          invoice.invoiceDiscountType == InvoiceDiscountType.percent
+              ? "Extra Discount (${invoice.invoiceDiscountValue.toStringAsFixed(1)}%)"
+              : "Extra Discount ",
+          "-$currencySymbol ${invoice.invoiceDiscountAmount.toStringAsFixed(2)}",
+        ),
       if (previousBalanceDue > 0)
         labelValue('Prev Balance:',
             '$currencySymbol ${previousBalanceDue.toStringAsFixed(2)}'),
@@ -449,7 +459,8 @@ pw.Page buildThermalTemplate(
           ],
         ),
         pw.SizedBox(height: 2),
-        pw.Text(AmountInWords.amount(netTotal.rounded,
+        pw.Text(
+            AmountInWords.amount(netTotal.rounded,
                 indian: invoice.currencyCode == 'INR'),
             style: pw.TextStyle(
                 fontSize: bodyFs - 1, fontStyle: pw.FontStyle.italic)),
@@ -463,7 +474,9 @@ pw.Page buildThermalTemplate(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-                invoice.outstandingBalance <= 0 ? 'PAID IN FULL' : 'Balance Due',
+                invoice.outstandingBalance <= 0
+                    ? 'PAID IN FULL'
+                    : 'Balance Due',
                 style: pw.TextStyle(
                     fontSize: bodyFs, fontWeight: pw.FontWeight.bold)),
             if (invoice.outstandingBalance > 0)
@@ -498,7 +511,8 @@ pw.Page buildThermalTemplate(
             fontSize: bodyFs, bold: true, color: PdfColors.grey800),
       if (showFooterBranding) ...[
         pw.SizedBox(height: 4),
-        centerText('Generated by Apex Books', fontSize: (smallFs-1), color: PdfColors.grey500),
+        centerText('Generated by Apex Books',
+            fontSize: (smallFs - 1), color: PdfColors.grey500),
       ],
       pw.SizedBox(height: 4),
     ];

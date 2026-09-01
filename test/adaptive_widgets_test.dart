@@ -197,8 +197,23 @@ void main() {
     // Settings row carries the update dot indicator.
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
 
-    await tester.tap(find.text('Quotations'));
-    await tester.tap(find.text('Expenses'));
+    // The More list is scrollable now — bring each target into view first.
+    Future<void> tapTile(String label) async {
+      await tester.scrollUntilVisible(
+        find.text(label),
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text(label));
+    }
+
+    await tapTile('Quotations');
+    await tapTile('Expenses');
+    await tester.scrollUntilVisible(
+      find.text('Logout'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Logout'));
     expect(selected, [3, 8]);
     expect(loggedOut, isTrue);

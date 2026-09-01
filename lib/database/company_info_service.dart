@@ -1,13 +1,13 @@
 import 'package:apexbooks/models/company_info.dart';
 import 'database_helper.dart';
 
-class CompanyInfoService
-{
+class CompanyInfoService {
   static final dbHelper = DatabaseHelper();
 
   static Future<CompanyInfo?> getCompanyInfo() async {
     final db = await dbHelper.database;
-    final List<Map<String, dynamic>> result = await db.query('company_info', limit: 1);
+    final List<Map<String, dynamic>> result =
+        await db.query('company_info', limit: 1);
 
     if (result.isNotEmpty) {
       return CompanyInfo.fromMap(result.first);

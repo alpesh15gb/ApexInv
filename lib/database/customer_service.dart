@@ -2,8 +2,7 @@ import 'package:apexbooks/models/customer.dart';
 import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 
-class CustomerService
-{
+class CustomerService {
   static final dbHelper = DatabaseHelper();
   // ─────────────────────────────────────────────
   // CRUD for Customer
@@ -90,8 +89,14 @@ class CustomerService
     final db = await dbHelper.database;
     final conditions = <String>[];
     final args = <String>[];
-    if (email.trim().isNotEmpty) { conditions.add('email = ?'); args.add(email.trim()); }
-    if (phone.trim().isNotEmpty) { conditions.add('phone = ?'); args.add(phone.trim()); }
+    if (email.trim().isNotEmpty) {
+      conditions.add('email = ?');
+      args.add(email.trim());
+    }
+    if (phone.trim().isNotEmpty) {
+      conditions.add('phone = ?');
+      args.add(phone.trim());
+    }
     if (conditions.isEmpty) return null;
     final maps = await db.query(
       'customers',
@@ -153,5 +158,4 @@ class CustomerService
       }
     });
   }
-
 }

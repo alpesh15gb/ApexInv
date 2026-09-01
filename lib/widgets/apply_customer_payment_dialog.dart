@@ -5,7 +5,8 @@ import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/invoice.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/utils/app_date.dart';
-import 'package:apexbooks/widgets/apply_payment_dialog.dart' show PaymentSummaryCard;
+import 'package:apexbooks/widgets/apply_payment_dialog.dart'
+    show PaymentSummaryCard;
 
 /// Applies one payment across several of a customer's open invoices —
 /// smallest outstanding balance first by default, editable per invoice
@@ -25,7 +26,8 @@ class ApplyCustomerPaymentDialog extends ConsumerStatefulWidget {
       _ApplyCustomerPaymentDialogState();
 }
 
-class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymentDialog> {
+class _ApplyCustomerPaymentDialogState
+    extends ConsumerState<ApplyCustomerPaymentDialog> {
   bool _isLoading = true;
   bool _isSaving = false;
   List<Invoice> _openInvoices = [];
@@ -55,8 +57,9 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
   }
 
   Future<void> _load() async {
-    final invoices =
-        await ref.read(invoiceRepositoryProvider).getOpenInvoicesForCustomer(widget.customer.id);
+    final invoices = await ref
+        .read(invoiceRepositoryProvider)
+        .getOpenInvoicesForCustomer(widget.customer.id);
     if (!mounted) return;
     setState(() {
       _openInvoices = invoices;
@@ -78,7 +81,10 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
       _invoicesForCurrency.fold(0.0, (s, i) => s + i.outstandingBalance);
 
   double get _totalAllocated => _invoicesForCurrency.fold(
-      0.0, (s, i) => s + (double.tryParse(_rowControllers[i.id]?.text.trim() ?? '') ?? 0.0));
+      0.0,
+      (s, i) =>
+          s +
+          (double.tryParse(_rowControllers[i.id]?.text.trim() ?? '') ?? 0.0));
 
   // Smallest outstanding balance first, so a limited payment clears as many
   // whole invoices as possible instead of leaving several partially paid.
@@ -89,7 +95,8 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
       ..sort((a, b) => a.outstandingBalance.compareTo(b.outstandingBalance));
     setState(() {
       for (final inv in bySmallest) {
-        final alloc = remaining <= 0 ? 0.0 : remaining.clamp(0.0, inv.outstandingBalance);
+        final alloc =
+            remaining <= 0 ? 0.0 : remaining.clamp(0.0, inv.outstandingBalance);
         _rowControllers[inv.id]?.text = alloc.toStringAsFixed(2);
         remaining -= alloc;
       }
@@ -109,7 +116,8 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
   Future<void> _apply() async {
     final allocations = <({Invoice invoice, double amount})>[];
     for (final inv in _invoicesForCurrency) {
-      final amount = double.tryParse(_rowControllers[inv.id]?.text.trim() ?? '') ?? 0.0;
+      final amount =
+          double.tryParse(_rowControllers[inv.id]?.text.trim() ?? '') ?? 0.0;
       if (amount > InvoiceCalculator.moneyEpsilon) {
         if (amount > inv.outstandingBalance + InvoiceCalculator.moneyEpsilon) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -132,12 +140,15 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
 
     setState(() => _isSaving = true);
     try {
-      final saved = await ref.read(paymentRepositoryProvider).applyPaymentAcrossInvoices(
-            allocations: allocations,
-            datePaid: _selectedDate,
-            paymentMethod: _selectedMethod,
-            notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-          );
+      final saved =
+          await ref.read(paymentRepositoryProvider).applyPaymentAcrossInvoices(
+                allocations: allocations,
+                datePaid: _selectedDate,
+                paymentMethod: _selectedMethod,
+                notes: _notesController.text.trim().isEmpty
+                    ? null
+                    : _notesController.text.trim(),
+              );
       widget.onPaymentApplied();
       if (!mounted) return;
       final sym = _invoicesForCurrency.first.currencySymbol;
@@ -181,7 +192,8 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.payments_outlined, color: Colors.white, size: 22),
+                  const Icon(Icons.payments_outlined,
+                      color: Colors.white, size: 22),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -189,9 +201,12 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                       children: [
                         const Text('Receive Payment',
                             style: TextStyle(
-                                color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold)),
                         Text(widget.customer.name,
-                            style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 13)),
                       ],
                     ),
                   ),
@@ -212,8 +227,8 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                       ? Padding(
                           padding: const EdgeInsets.all(24),
                           child: Text('No open invoices for this customer.',
-                              style:
-                                  TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                              style: TextStyle(
+                                  color: theme.colorScheme.onSurfaceVariant)),
                         )
                       : SingleChildScrollView(
                           padding: const EdgeInsets.all(20),
@@ -230,7 +245,8 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                                     isDense: true,
                                   ),
                                   items: _currencies
-                                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                                      .map((c) => DropdownMenuItem(
+                                          value: c, child: Text(c)))
                                       .toList(),
                                   onChanged: (v) {
                                     if (v == null) return;
@@ -267,11 +283,14 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                                         labelText:
                                             'Amount Received (${_invoicesForCurrency.first.currencySymbol})',
                                         border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(8)),
-                                        helperText: 'Auto-allocates smallest invoice first',
+                                            borderRadius:
+                                                BorderRadius.circular(8)),
+                                        helperText:
+                                            'Auto-allocates smallest invoice first',
                                       ),
                                       keyboardType:
-                                          const TextInputType.numberWithOptions(decimal: true),
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -290,7 +309,8 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                                   style: TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
-                                      color: theme.colorScheme.onSurfaceVariant)),
+                                      color:
+                                          theme.colorScheme.onSurfaceVariant)),
                               const SizedBox(height: 8),
                               // Bounded + virtualized so a customer with many
                               // open invoices doesn't push the date/method/
@@ -298,7 +318,9 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                               // reach — this scrolls independently instead of
                               // growing the whole dialog.
                               SizedBox(
-                                height: _invoicesForCurrency.length.clamp(1, 5) * 68.0,
+                                height:
+                                    _invoicesForCurrency.length.clamp(1, 5) *
+                                        68.0,
                                 child: ListView.builder(
                                   itemCount: _invoicesForCurrency.length,
                                   itemBuilder: (context, i) =>
@@ -318,10 +340,14 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                                         decoration: InputDecoration(
                                           labelText: 'Date',
                                           border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(8)),
-                                          suffixIcon: const Icon(Icons.calendar_today, size: 18),
+                                              borderRadius:
+                                                  BorderRadius.circular(8)),
+                                          suffixIcon: const Icon(
+                                              Icons.calendar_today,
+                                              size: 18),
                                         ),
-                                        child: Text(AppDate.format(_selectedDate)),
+                                        child:
+                                            Text(AppDate.format(_selectedDate)),
                                       ),
                                     ),
                                   ),
@@ -332,13 +358,16 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                                       decoration: InputDecoration(
                                         labelText: 'Payment Method',
                                         border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(8)),
+                                            borderRadius:
+                                                BorderRadius.circular(8)),
                                       ),
                                       hint: const Text('Select method'),
                                       items: _methods
-                                          .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                                          .map((m) => DropdownMenuItem(
+                                              value: m, child: Text(m)))
                                           .toList(),
-                                      onChanged: (v) => setState(() => _selectedMethod = v),
+                                      onChanged: (v) =>
+                                          setState(() => _selectedMethod = v),
                                     ),
                                   ),
                                 ],
@@ -348,9 +377,10 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                                 controller: _notesController,
                                 decoration: InputDecoration(
                                   labelText: 'Reference / Notes (optional)',
-                                  border:
-                                      OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  hintText: 'e.g. cheque no., transaction ID...',
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8)),
+                                  hintText:
+                                      'e.g. cheque no., transaction ID...',
                                 ),
                                 maxLines: 2,
                               ),
@@ -374,8 +404,10 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
                       style: ElevatedButton.styleFrom(
                         backgroundColor: theme.primaryColor,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                       icon: _isSaving
                           ? const SizedBox(
@@ -413,15 +445,19 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(inv.invoiceNumber ?? inv.id,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
                 Text(AppDate.format(inv.date),
-                    style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurfaceVariant)),
               ],
             ),
           ),
           Expanded(
             flex: 2,
-            child: Text('${inv.currencySymbol} ${inv.outstandingBalance.toStringAsFixed(2)}',
+            child: Text(
+                '${inv.currencySymbol} ${inv.outstandingBalance.toStringAsFixed(2)}',
                 style: const TextStyle(fontSize: 13, color: Colors.orange)),
           ),
           Expanded(
@@ -429,8 +465,10 @@ class _ApplyCustomerPaymentDialogState extends ConsumerState<ApplyCustomerPaymen
             child: TextField(
               controller: _rowControllers[inv.id],
               textAlign: TextAlign.end,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                  isDense: true, border: OutlineInputBorder()),
               onChanged: (_) => setState(() {}),
             ),
           ),

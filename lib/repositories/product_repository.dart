@@ -25,6 +25,7 @@ abstract class ProductRepository {
   Future<List<Product>> getOutOfStockProducts();
   Future<ProductMetadata?> getProductMetadata(String productId);
   Future<Map<String, ProductMetadata>> getAllProductMetadata();
-  Future<Map<String, ProductMetadata>> getProductMetadataForIds(List<String> productIds);
+  Future<Map<String, ProductMetadata>> getProductMetadataForIds(
+      List<String> productIds);
   Future<void> upsertProductMetadata(ProductMetadata metadata);
 }

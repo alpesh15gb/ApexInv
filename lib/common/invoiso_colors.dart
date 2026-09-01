@@ -44,11 +44,11 @@ class DashboardScreenColors {
   );
 
   static final invoiceNumberOverDueLinearGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [
-  Colors.red,
-    Colors.red.withValues(alpha: 0.7),
-  ],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Colors.red,
+      Colors.red.withValues(alpha: 0.7),
+    ],
   );
 }

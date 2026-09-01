@@ -70,7 +70,8 @@ class ProductService {
     );
   }
 
-  static Future<List<Product>> searchProducts(String query, {String? type}) async {
+  static Future<List<Product>> searchProducts(String query,
+      {String? type}) async {
     final db = await dbHelper.database;
     final typeFilter = (type != null && type != 'both') ? type : null;
     if (query.isEmpty) {
@@ -111,10 +112,17 @@ class ProductService {
     List<dynamic>? whereArgs;
     final queryLOwer = query.toLowerCase();
     if (query.isNotEmpty && typeFilter != null) {
-      where = '(LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ?) AND type = ?';
-      whereArgs = ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%', typeFilter];
+      where =
+          '(LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ?) AND type = ?';
+      whereArgs = [
+        '%$queryLOwer%',
+        '%$queryLOwer%',
+        '%$queryLOwer%',
+        typeFilter
+      ];
     } else if (query.isNotEmpty) {
-      where = 'LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ?';
+      where =
+          'LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ?';
       whereArgs = ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%'];
     } else if (typeFilter != null) {
       where = 'type = ?';
@@ -160,7 +168,8 @@ class ProductService {
   static Future<void> deleteProduct(String id) async {
     final db = await dbHelper.database;
     await db.delete('products', where: 'id = ?', whereArgs: [id]);
-    await db.delete('product_metadata', where: 'product_id = ?', whereArgs: [id]);
+    await db
+        .delete('product_metadata', where: 'product_id = ?', whereArgs: [id]);
   }
 
   // ─────────────────────────────────────────────
@@ -179,7 +188,8 @@ class ProductService {
     final db = await dbHelper.database;
     final maps = await db.query('product_metadata');
     return {
-      for (final m in maps) m['product_id'] as String: ProductMetadata.fromMap(m)
+      for (final m in maps)
+        m['product_id'] as String: ProductMetadata.fromMap(m)
     };
   }
 
@@ -193,7 +203,8 @@ class ProductService {
       whereArgs: productIds,
     );
     return {
-      for (final m in maps) m['product_id'] as String: ProductMetadata.fromMap(m)
+      for (final m in maps)
+        m['product_id'] as String: ProductMetadata.fromMap(m)
     };
   }
 
@@ -212,7 +223,8 @@ class ProductService {
 
   static Future<void> deleteProductMetadata(String productId) async {
     final db = await dbHelper.database;
-    await db.delete('product_metadata', where: 'product_id = ?', whereArgs: [productId]);
+    await db.delete('product_metadata',
+        where: 'product_id = ?', whereArgs: [productId]);
   }
 
   static Future<void> updateProductStock(String id, int newStock) async {

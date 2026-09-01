@@ -45,8 +45,11 @@ import 'package:apexbooks/screens/expense_management_screen.dart';
 import 'package:apexbooks/screens/purchase_order_screen.dart';
 import 'package:apexbooks/screens/import_screen.dart';
 import 'package:apexbooks/screens/more_menu_screen.dart';
+import 'package:apexbooks/screens/purchase_bill_screen.dart';
+import 'package:apexbooks/screens/reminders_screen.dart';
 
-// invoice.type is a raw internal value ('Invoice'/'Quotation'/'Receipt') used
+// invoice.type is a raw internal value ('Invoice'/'Quotation'/'Receipt'/
+// 'Credit Note'/'Debit Note'/'Delivery Challan'/'Proforma') used
 // for comparisons throughout this file — only the displayed label is localized.
 String _invoiceTypeLabel(BuildContext context, String type) {
   final l10n = AppLocalizations.of(context)!;
@@ -55,6 +58,14 @@ String _invoiceTypeLabel(BuildContext context, String type) {
       return l10n.labelQuotation;
     case 'Receipt':
       return l10n.labelReceipt;
+    case 'Credit Note':
+      return 'Credit Note';
+    case 'Debit Note':
+      return 'Debit Note';
+    case 'Delivery Challan':
+      return 'Delivery Challan';
+    case 'Proforma':
+      return 'Proforma';
     default:
       return l10n.labelInvoice;
   }
@@ -232,6 +243,42 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return const ExpenseManagementScreen();
       case 9:
         return const PurchaseOrderScreen();
+      case 11:
+        return PurchaseBillScreen(user: _currentUser);
+      case 13:
+        return InvoiceManagementScreenV2(
+          key: const ValueKey('credit_note_list'),
+          onEditInvoice: editInvoice,
+          onCloneInvoice: cloneInvoice,
+          user: _currentUser,
+          filterType: 'Credit Note',
+        );
+      case 14:
+        return InvoiceManagementScreenV2(
+          key: const ValueKey('debit_note_list'),
+          onEditInvoice: editInvoice,
+          onCloneInvoice: cloneInvoice,
+          user: _currentUser,
+          filterType: 'Debit Note',
+        );
+      case 15:
+        return InvoiceManagementScreenV2(
+          key: const ValueKey('challan_list'),
+          onEditInvoice: editInvoice,
+          onCloneInvoice: cloneInvoice,
+          user: _currentUser,
+          filterType: 'Delivery Challan',
+        );
+      case 16:
+        return InvoiceManagementScreenV2(
+          key: const ValueKey('proforma_list'),
+          onEditInvoice: editInvoice,
+          onCloneInvoice: cloneInvoice,
+          user: _currentUser,
+          filterType: 'Proforma',
+        );
+      case 17:
+        return const RemindersScreen();
       case 10:
         return SettingsScreen(
           currentUser: _currentUser,
@@ -617,9 +664,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         Icons.receipt_long, 'Expenses'),
                     _buildNavItem(9, Icons.shopping_cart_outlined,
                         Icons.shopping_cart, 'Purchase Orders'),
+                    _buildNavItem(11, Icons.inventory_outlined, Icons.inventory,
+                        'Purchase Bills'),
+                    _buildNavItem(13, Icons.note_alt_outlined, Icons.note_alt,
+                        'Credit Notes'),
+                    _buildNavItem(14, Icons.note_add_outlined, Icons.note_add,
+                        'Debit Notes'),
+                    _buildNavItem(15, Icons.local_shipping_outlined,
+                        Icons.local_shipping, 'Delivery Challans'),
+                    _buildNavItem(16, Icons.request_page_outlined,
+                        Icons.request_page, 'Proforma'),
                     _buildNavItem(10, Icons.settings_outlined, Icons.settings,
                         AppLocalizations.of(context)!.navSettings,
                         showDot: _hasUpdate),
+                    _buildNavItem(17, Icons.notifications_active_outlined,
+                        Icons.notifications_active, 'Reminders'),
                   ],
                 ),
               ),

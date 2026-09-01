@@ -43,7 +43,7 @@ class InvoicePdfServices {
       }
     } catch (e) {
       if (context.mounted) {
-        if(kDebugMode) print(e);
+        if (kDebugMode) print(e);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error previewing PDF: $e')),
         );
@@ -154,7 +154,8 @@ class InvoicePdfServices {
   /// types, unchanged from before. Other queries (e.g. "recent invoices")
   /// rely on `id` sorting as a single monotonic sequence, so this must never
   /// be scoped by type.
-  static Future<String> generateNextId() => BackendServices.invoices.generateNextId();
+  static Future<String> generateNextId() =>
+      BackendServices.invoices.generateNextId();
 
   /// Generates the next **display** number for [type] ('Invoice' |
   /// 'Quotation' | 'Receipt') — each type has its own independent sequence.

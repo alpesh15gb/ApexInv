@@ -2,12 +2,37 @@
 /// (thousand, lakh, crore) — e.g. 1110 -> "One Thousand One Hundred and Ten".
 class AmountInWords {
   static const _ones = [
-    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
-    'Seventeen', 'Eighteen', 'Nineteen',
+    '',
+    'One',
+    'Two',
+    'Three',
+    'Four',
+    'Five',
+    'Six',
+    'Seven',
+    'Eight',
+    'Nine',
+    'Ten',
+    'Eleven',
+    'Twelve',
+    'Thirteen',
+    'Fourteen',
+    'Fifteen',
+    'Sixteen',
+    'Seventeen',
+    'Eighteen',
+    'Nineteen',
   ];
   static const _tens = [
-    '', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty',
+    '',
+    '',
+    'Twenty',
+    'Thirty',
+    'Forty',
+    'Fifty',
+    'Sixty',
+    'Seventy',
+    'Eighty',
     'Ninety',
   ];
 
@@ -66,8 +91,10 @@ class AmountInWords {
   /// e.g. 1110.0 -> "One Thousand One Hundred and Ten Only".
   /// Uses Indian grouping (lakh/crore) when [indian] is true, else
   /// international grouping (million/billion).
-  static String amount(double value, {String suffix = 'Only', bool indian = true}) {
-    final words = indian ? number(value.round()) : numberInternational(value.round());
+  static String amount(double value,
+      {String suffix = 'Only', bool indian = true}) {
+    final words =
+        indian ? number(value.round()) : numberInternational(value.round());
     return suffix.isEmpty ? words : '$words $suffix';
   }
 }

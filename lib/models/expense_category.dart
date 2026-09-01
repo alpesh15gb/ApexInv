@@ -37,8 +37,7 @@ class ExpenseCategory {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ExpenseCategory && id == other.id;
+      identical(this, other) || other is ExpenseCategory && id == other.id;
 
   @override
   int get hashCode => id.hashCode;

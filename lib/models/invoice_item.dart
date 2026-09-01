@@ -35,7 +35,7 @@ class InvoiceItem {
   double get effectivePrice => unitPrice ?? product.price;
 
   String get effectiveUnit => unit ?? product.unit;
-  
+
   String get effectiveDescription => (description ?? '').trim();
 
   /// What prints on an invoice (A4 + thermal): the per-line note if the user

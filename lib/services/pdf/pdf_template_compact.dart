@@ -70,11 +70,13 @@ pw.MultiPage buildCompactTemplate(
   final double cellPaddingV = pageFormat == PdfPageFormat.a6
       ? compactPdfLayoutStyle.tableVerticalPadding
       : (8 * fontScale).clamp(4.0, 8.0);
-  final double totalsFontSize = compactPdfLayoutStyle.totalsFontSize * fontScale;
+  final double totalsFontSize =
+      compactPdfLayoutStyle.totalsFontSize * fontScale;
   final double headerFont = compactPdfLayoutStyle.titleFontSize * fontScale;
   final double labelFont = compactPdfLayoutStyle.subtitleFontSize * fontScale;
   final double addressFont = compactPdfLayoutStyle.subtitleFontSize * fontScale;
-  final double sectionHeaderFont = compactPdfLayoutStyle.subtitleFontSize * fontScale;
+  final double sectionHeaderFont =
+      compactPdfLayoutStyle.subtitleFontSize * fontScale;
   final double bodyFont = compactPdfLayoutStyle.bodyFontSize * fontScale;
   final double pageMargin = pageFormat == PdfPageFormat.a6 ? 16.0 : 20.0;
 
@@ -98,7 +100,8 @@ pw.MultiPage buildCompactTemplate(
   final fssaiCode = company?.fssaiCode ?? '';
   final companyIdLine = [
     if (showGst && gstin.isNotEmpty) '$gstLabel: $gstin',
-    if (showPan && panNumber.isNotEmpty) '${panLabel(company?.country)}: $panNumber',
+    if (showPan && panNumber.isNotEmpty)
+      '${panLabel(company?.country)}: $panNumber',
     if (showFssai && fssaiCode.isNotEmpty) 'FSSAI: $fssaiCode',
   ].join('   ');
 
@@ -124,7 +127,9 @@ pw.MultiPage buildCompactTemplate(
       pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          if (showLogo && logoImage != null && logoPosition == LogoPosition.left) ...[
+          if (showLogo &&
+              logoImage != null &&
+              logoPosition == LogoPosition.left) ...[
             buildCompanyLogo(logoImage, size: compactLogoSize),
             pw.SizedBox(width: compactPdfLayoutStyle.headerGap),
           ],
@@ -153,7 +158,8 @@ pw.MultiPage buildCompactTemplate(
                                 fontSize: headerFont,
                                 fontWeight: pw.FontWeight.bold),
                           ),
-                          if (showAddress && (company?.address ?? '').isNotEmpty)
+                          if (showAddress &&
+                              (company?.address ?? '').isNotEmpty)
                             pw.Text(company!.address,
                                 style: pw.TextStyle(
                                     fontSize: addressFont,
@@ -176,8 +182,7 @@ pw.MultiPage buildCompactTemplate(
                 pw.SizedBox(height: 4),
                 pw.Container(
                   decoration: pw.BoxDecoration(
-                    border:
-                        pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                    border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
                   ),
                   child: pw.Row(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -238,7 +243,9 @@ pw.MultiPage buildCompactTemplate(
                                       fontSize: sectionHeaderFont,
                                       fontWeight: pw.FontWeight.bold)),
                               pw.SizedBox(height: 1),
-                              if (invoice.pdfNumberText(invoicePrefix, showLeadingZeros: showLeadingZeros) != null)
+                              if (invoice.pdfNumberText(invoicePrefix,
+                                      showLeadingZeros: showLeadingZeros) !=
+                                  null)
                                 pw.Text(
                                     'No: ${invoice.pdfNumberText(invoicePrefix, showLeadingZeros: showLeadingZeros)}',
                                     style: pw.TextStyle(fontSize: addressFont)),
@@ -248,8 +255,7 @@ pw.MultiPage buildCompactTemplate(
                               if (invoice.dueDate != null)
                                 pw.Text(
                                     'Due: ${formatPdfDate(invoice.dueDate!, datePattern)}',
-                                    style:
-                                        pw.TextStyle(fontSize: addressFont)),
+                                    style: pw.TextStyle(fontSize: addressFont)),
                             ],
                           ),
                         ),
@@ -285,7 +291,8 @@ pw.MultiPage buildCompactTemplate(
         tableFontSize: tableFontSize,
         cellPaddingH: cellPaddingH,
         cellPaddingV: cellPaddingV,
-        showCgstSgst: showCgstSgst, showIgst: showIgst,
+        showCgstSgst: showCgstSgst,
+        showIgst: showIgst,
         totalQuantityText: showTotalQuantity && showQuantity
             ? '${totalQty == totalQty.roundToDouble() ? totalQty.toInt() : totalQty}'
             : null,
@@ -307,13 +314,16 @@ pw.MultiPage buildCompactTemplate(
           previousBalanceDue: previousBalanceDue,
           fontSize: totalsFontSize,
           compact: true,
-          showCgstSgst: showCgstSgst, showIgst: showIgst,
+          showCgstSgst: showCgstSgst,
+          showIgst: showIgst,
           showRoundOff: showRoundOff,
         ),
       ),
 
       // ── Signature + UPI/Bank ──
-      if (signatureImage != null || (showUpiQr && upiId != null) || bankAccount != null) ...[
+      if (signatureImage != null ||
+          (showUpiQr && upiId != null) ||
+          bankAccount != null) ...[
         pw.SizedBox(height: compactPdfLayoutStyle.signatureTopGap),
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -341,10 +351,12 @@ pw.MultiPage buildCompactTemplate(
                       ? buildSignatureWidget(
                           signatureImage,
                           signaturePosition,
-                          imageHeight: compactPdfLayoutStyle.signatureImageHeight *
-                              (signatureSizePx / 50),
+                          imageHeight:
+                              compactPdfLayoutStyle.signatureImageHeight *
+                                  (signatureSizePx / 50),
                           labelGap: compactPdfLayoutStyle.signatureLabelGap,
-                          labelFontSize: compactPdfLayoutStyle.signatureLabelFontSize,
+                          labelFontSize:
+                              compactPdfLayoutStyle.signatureLabelFontSize,
                         )
                       : pw.SizedBox(),
                 ]
@@ -353,10 +365,12 @@ pw.MultiPage buildCompactTemplate(
                       ? buildSignatureWidget(
                           signatureImage,
                           signaturePosition,
-                          imageHeight: compactPdfLayoutStyle.signatureImageHeight *
-                              (signatureSizePx / 50),
+                          imageHeight:
+                              compactPdfLayoutStyle.signatureImageHeight *
+                                  (signatureSizePx / 50),
                           labelGap: compactPdfLayoutStyle.signatureLabelGap,
-                          labelFontSize: compactPdfLayoutStyle.signatureLabelFontSize,
+                          labelFontSize:
+                              compactPdfLayoutStyle.signatureLabelFontSize,
                         )
                       : pw.SizedBox(),
                   buildBankUpiRow(

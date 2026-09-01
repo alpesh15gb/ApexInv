@@ -23,6 +23,8 @@ class PaymentService {
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? chequeNumber,
+    DateTime? chequeDate,
   }) async {
     final db = await _dbHelper.database;
     late InvoicePayment saved;
@@ -69,6 +71,9 @@ class PaymentService {
         datePaid: datePaid,
         paymentMethod: paymentMethod,
         notes: notes,
+        chequeNumber: chequeNumber,
+        chequeDate: chequeDate,
+        chequeCleared: false,
       );
 
       await txn.insert('invoice_payments', saved.toMap());

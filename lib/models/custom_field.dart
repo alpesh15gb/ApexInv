@@ -48,8 +48,7 @@ class CustomField {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is CustomField && id == other.id;
+      identical(this, other) || other is CustomField && id == other.id;
 
   @override
   int get hashCode => id.hashCode;

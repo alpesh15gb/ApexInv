@@ -18,7 +18,8 @@ class AppFormatters {
   static String formatDate(DateTime? date) =>
       date != null ? _dateFormat.format(date) : 'Unknown date';
 
-  static String formatShortDate(DateTime? date, {String pattern = 'dd/MM/yyyy'}) =>
+  static String formatShortDate(DateTime? date,
+          {String pattern = 'dd/MM/yyyy'}) =>
       date != null ? DateFormat(pattern).format(date) : '-';
 
   static String formatAmount(double amount, String symbol) =>

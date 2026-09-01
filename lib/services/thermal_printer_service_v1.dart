@@ -36,20 +36,22 @@ class ThermalPrinterService {
                 const Text('No USB printers found.')
               else
                 ...discovered.map((p) => ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(p.name),
-                  onTap: () async {
-                    Navigator.pop(dialogContext);
-                    final input = UsbPrinterInput(
-                      name: p.detail.name,
-                      vendorId: p.detail.vendorId,
-                      productId: p.detail.productId,
-                    );
-                    await _printToDevice(
-                        type: PrinterType.usb, model: input, invoice: invoice);
-                  },
-                )),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(p.name),
+                      onTap: () async {
+                        Navigator.pop(dialogContext);
+                        final input = UsbPrinterInput(
+                          name: p.detail.name,
+                          vendorId: p.detail.vendorId,
+                          productId: p.detail.productId,
+                        );
+                        await _printToDevice(
+                            type: PrinterType.usb,
+                            model: input,
+                            invoice: invoice);
+                      },
+                    )),
               if (kDebugMode) ...[
                 const Divider(height: 24),
                 const Text('Test via network (e.g. local ESC/POS listener)',
@@ -90,12 +92,14 @@ class ThermalPrinterService {
   /// space padding render correctly everywhere.
   static Future<List<int>> _buildReceiptBytes(Invoice invoice) async {
     final dateFmt = await BackendServices.settings.getDateFormat();
-    final settings = await PDFService.fetchPdfSettings(datePattern: dateFmt.key);
+    final settings =
+        await PDFService.fetchPdfSettings(datePattern: dateFmt.key);
     final previousBalanceDue = settings.showPreviousBalance
-        ? await BackendServices.invoices.getPreviousBalanceDueForInvoice(invoice)
+        ? await BackendServices.invoices
+            .getPreviousBalanceDueForInvoice(invoice)
         : 0.0;
     final effectivePreviousBalance =
-    settings.showPreviousBalance ? previousBalanceDue : 0.0;
+        settings.showPreviousBalance ? previousBalanceDue : 0.0;
 
     final is58 = settings.pageSize == PageSize.thermal58;
 
@@ -103,27 +107,42 @@ class ThermalPrinterService {
     // physically clips the last column(s) on full-width lines. Adjustable
     // per-install via SettingKey.thermalWidthMargin since printer models vary
     // (e.g. WOOSIM WSP-R241 needed 1).
-    final marginStr = await BackendServices.settings.getSetting(SettingKey.thermalWidthMargin);
+    final marginStr = await BackendServices.settings
+        .getSetting(SettingKey.thermalWidthMargin);
     final margin = int.tryParse(marginStr ?? '') ?? 1;
-    final itemLayout =
-        await BackendServices.settings.getSetting(SettingKey.thermalItemLayout) ?? 'table';
-    if(kDebugMode) print(margin);
+    final itemLayout = await BackendServices.settings
+            .getSetting(SettingKey.thermalItemLayout) ??
+        'table';
+    if (kDebugMode) print(margin);
     final width = (is58 ? 32 : 48) - margin;
-    if(kDebugMode)  print(width);
+    if (kDebugMode) print(width);
     final profile = await CapabilityProfile.load();
-    final generator = Generator(is58 ? PaperSize.mm58 : PaperSize.mm80, profile,spaceBetweenRows: 1);
+    final generator = Generator(is58 ? PaperSize.mm58 : PaperSize.mm80, profile,
+        spaceBetweenRows: 1);
     final currency = invoice.currencySymbol;
     final company = settings.company;
 
     final showItemTax = invoice.taxMode == TaxMode.perItem;
     List<int> bytes = [];
 
-    void line(String text, {PosAlign align = PosAlign.left, bool bold = false,bool isHead = false})
-    {
-      if(isHead) {
-        bytes += generator.text(text, styles: PosStyles(align: align, bold: bold,height: PosTextSize.size2,width: PosTextSize.size1,));
+    void line(String text,
+        {PosAlign align = PosAlign.left,
+        bool bold = false,
+        bool isHead = false}) {
+      if (isHead) {
+        bytes += generator.text(text,
+            styles: PosStyles(
+              align: align,
+              bold: bold,
+              height: PosTextSize.size2,
+              width: PosTextSize.size1,
+            ));
       } else {
-        bytes += generator.text(text, styles: PosStyles(align: align, bold: bold,));
+        bytes += generator.text(text,
+            styles: PosStyles(
+              align: align,
+              bold: bold,
+            ));
       }
     }
 
@@ -151,7 +170,9 @@ class ThermalPrinterService {
     }
     */
 
-    void hr() {bytes+=generator.hr();}
+    void hr() {
+      bytes += generator.hr();
+    }
 
     //void hr2() => line('-' * width);
 
@@ -168,7 +189,7 @@ class ThermalPrinterService {
 
     // ── Business header ──
     if ((company?.name ?? '').isNotEmpty) {
-      line(company!.name, align: PosAlign.center, bold: true,isHead: true);
+      line(company!.name, align: PosAlign.center, bold: true, isHead: true);
     }
     if ((company?.address ?? '').isNotEmpty) {
       line(company!.address, align: PosAlign.center);
@@ -218,8 +239,9 @@ class ThermalPrinterService {
     // 58mm (31 chars) while leaving extra room for the name on 80mm.
     const slW = 2, qtyW = 4, rateW = 6, gstW = 4, totalW = 7;
     final gaps = showItemTax ? 5 : 4;
-    final nameW = (width - slW - qtyW - rateW - (showItemTax ? gstW : 0) - totalW - gaps)
-        .clamp(1, 999);
+    final nameW =
+        (width - slW - qtyW - rateW - (showItemTax ? gstW : 0) - totalW - gaps)
+            .clamp(1, 999);
     final useTable = itemLayout != 'detailed';
 
     String singleLineRow(String sl, String name, String qty, String rate,
@@ -273,11 +295,14 @@ class ThermalPrinterService {
 
     // ── Totals ──
     if (invoice.totalDiscount > 0) {
-      twoCol('Subtotal:', '$currency ${invoice.grossSubtotal.toStringAsFixed(2)}');
-      twoCol('Discount:', '-$currency ${invoice.totalDiscount.toStringAsFixed(2)}');
+      twoCol(
+          'Subtotal:', '$currency ${invoice.grossSubtotal.toStringAsFixed(2)}');
+      twoCol('Discount:',
+          '-$currency ${invoice.totalDiscount.toStringAsFixed(2)}');
     }
     if (invoice.taxMode != TaxMode.none) {
-      twoCol(invoiceTaxLabel(invoice), '$currency ${invoice.tax.toStringAsFixed(2)}');
+      twoCol(invoiceTaxLabel(invoice),
+          '$currency ${invoice.tax.toStringAsFixed(2)}');
     }
     for (final c in invoice.additionalCosts) {
       twoCol(c.label.isEmpty ? 'Extra Cost' : c.label,
@@ -298,7 +323,8 @@ class ThermalPrinterService {
           company!.country.toLowerCase() == 'india';
       hr();
       line('=== TAX SUMMARY ===', align: PosAlign.center, bold: true);
-      twoCol('Taxable Amt:', '$currency ${invoice.subtotal.toStringAsFixed(2)}');
+      twoCol(
+          'Taxable Amt:', '$currency ${invoice.subtotal.toStringAsFixed(2)}');
       if (isIndia && invoice.isInterState) {
         twoCol('IGST:', '$currency ${invoice.tax.toStringAsFixed(2)}');
       } else if (isIndia) {
@@ -314,7 +340,8 @@ class ThermalPrinterService {
       if (invoice.outstandingBalance <= 0) {
         twoCol('PAID IN FULL', '', bold: true);
       } else {
-        twoCol('Balance Due', '$currency ${invoice.outstandingBalance.toStringAsFixed(2)}',
+        twoCol('Balance Due',
+            '$currency ${invoice.outstandingBalance.toStringAsFixed(2)}',
             bold: true);
       }
     }
@@ -432,9 +459,9 @@ class _NetworkPrintRowState extends State<_NetworkPrintRow> {
         IconButton(
           icon: _sending
               ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2))
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.send),
           onPressed: _sending ? null : _send,
         ),

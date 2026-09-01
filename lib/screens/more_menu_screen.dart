@@ -39,6 +39,12 @@ class MoreMenuScreen extends ConsumerWidget {
             _tile(context, 4, Icons.point_of_sale_outlined, l10n.navReceipts),
             _tile(context, 8, Icons.receipt_long_outlined, 'Expenses'),
             _tile(context, 9, Icons.shopping_cart_outlined, 'Purchase Orders'),
+            _tile(context, 11, Icons.inventory_outlined, 'Purchase Bills'),
+            _tile(context, 13, Icons.note_alt_outlined, 'Credit Notes'),
+            _tile(context, 14, Icons.note_add_outlined, 'Debit Notes'),
+            _tile(context, 15, Icons.local_shipping_outlined,
+                'Delivery Challans'),
+            _tile(context, 16, Icons.request_page_outlined, 'Proforma'),
           ]),
           const SizedBox(height: 16),
           _section(context, l10n.moreSectionAnalytics, [
@@ -49,6 +55,8 @@ class MoreMenuScreen extends ConsumerWidget {
           _section(context, l10n.moreSectionPreferences, [
             _tile(context, 10, Icons.settings_outlined, l10n.navSettings,
                 showDot: hasUpdate),
+            _tile(context, 17, Icons.notifications_active_outlined,
+                'Payment Reminders'),
           ]),
           const SizedBox(height: 16),
           _logoutTile(context),

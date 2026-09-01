@@ -4,9 +4,11 @@ import 'package:apexbooks/repositories/invoice_repository.dart';
 
 class SqliteInvoiceRepository implements InvoiceRepository {
   @override
-  Future<void> insertInvoice(Invoice invoice) => InvoiceService.insertInvoice(invoice);
+  Future<void> insertInvoice(Invoice invoice) =>
+      InvoiceService.insertInvoice(invoice);
   @override
-  Future<void> updateInvoice(Invoice invoice) => InvoiceService.updateInvoice(invoice);
+  Future<void> updateInvoice(Invoice invoice) =>
+      InvoiceService.updateInvoice(invoice);
   @override
   Future<double> getPreviousBalanceDueForInvoice(Invoice invoice) =>
       InvoiceService.getPreviousBalanceDueForInvoice(invoice);
@@ -24,7 +26,8 @@ class SqliteInvoiceRepository implements InvoiceRepository {
         currentInvoiceId: currentInvoiceId,
       );
   @override
-  Future<Invoice?> getInvoiceById(String id) => InvoiceService.getInvoiceById(id);
+  Future<Invoice?> getInvoiceById(String id) =>
+      InvoiceService.getInvoiceById(id);
   @override
   Future<List<Invoice>> getAllInvoices() => InvoiceService.getAllInvoices();
   @override
@@ -77,43 +80,56 @@ class SqliteInvoiceRepository implements InvoiceRepository {
         customerId: customerId,
       );
   @override
-  Future<int> getInvoiceCount({String searchQuery = '', String? filterType, String? customerId}) =>
+  Future<int> getInvoiceCount(
+          {String searchQuery = '', String? filterType, String? customerId}) =>
       InvoiceService.getInvoiceCount(
-          searchQuery: searchQuery, filterType: filterType, customerId: customerId);
+          searchQuery: searchQuery,
+          filterType: filterType,
+          customerId: customerId);
   @override
-  Future<void> softDeleteInvoice(String id) => InvoiceService.softDeleteInvoice(id);
+  Future<void> softDeleteInvoice(String id) =>
+      InvoiceService.softDeleteInvoice(id);
   @override
   Future<void> restoreInvoice(String id) => InvoiceService.restoreInvoice(id);
   @override
-  Future<void> permanentDeleteInvoice(String id) => InvoiceService.permanentDeleteInvoice(id);
+  Future<void> permanentDeleteInvoice(String id) =>
+      InvoiceService.permanentDeleteInvoice(id);
   @override
-  Future<List<Invoice>> getDeletedInvoices() => InvoiceService.getDeletedInvoices();
+  Future<List<Invoice>> getDeletedInvoices() =>
+      InvoiceService.getDeletedInvoices();
   @override
   Future<void> deleteInvoice(String id) => InvoiceService.deleteInvoice(id);
   @override
   Future<int> getTotalInvoiceCountIncludingTrashed() =>
       InvoiceService.getTotalInvoiceCountIncludingTrashed();
   @override
-  Future<({int count, double revenue, double outstanding})> getDashboardFinancials() =>
-      InvoiceService.getDashboardFinancials();
+  Future<({int count, double revenue, double outstanding})>
+      getDashboardFinancials() => InvoiceService.getDashboardFinancials();
   @override
-  Future<List<Invoice>> getRecentInvoices({int limit = 5}) => InvoiceService.getRecentInvoices(limit: limit);
+  Future<List<Invoice>> getRecentInvoices({int limit = 5}) =>
+      InvoiceService.getRecentInvoices(limit: limit);
   @override
-  Future<List<Invoice>> getDueSoonInvoices() => InvoiceService.getDueSoonInvoices();
+  Future<List<Invoice>> getDueSoonInvoices() =>
+      InvoiceService.getDueSoonInvoices();
   @override
-  Future<List<Invoice>> getOverdueInvoices({int limit = 10}) => InvoiceService.getOverdueInvoices(limit: limit);
+  Future<List<Invoice>> getOverdueInvoices({int limit = 10}) =>
+      InvoiceService.getOverdueInvoices(limit: limit);
   @override
   Future<List<Invoice>> getOpenInvoicesForCustomer(String customerId) =>
       InvoiceService.getOpenInvoicesForCustomer(customerId);
   @override
-  Future<List<({String id, String name})>> getCustomersWithInvoices({String? filterType}) =>
+  Future<List<({String id, String name})>> getCustomersWithInvoices(
+          {String? filterType}) =>
       InvoiceService.getCustomersWithInvoices(filterType: filterType);
   @override
-  Future<List<Map<String, dynamic>>> getMonthlyRevenue() => InvoiceService.getMonthlyRevenue();
+  Future<List<Map<String, dynamic>>> getMonthlyRevenue() =>
+      InvoiceService.getMonthlyRevenue();
   @override
-  Future<List<Map<String, dynamic>>> getTopCustomers() => InvoiceService.getTopCustomers();
+  Future<List<Map<String, dynamic>>> getTopCustomers() =>
+      InvoiceService.getTopCustomers();
   @override
-  Future<List<Map<String, dynamic>>> getTopProducts() => InvoiceService.getTopProducts();
+  Future<List<Map<String, dynamic>>> getTopProducts() =>
+      InvoiceService.getTopProducts();
 
   @override
   Future<String> generateNextId() {

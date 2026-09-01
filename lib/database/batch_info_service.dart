@@ -13,7 +13,8 @@ class BatchInfoService {
   static Future<void> updateBatchInfo(BatchInfo batch) async {
     final db = await dbHelper.database;
     final updateMap = batch.toMap()..remove('id');
-    await db.update('batch_info', updateMap, where: 'id = ?', whereArgs: [batch.id]);
+    await db.update('batch_info', updateMap,
+        where: 'id = ?', whereArgs: [batch.id]);
   }
 
   static Future<BatchInfo?> getBatchInfoById(String id) async {
@@ -36,11 +37,13 @@ class BatchInfoService {
 
   static Future<List<BatchInfo>> getAllBatches() async {
     final db = await dbHelper.database;
-    final maps = await db.query('batch_info', orderBy: 'product_id, batch_number');
+    final maps =
+        await db.query('batch_info', orderBy: 'product_id, batch_number');
     return maps.map((m) => BatchInfo.fromMap(m)).toList();
   }
 
-  static Future<List<BatchInfo>> getExpiringBatches({int withinDays = 30}) async {
+  static Future<List<BatchInfo>> getExpiringBatches(
+      {int withinDays = 30}) async {
     final db = await dbHelper.database;
     final now = DateTime.now();
     final futureDate = now.add(Duration(days: withinDays));
@@ -81,7 +84,8 @@ class BatchInfoService {
 
   static Future<String> generateNextId() async {
     final db = await dbHelper.database;
-    final result = await db.rawQuery("SELECT MAX(CAST(REPLACE(id, 'batch-', '') AS INTEGER)) FROM batch_info WHERE id LIKE 'batch-%'");
+    final result = await db.rawQuery(
+        "SELECT MAX(CAST(REPLACE(id, 'batch-', '') AS INTEGER)) FROM batch_info WHERE id LIKE 'batch-%'");
     final maxId = Sqflite.firstIntValue(result) ?? 0;
     return 'batch-${maxId + 1}';
   }

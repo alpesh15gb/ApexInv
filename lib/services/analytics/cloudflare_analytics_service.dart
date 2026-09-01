@@ -10,22 +10,23 @@ class CloudflareAnalyticsService {
   static Future<void> sendHeartbeat() async {
     try {
       final installationId =
-      await BackendServices.installation.getOrCreateInstallationId();
+          await BackendServices.installation.getOrCreateInstallationId();
 
       await http
           .post(
-        Uri.parse(_heartbeatUrl),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: jsonEncode({
-          "installationId": installationId,
-          "platform": Platform.operatingSystem,
-          "appVersion": AppConfig.version,
-        }),
-      ).timeout(const Duration(seconds: 5));
+            Uri.parse(_heartbeatUrl),
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: jsonEncode({
+              "installationId": installationId,
+              "platform": Platform.operatingSystem,
+              "appVersion": AppConfig.version,
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
     } catch (e) {
-      if(kDebugMode) {
+      if (kDebugMode) {
         debugPrint("Analytics heartbeat failed: $e");
       }
     }

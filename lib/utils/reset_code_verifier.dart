@@ -13,8 +13,38 @@ class ResetCodeVerifier {
 
   /// Ed25519 public key bytes. Safe to ship - cannot sign, only verify.
   static const List<int> _publicKeyBytes = [
-    32, 32, 192, 59, 67, 127, 76, 119, 253, 86, 122, 201, 212, 124, 139, 248,
-    245, 252, 254, 202, 107, 96, 145, 66, 60, 35, 245, 73, 2, 24, 122, 160,
+    32,
+    32,
+    192,
+    59,
+    67,
+    127,
+    76,
+    119,
+    253,
+    86,
+    122,
+    201,
+    212,
+    124,
+    139,
+    248,
+    245,
+    252,
+    254,
+    202,
+    107,
+    96,
+    145,
+    66,
+    60,
+    35,
+    245,
+    73,
+    2,
+    24,
+    122,
+    160,
   ];
 
   /// Days since Unix epoch, computed from UTC. Must match the signer
@@ -39,7 +69,8 @@ class ResetCodeVerifier {
     }
 
     final algorithm = Ed25519();
-    final publicKey = SimplePublicKey(_publicKeyBytes, type: KeyPairType.ed25519);
+    final publicKey =
+        SimplePublicKey(_publicKeyBytes, type: KeyPairType.ed25519);
     final today = utcDayBucket();
 
     for (final offset in [0, -1, -2]) {

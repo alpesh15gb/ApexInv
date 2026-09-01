@@ -13,12 +13,14 @@ class PaymentTermService {
   static Future<void> updatePaymentTerm(PaymentTerm term) async {
     final db = await dbHelper.database;
     final updateMap = term.toMap()..remove('id');
-    await db.update('payment_terms', updateMap, where: 'id = ?', whereArgs: [term.id]);
+    await db.update('payment_terms', updateMap,
+        where: 'id = ?', whereArgs: [term.id]);
   }
 
   static Future<PaymentTerm?> getPaymentTermById(String id) async {
     final db = await dbHelper.database;
-    final maps = await db.query('payment_terms', where: 'id = ?', whereArgs: [id]);
+    final maps =
+        await db.query('payment_terms', where: 'id = ?', whereArgs: [id]);
     if (maps.isNotEmpty) return PaymentTerm.fromMap(maps.first);
     return null;
   }
@@ -37,7 +39,8 @@ class PaymentTermService {
   static Future<void> insertDefaultTerms() async {
     final db = await dbHelper.database;
     final defaults = [
-      PaymentTerm(id: 'term-0', name: 'Due on Receipt', days: 0, isDefault: true),
+      PaymentTerm(
+          id: 'term-0', name: 'Due on Receipt', days: 0, isDefault: true),
       PaymentTerm(id: 'term-15', name: 'Net 15', days: 15),
       PaymentTerm(id: 'term-30', name: 'Net 30', days: 30),
       PaymentTerm(id: 'term-45', name: 'Net 45', days: 45),

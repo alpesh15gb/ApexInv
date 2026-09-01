@@ -12,30 +12,30 @@ import 'package:apexbooks/repositories/sqlite/sqlite_settings_repository.dart';
 
 final sqliteRepositoryOverrides = <Override>[
   customerRepositoryProvider.overrideWith(
-        (ref) => SqliteCustomerRepository(),
+    (ref) => SqliteCustomerRepository(),
   ),
   invoiceRepositoryProvider.overrideWith(
-        (ref) => SqliteInvoiceRepository(),
+    (ref) => SqliteInvoiceRepository(),
   ),
   productRepositoryProvider.overrideWith(
-        (ref) => SqliteProductRepository(),
+    (ref) => SqliteProductRepository(),
   ),
   paymentRepositoryProvider.overrideWith(
-        (ref) => SqlitePaymentRepository(),
+    (ref) => SqlitePaymentRepository(),
   ),
   companyInfoRepositoryProvider.overrideWith(
-        (ref) => SqliteCompanyInfoRepository(),
+    (ref) => SqliteCompanyInfoRepository(),
   ),
   settingsRepositoryProvider.overrideWith(
-        (ref) => SqliteSettingsRepository(),
+    (ref) => SqliteSettingsRepository(),
   ),
   reportRepositoryProvider.overrideWith(
-        (ref) => SqliteReportRepository(),
+    (ref) => SqliteReportRepository(),
   ),
   invoiceItemRepositoryProvider.overrideWith(
-        (ref) => SqliteInvoiceItemRepository(),
+    (ref) => SqliteInvoiceItemRepository(),
   ),
   authRepositoryProvider.overrideWith(
-        (ref) => SqliteAuthRepository(),
+    (ref) => SqliteAuthRepository(),
   ),
 ];

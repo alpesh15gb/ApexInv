@@ -2,7 +2,6 @@ import 'package:apexbooks/database/user_service.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/repositories/auth_repository.dart';
 
-
 class SqliteAuthRepository implements AuthRepository {
   @override
   Future<bool> deleteUserSafely(String userId) {
@@ -58,5 +57,4 @@ class SqliteAuthRepository implements AuthRepository {
   Future<void> logoutAndSessionReset() {
     return UserService.logoutAndSessionReset();
   }
-
 }

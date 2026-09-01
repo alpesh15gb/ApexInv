@@ -11,6 +11,8 @@ class SqlitePaymentRepository implements PaymentRepository {
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? chequeNumber,
+    DateTime? chequeDate,
   }) =>
       PaymentService.addPayment(
         invoice: invoice,
@@ -18,6 +20,8 @@ class SqlitePaymentRepository implements PaymentRepository {
         datePaid: datePaid,
         paymentMethod: paymentMethod,
         notes: notes,
+        chequeNumber: chequeNumber,
+        chequeDate: chequeDate,
       );
   @override
   Future<int> addPaymentBatch({
@@ -55,9 +59,11 @@ class SqlitePaymentRepository implements PaymentRepository {
   Future<Map<String, double>> getTotalPaidBatch(List<String> invoiceIds) =>
       PaymentService.getTotalPaidBatch(invoiceIds);
   @override
-  Future<void> deletePayment(String paymentId) => PaymentService.deletePayment(paymentId);
+  Future<void> deletePayment(String paymentId) =>
+      PaymentService.deletePayment(paymentId);
   @override
-  Future<List<InvoicePayment>> getAllPaymentsBetween(DateTime from, DateTime to) =>
+  Future<List<InvoicePayment>> getAllPaymentsBetween(
+          DateTime from, DateTime to) =>
       PaymentService.getAllPaymentsBetween(from, to);
   @override
   Future<double> getTaxPaidBetween(DateTime from, DateTime to) =>

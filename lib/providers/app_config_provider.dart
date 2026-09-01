@@ -18,6 +18,7 @@ class AppEditionConfig {
   final String thankYouNote;
   final bool enableUpdateCheck;
   final bool isCloud;
+
   /// Optional edition-specific extra tab in Settings (e.g. cloud's Team
   /// Management). Set via provider override in that edition's main.dart —
   /// keeps edition-only screens out of this shared package.
@@ -43,16 +44,16 @@ class AppEditionConfig {
   });
 }
 
-final appEditionConfigProvider = Provider<AppEditionConfig>((ref) => const AppEditionConfig(
-      name: AppConfig.name,
-      version: AppConfig.version,
-      developer: AppConfig.developer,
-      supportEmail: AppConfig.supportEmail,
-      website: AppConfig.website,
-      license: AppConfig.license,
-      description: AppConfig.description,
-      additionalNote: DefaultValues.additionalNote,
-      thankYouNote: DefaultValues.thankYouNote,
-      enableUpdateCheck: UpdateConfig.enableUpdateCheck,
-      isCloud: AppConfig.kIsCloud
-    ));
+final appEditionConfigProvider = Provider<AppEditionConfig>((ref) =>
+    const AppEditionConfig(
+        name: AppConfig.name,
+        version: AppConfig.version,
+        developer: AppConfig.developer,
+        supportEmail: AppConfig.supportEmail,
+        website: AppConfig.website,
+        license: AppConfig.license,
+        description: AppConfig.description,
+        additionalNote: DefaultValues.additionalNote,
+        thankYouNote: DefaultValues.thankYouNote,
+        enableUpdateCheck: UpdateConfig.enableUpdateCheck,
+        isCloud: AppConfig.kIsCloud));

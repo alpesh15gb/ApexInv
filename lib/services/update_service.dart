@@ -25,7 +25,8 @@ class UpdateInfo {
   static List<int> _parse(String version) {
     final clean = version.replaceAll(RegExp(r'[^0-9.]'), '');
     final parts = clean.split('.');
-    return List.generate(3, (i) => i < parts.length ? (int.tryParse(parts[i]) ?? 0) : 0);
+    return List.generate(
+        3, (i) => i < parts.length ? (int.tryParse(parts[i]) ?? 0) : 0);
   }
 }
 
@@ -39,15 +40,18 @@ class UpdateService {
   static Future<UpdateInfo?> checkForUpdate({bool force = false}) async {
     try {
       if (!force) {
-        final lastCheck = await BackendServices.settings.getSetting(SettingKey.lastUpdateCheck);
+        final lastCheck = await BackendServices.settings
+            .getSetting(SettingKey.lastUpdateCheck);
         if (lastCheck != null) {
           final last = DateTime.tryParse(lastCheck);
           final withinWindow = last != null &&
               DateTime.now().difference(last).inHours < _checkIntervalHours;
           if (withinWindow) {
-            final cached = await BackendServices.settings.getSetting(SettingKey.lastKnownLatestVersion);
+            final cached = await BackendServices.settings
+                .getSetting(SettingKey.lastKnownLatestVersion);
             if (cached != null && cached.isNotEmpty) {
-              return UpdateInfo(latestVersion: cached, currentVersion: AppConfig.version);
+              return UpdateInfo(
+                  latestVersion: cached, currentVersion: AppConfig.version);
             }
           }
         }
@@ -65,11 +69,12 @@ class UpdateService {
         await BackendServices.settings.setSetting(
             SettingKey.lastUpdateCheck, DateTime.now().toIso8601String());
         if (latestTag.isNotEmpty) {
-          await BackendServices.settings.setSetting(
-              SettingKey.lastKnownLatestVersion, latestTag);
+          await BackendServices.settings
+              .setSetting(SettingKey.lastKnownLatestVersion, latestTag);
         }
 
-        return UpdateInfo(latestVersion: latestTag, currentVersion: AppConfig.version);
+        return UpdateInfo(
+            latestVersion: latestTag, currentVersion: AppConfig.version);
       }
     } catch (_) {
       // Never crash the app over an update check
@@ -80,12 +85,14 @@ class UpdateService {
   /// Returns true if the update dialog should be shown for [info].
   static Future<bool> shouldNotify(UpdateInfo info) async {
     if (!info.hasUpdate) return false;
-    final last = await BackendServices.settings.getSetting(SettingKey.lastNotifiedVersion);
+    final last = await BackendServices.settings
+        .getSetting(SettingKey.lastNotifiedVersion);
     return last != info.latestVersion;
   }
 
   /// Call when the user dismisses the dialog so it won't show again for this version.
   static Future<void> markNotified(String version) async {
-    await BackendServices.settings.setSetting(SettingKey.lastNotifiedVersion, version);
+    await BackendServices.settings
+        .setSetting(SettingKey.lastNotifiedVersion, version);
   }
 }

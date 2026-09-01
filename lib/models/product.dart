@@ -67,7 +67,8 @@ class Product {
       hsncode: map['product_hsn_code'] ?? '',
       tax_rate: map['product_tax_rate'] ?? 0,
       type: map['product_type'] as String? ?? 'product',
-      defaultDiscount: (map['product_default_discount'] as num?)?.toDouble() ?? 0.0,
+      defaultDiscount:
+          (map['product_default_discount'] as num?)?.toDouble() ?? 0.0,
       purchasePrice: (map['product_purchase_price'] as num?)?.toDouble() ?? 0.0,
       aliasName: map['product_alias_name'] as String?,
       unit: map['product_unit'] as String? ?? '',

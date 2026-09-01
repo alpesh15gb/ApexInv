@@ -51,7 +51,8 @@ class UserService {
 
   static Future<User?> getUserById(String id) async {
     final db = await dbHelper.database;
-    final result = await db.query('users', where: 'id = ?', whereArgs: [id], limit: 1);
+    final result =
+        await db.query('users', where: 'id = ?', whereArgs: [id], limit: 1);
     if (result.isNotEmpty) return User.fromMap(result.first);
     return null;
   }

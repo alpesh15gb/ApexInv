@@ -10,7 +10,8 @@ class PurchaseOrderScreen extends ConsumerStatefulWidget {
   const PurchaseOrderScreen({super.key});
 
   @override
-  ConsumerState<PurchaseOrderScreen> createState() => _PurchaseOrderScreenState();
+  ConsumerState<PurchaseOrderScreen> createState() =>
+      _PurchaseOrderScreenState();
 }
 
 class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
@@ -34,7 +35,8 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
       pageSize: _pageSize,
       status: _filterStatus,
     );
-    final count = await PurchaseOrderService.getPurchaseOrderCount(status: _filterStatus);
+    final count =
+        await PurchaseOrderService.getPurchaseOrderCount(status: _filterStatus);
     if (mounted) {
       setState(() {
         _orders = orders;
@@ -85,13 +87,17 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.shopping_cart_outlined, size: 64, color: colorScheme.outlineVariant),
+                            Icon(Icons.shopping_cart_outlined,
+                                size: 64, color: colorScheme.outlineVariant),
                             const SizedBox(height: 16),
                             Text(
                               'No purchase orders found',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
                             ),
                             const SizedBox(height: 8),
                             FilledButton.tonal(
@@ -173,22 +179,29 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                           children: [
                             Text(
                               'PO #${order.orderNumber ?? order.id}',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               order.vendorName,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
                             ),
                           ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: statusColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -199,7 +212,8 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                             Icon(statusIcon, size: 14, color: statusColor),
                             const SizedBox(width: 4),
                             Text(
-                              order.status[0].toUpperCase() + order.status.substring(1),
+                              order.status[0].toUpperCase() +
+                                  order.status.substring(1),
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -215,16 +229,19 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                   if (isWide)
                     Row(
                       children: [
-                        _buildInfoChip(Icons.calendar_today, DateFormat('dd MMM yyyy').format(order.date)),
+                        _buildInfoChip(Icons.calendar_today,
+                            DateFormat('dd MMM yyyy').format(order.date)),
                         const SizedBox(width: 12),
-                        _buildInfoChip(Icons.inventory_2, '${order.items.length} items'),
+                        _buildInfoChip(
+                            Icons.inventory_2, '${order.items.length} items'),
                         const Spacer(),
                         Text(
                           currencyFormat.format(order.totalAmount),
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.primary,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.primary,
+                                  ),
                         ),
                       ],
                     )
@@ -236,17 +253,20 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                           spacing: 12,
                           runSpacing: 4,
                           children: [
-                            _buildInfoChip(Icons.calendar_today, DateFormat('dd MMM yyyy').format(order.date)),
-                            _buildInfoChip(Icons.inventory_2, '${order.items.length} items'),
+                            _buildInfoChip(Icons.calendar_today,
+                                DateFormat('dd MMM yyyy').format(order.date)),
+                            _buildInfoChip(Icons.inventory_2,
+                                '${order.items.length} items'),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Text(
                           currencyFormat.format(order.totalAmount),
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.primary,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.primary,
+                                  ),
                         ),
                       ],
                     ),
@@ -254,11 +274,13 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.warning_amber, size: 14, color: Colors.orange),
+                        Icon(Icons.warning_amber,
+                            size: 14, color: Colors.orange),
                         const SizedBox(width: 4),
                         Text(
                           'Outstanding: ${currencyFormat.format(order.outstandingBalance)}',
-                          style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.orange.shade800),
                         ),
                       ],
                     ),
@@ -276,7 +298,8 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        Icon(icon,
+            size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
         const SizedBox(width: 4),
         Text(text, style: Theme.of(context).textTheme.bodySmall),
       ],
@@ -288,8 +311,10 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
   }
 
   Future<void> _showOrderDialog({PurchaseOrder? existingOrder}) async {
-    final vendorController = TextEditingController(text: existingOrder?.vendorName ?? '');
-    final notesController = TextEditingController(text: existingOrder?.notes ?? '');
+    final vendorController =
+        TextEditingController(text: existingOrder?.vendorName ?? '');
+    final notesController =
+        TextEditingController(text: existingOrder?.notes ?? '');
     DateTime orderDate = existingOrder?.date ?? DateTime.now();
     DateTime? expectedDate = existingOrder?.expectedDate;
     String status = existingOrder?.status ?? 'draft';
@@ -305,7 +330,9 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(existingOrder == null ? 'Create Purchase Order' : 'Edit Purchase Order'),
+          title: Text(existingOrder == null
+              ? 'Create Purchase Order'
+              : 'Edit Purchase Order'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -330,7 +357,8 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now().add(const Duration(days: 365)),
                     );
-                    if (picked != null) setDialogState(() => orderDate = picked);
+                    if (picked != null)
+                      setDialogState(() => orderDate = picked);
                   },
                 ),
                 ListTile(
@@ -343,11 +371,13 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
-                      initialDate: expectedDate ?? DateTime.now().add(const Duration(days: 7)),
+                      initialDate: expectedDate ??
+                          DateTime.now().add(const Duration(days: 7)),
                       firstDate: DateTime.now(),
                       lastDate: DateTime.now().add(const Duration(days: 365)),
                     );
-                    if (picked != null) setDialogState(() => expectedDate = picked);
+                    if (picked != null)
+                      setDialogState(() => expectedDate = picked);
                   },
                 ),
                 if (existingOrder != null) ...[
@@ -357,11 +387,15 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                     decoration: const InputDecoration(labelText: 'Status'),
                     items: const [
                       DropdownMenuItem(value: 'draft', child: Text('Draft')),
-                      DropdownMenuItem(value: 'confirmed', child: Text('Confirmed')),
-                      DropdownMenuItem(value: 'received', child: Text('Received')),
-                      DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
+                      DropdownMenuItem(
+                          value: 'confirmed', child: Text('Confirmed')),
+                      DropdownMenuItem(
+                          value: 'received', child: Text('Received')),
+                      DropdownMenuItem(
+                          value: 'cancelled', child: Text('Cancelled')),
                     ],
-                    onChanged: (v) => setDialogState(() => status = v ?? 'draft'),
+                    onChanged: (v) =>
+                        setDialogState(() => status = v ?? 'draft'),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -402,7 +436,8 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                       dense: true,
                       contentPadding: EdgeInsets.zero,
                       title: Text(item.productName),
-                      subtitle: Text('${item.quantity} × ₹${item.pricePerUnit.toStringAsFixed(2)}'),
+                      subtitle: Text(
+                          '${item.quantity} × ₹${item.pricePerUnit.toStringAsFixed(2)}'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -412,7 +447,8 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.close, size: 18),
-                            onPressed: () => setDialogState(() => items.removeAt(i)),
+                            onPressed: () =>
+                                setDialogState(() => items.removeAt(i)),
                           ),
                         ],
                       ),
@@ -444,9 +480,12 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
     );
 
     if (result == true) {
-      final totalAmount = items.fold(0.0, (sum, item) => sum + item.totalAmount);
-      final id = existingOrder?.id ?? await PurchaseOrderService.generateNextId();
-      final orderNumber = existingOrder?.orderNumber ?? await PurchaseOrderService.generateNextOrderNumber();
+      final totalAmount =
+          items.fold(0.0, (sum, item) => sum + item.totalAmount);
+      final id =
+          existingOrder?.id ?? await PurchaseOrderService.generateNextId();
+      final orderNumber = existingOrder?.orderNumber ??
+          await PurchaseOrderService.generateNextOrderNumber();
 
       final order = PurchaseOrder(
         id: id,
@@ -485,10 +524,12 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
             children: [
               DropdownButtonFormField<Product>(
                 decoration: const InputDecoration(labelText: 'Product *'),
-                items: products.map((p) => DropdownMenuItem(
-                  value: p,
-                  child: Text(p.name, overflow: TextOverflow.ellipsis),
-                )).toList(),
+                items: products
+                    .map((p) => DropdownMenuItem(
+                          value: p,
+                          child: Text(p.name, overflow: TextOverflow.ellipsis),
+                        ))
+                    .toList(),
                 onChanged: (p) {
                   selectedProduct = p;
                   if (p != null) {
@@ -531,14 +572,16 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
               }
               final qty = double.tryParse(qtyController.text) ?? 1;
               final price = double.tryParse(priceController.text) ?? 0;
-              Navigator.pop(context, PurchaseOrderItem(
-                id: 'poi-${DateTime.now().millisecondsSinceEpoch}',
-                productId: selectedProduct!.id,
-                productName: selectedProduct!.name,
-                quantity: qty,
-                pricePerUnit: price,
-                taxRate: selectedProduct!.tax_rate.toDouble(),
-              ));
+              Navigator.pop(
+                  context,
+                  PurchaseOrderItem(
+                    id: 'poi-${DateTime.now().millisecondsSinceEpoch}',
+                    productId: selectedProduct!.id,
+                    productName: selectedProduct!.name,
+                    quantity: qty,
+                    pricePerUnit: price,
+                    taxRate: selectedProduct!.tax_rate.toDouble(),
+                  ));
             },
             child: const Text('Add'),
           ),
@@ -562,24 +605,28 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
               Text('Vendor: ${order.vendorName}'),
               Text('Date: ${DateFormat('dd MMM yyyy').format(order.date)}'),
               if (order.expectedDate != null)
-                Text('Expected: ${DateFormat('dd MMM yyyy').format(order.expectedDate!)}'),
+                Text(
+                    'Expected: ${DateFormat('dd MMM yyyy').format(order.expectedDate!)}'),
               Text('Status: ${order.status}'),
               const Divider(),
               ...order.items.map((item) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(child: Text('${item.productName} (${item.quantity})')),
-                    Text(currencyFormat.format(item.totalAmount)),
-                  ],
-                ),
-              )),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                            child:
+                                Text('${item.productName} (${item.quantity})')),
+                        Text(currencyFormat.format(item.totalAmount)),
+                      ],
+                    ),
+                  )),
               const Divider(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Total:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Total:',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                   Text(currencyFormat.format(order.totalAmount),
                       style: const TextStyle(fontWeight: FontWeight.bold)),
                 ],
@@ -595,10 +642,12 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Outstanding:', style: TextStyle(color: Colors.orange)),
+                    const Text('Outstanding:',
+                        style: TextStyle(color: Colors.orange)),
                     Text(
                       currencyFormat.format(order.outstandingBalance),
-                      style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          color: Colors.orange, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -625,10 +674,12 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
               onPressed: () async {
                 // Mark as received and update stock
                 for (final item in order.items) {
-                  final product = await ProductService.getProductById(item.productId);
+                  final product =
+                      await ProductService.getProductById(item.productId);
                   if (product != null && !product.unlimitedStock) {
                     final newStock = product.stock + item.quantity.toInt();
-                    await ProductService.updateProductStock(product.id, newStock);
+                    await ProductService.updateProductStock(
+                        product.id, newStock);
                   }
                 }
                 await PurchaseOrderService.updateStatus(order.id, 'received');

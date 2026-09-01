@@ -18,7 +18,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 45;
+  final dbVersion = 46;
 
   /// Emits when the sync engine finishes applying pulled remote rows, so the
   /// UI layer can refresh its lists. Write-side signaling needs no stream:
@@ -89,7 +89,9 @@ class DatabaseHelper {
         alias_name TEXT,
         unit TEXT DEFAULT '',
         unlimited_stock INTEGER DEFAULT 0,
-        price_includes_tax INTEGER DEFAULT 0
+        price_includes_tax INTEGER DEFAULT 0,
+        reorder_level REAL DEFAULT 0,
+        barcode TEXT DEFAULT ''
       )
     ''');
 
@@ -139,7 +141,11 @@ class DatabaseHelper {
         custom_invoice_number TEXT,
         is_interstate INTEGER DEFAULT 0,
         payment_term_id TEXT DEFAULT '',
-        custom_fields TEXT DEFAULT ''
+        custom_fields TEXT DEFAULT '',
+        reference_invoice_id TEXT,
+        is_recurring INTEGER DEFAULT 0,
+        recurring_frequency TEXT,
+        recurring_next_date TEXT
       )
     ''');
 
@@ -225,19 +231,38 @@ class DatabaseHelper {
         balance_after    REAL NOT NULL,
         date_paid        TEXT NOT NULL,
         payment_method   TEXT,
-        notes            TEXT
+        notes            TEXT,
+        cheque_number    TEXT,
+        cheque_date      TEXT,
+        cheque_cleared   INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE audit_log (
+        id TEXT PRIMARY KEY,
+        username TEXT,
+        action TEXT NOT NULL,
+        entity TEXT,
+        entity_id TEXT,
+        details TEXT,
+        created_at TEXT NOT NULL
       )
     ''');
 
     // Indexes
-    await db.execute('CREATE INDEX idx_invoices_customer ON invoices(customer_name)');
+    await db.execute(
+        'CREATE INDEX idx_invoices_customer ON invoices(customer_name)');
     await db.execute('CREATE INDEX idx_invoices_date ON invoices(date)');
     await db.execute('CREATE INDEX idx_invoices_type ON invoices(type)');
     await db.execute('CREATE INDEX idx_customers_name ON customers(name)');
     await db.execute('CREATE INDEX idx_products_name ON products(name)');
-    await db.execute('CREATE INDEX idx_invoice_items_invoice ON invoice_items(invoice_id)');
-    await db.execute('CREATE INDEX idx_payments_invoice ON invoice_payments(invoice_id)');
-    await db.execute('CREATE INDEX idx_payments_date ON invoice_payments(date_paid)');
+    await db.execute(
+        'CREATE INDEX idx_invoice_items_invoice ON invoice_items(invoice_id)');
+    await db.execute(
+        'CREATE INDEX idx_payments_invoice ON invoice_payments(invoice_id)');
+    await db.execute(
+        'CREATE INDEX idx_payments_date ON invoice_payments(date_paid)');
 
     // Insert dummy company info
     await db.insert('company_info', {
@@ -262,7 +287,8 @@ class DatabaseHelper {
     });
 
     // Insert default template
-    await db.insert('settings', {'key': 'invoice_template', 'value': 'classic'});
+    await db
+        .insert('settings', {'key': 'invoice_template', 'value': 'classic'});
 
     // Insert default currency
     await db.insert('settings', {'key': 'currency', 'value': 'INR'});
@@ -287,7 +313,6 @@ class DatabaseHelper {
       await db.insert('payment_terms', t);
     }
 
-
     // ── Phase 3: Expenses ──
     await db.execute('''
       CREATE TABLE IF NOT EXISTS expense_categories (
@@ -306,8 +331,10 @@ class DatabaseHelper {
         notes TEXT
       )
     ''');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)');
     final expenseCats = [
       {'id': 'cat-rent', 'name': 'Rent'},
       {'id': 'cat-salary', 'name': 'Salary'},
@@ -354,9 +381,12 @@ class DatabaseHelper {
         description TEXT
       )
     ''');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_po_items_order ON purchase_order_items(purchase_order_id)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_po_date ON purchase_orders(date)');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_po_items_order ON purchase_order_items(purchase_order_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_po_date ON purchase_orders(date)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status)');
 
     // ── Phase 5: Batch/Serial Tracking ──
     await db.execute('''
@@ -372,7 +402,8 @@ class DatabaseHelper {
         size TEXT
       )
     ''');
-    await db.execute('CREATE INDEX IF NOT EXISTS idx_batch_product ON batch_info(product_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_batch_product ON batch_info(product_id)');
 
     // ── Phase 6: Custom Fields ──
     await db.execute('''
@@ -381,6 +412,48 @@ class DatabaseHelper {
         display_name TEXT NOT NULL,
         type TEXT DEFAULT 'text',
         enabled INTEGER DEFAULT 1
+      )
+    ''');
+
+    // ── Phase 6b: Purchase bills (inward supplies / GSTR-2) ──
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS purchase_bills (
+        id TEXT PRIMARY KEY,
+        bill_number TEXT,
+        supplier_name TEXT NOT NULL,
+        supplier_gstin TEXT,
+        supplier_phone TEXT,
+        supplier_email TEXT,
+        supplier_address TEXT,
+        date TEXT NOT NULL,
+        due_date TEXT,
+        total_amount REAL DEFAULT 0,
+        total_tax REAL DEFAULT 0,
+        amount_paid REAL DEFAULT 0,
+        itc_eligible INTEGER DEFAULT 1,
+        reverse_charge INTEGER DEFAULT 0,
+        notes TEXT,
+        currency_code TEXT DEFAULT 'INR',
+        currency_symbol TEXT DEFAULT '?'
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS purchase_bill_items (
+        id TEXT PRIMARY KEY,
+        purchase_bill_id TEXT NOT NULL,
+        product_id TEXT,
+        product_name TEXT NOT NULL,
+        hsn_code TEXT,
+        quantity REAL DEFAULT 1,
+        unit TEXT,
+        rate REAL DEFAULT 0,
+        tax_rate REAL DEFAULT 0,
+        discount REAL DEFAULT 0,
+        taxable_value REAL DEFAULT 0,
+        igst REAL DEFAULT 0,
+        cgst REAL DEFAULT 0,
+        sgst REAL DEFAULT 0,
+        amount REAL DEFAULT 0
       )
     ''');
 
@@ -538,7 +611,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 12) {
-      await _runMigrationStep(db, 12, 'add_unit_price_to_invoice_items', () async {
+      await _runMigrationStep(db, 12, 'add_unit_price_to_invoice_items',
+          () async {
         await db.execute(
           'ALTER TABLE invoice_items ADD COLUMN unit_price REAL',
         );
@@ -546,12 +620,14 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 13) {
-      await _runMigrationStep(db, 13, 'add_extra_cost_to_invoice_items', () async {
+      await _runMigrationStep(db, 13, 'add_extra_cost_to_invoice_items',
+          () async {
         await db.execute(
           'ALTER TABLE invoice_items ADD COLUMN extra_cost REAL',
         );
       });
-      await _runMigrationStep(db, 13, 'add_quantity_label_to_invoices', () async {
+      await _runMigrationStep(db, 13, 'add_quantity_label_to_invoices',
+          () async {
         await db.execute(
           'ALTER TABLE invoices ADD COLUMN quantity_label TEXT',
         );
@@ -559,7 +635,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 14) {
-      await _runMigrationStep(db, 14, 'add_discount_per_unit_to_invoice_items', () async {
+      await _runMigrationStep(db, 14, 'add_discount_per_unit_to_invoice_items',
+          () async {
         await db.execute(
           'ALTER TABLE invoice_items ADD COLUMN discount_per_unit INTEGER DEFAULT 0',
         );
@@ -567,7 +644,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 15) {
-      await _runMigrationStep(db, 15, 'add_additional_costs_to_invoices', () async {
+      await _runMigrationStep(db, 15, 'add_additional_costs_to_invoices',
+          () async {
         await db.execute(
           'ALTER TABLE invoices ADD COLUMN additional_costs TEXT',
         );
@@ -575,12 +653,14 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 16) {
-      await _runMigrationStep(db, 16, 'add_business_name_to_customers', () async {
+      await _runMigrationStep(db, 16, 'add_business_name_to_customers',
+          () async {
         await db.execute(
           "ALTER TABLE customers ADD COLUMN business_name TEXT DEFAULT ''",
         );
       });
-      await _runMigrationStep(db, 16, 'add_customer_business_name_to_invoices', () async {
+      await _runMigrationStep(db, 16, 'add_customer_business_name_to_invoices',
+          () async {
         await db.execute(
           "ALTER TABLE invoices ADD COLUMN customer_business_name TEXT DEFAULT ''",
         );
@@ -593,7 +673,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 17) {
-      await _runMigrationStep(db, 17, 'add_is_product_saved_to_invoice_items', () async {
+      await _runMigrationStep(db, 17, 'add_is_product_saved_to_invoice_items',
+          () async {
         await db.execute(
           'ALTER TABLE invoice_items ADD COLUMN is_product_saved INTEGER DEFAULT 0',
         );
@@ -606,7 +687,8 @@ class DatabaseHelper {
           "ALTER TABLE products ADD COLUMN type TEXT DEFAULT 'product'",
         );
       });
-      await _runMigrationStep(db, 18, 'add_product_type_to_invoice_items', () async {
+      await _runMigrationStep(db, 18, 'add_product_type_to_invoice_items',
+          () async {
         await db.execute(
           "ALTER TABLE invoice_items ADD COLUMN product_type TEXT DEFAULT 'product'",
         );
@@ -614,7 +696,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 19) {
-      await _runMigrationStep(db, 19, 'add_default_discount_to_products', () async {
+      await _runMigrationStep(db, 19, 'add_default_discount_to_products',
+          () async {
         await db.execute(
           'ALTER TABLE products ADD COLUMN default_discount REAL DEFAULT 0',
         );
@@ -622,7 +705,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 20) {
-      await _runMigrationStep(db, 20, 'add_bank_account_id_to_invoices', () async {
+      await _runMigrationStep(db, 20, 'add_bank_account_id_to_invoices',
+          () async {
         await db.execute(
           'ALTER TABLE invoices ADD COLUMN bank_account_id TEXT',
         );
@@ -630,7 +714,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 21) {
-      await _runMigrationStep(db, 21, 'add_previous_balance_to_invoices', () async {
+      await _runMigrationStep(db, 21, 'add_previous_balance_to_invoices',
+          () async {
         await db.execute(
           'ALTER TABLE invoices ADD COLUMN previous_balance REAL DEFAULT 0.0',
         );
@@ -638,8 +723,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 24) {
-      await _runMigrationStep(
-          db, 22, 'add_pan_number_to_company_info', () async {
+      await _runMigrationStep(db, 22, 'add_pan_number_to_company_info',
+          () async {
         await db.execute(
           "ALTER TABLE company_info ADD COLUMN pan_number TEXT DEFAULT ''",
         );
@@ -647,7 +732,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 25) {
-      await _runMigrationStep(db, 23, 'add_invoice_number_to_invoices', () async {
+      await _runMigrationStep(db, 23, 'add_invoice_number_to_invoices',
+          () async {
         await db.execute(
           'ALTER TABLE invoices ADD COLUMN invoice_number TEXT',
         );
@@ -655,7 +741,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 26) {
-      await _runMigrationStep(db, 24, 'add_purchase_price_to_products', () async {
+      await _runMigrationStep(db, 24, 'add_purchase_price_to_products',
+          () async {
         await db.execute(
           'ALTER TABLE products ADD COLUMN purchase_price REAL DEFAULT 0.0',
         );
@@ -668,15 +755,14 @@ class DatabaseHelper {
       });
     }
 
-    if (oldVersion < 30)
-    {
+    if (oldVersion < 30) {
       await _runMigrationStep(db, 30, 'add_unit_to_products', () async {
         await db.execute(
           "ALTER TABLE products ADD COLUMN unit TEXT DEFAULT ''",
         );
       });
-      await _runMigrationStep(
-          db, 30, 'add_product_unit_to_invoice_items', () async {
+      await _runMigrationStep(db, 30, 'add_product_unit_to_invoice_items',
+          () async {
         await db.execute(
           "ALTER TABLE invoice_items ADD COLUMN product_unit TEXT DEFAULT ''",
         );
@@ -689,15 +775,14 @@ class DatabaseHelper {
       });
     }
 
-    if(oldVersion < 32)
-    {
+    if (oldVersion < 32) {
       await _runMigrationStep(db, 32, 'add_alias_name_to_products', () async {
         await db.execute(
           'ALTER TABLE products ADD COLUMN alias_name TEXT',
         );
       });
-      await _runMigrationStep(
-          db, 32, 'add_product_alias_name_to_invoice_items', () async {
+      await _runMigrationStep(db, 32, 'add_product_alias_name_to_invoice_items',
+          () async {
         await db.execute(
           'ALTER TABLE invoice_items ADD COLUMN product_alias_name TEXT',
         );
@@ -742,9 +827,9 @@ class DatabaseHelper {
       // invoice_items had PRIMARY KEY (invoice_id, product_id), which blocked
       // adding the same product twice to one invoice (allow_duplicate_invoice_items
       // setting). SQLite can't drop a PK via ALTER, so rebuild the table.
-      await _runMigrationStep(db, 37, 'add_id_pk_to_invoice_items',
-          () async {
-        await db.execute('ALTER TABLE invoice_items RENAME TO invoice_items_old');
+      await _runMigrationStep(db, 37, 'add_id_pk_to_invoice_items', () async {
+        await db
+            .execute('ALTER TABLE invoice_items RENAME TO invoice_items_old');
         await db.execute('''
           CREATE TABLE invoice_items (
             id TEXT PRIMARY KEY,
@@ -784,7 +869,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 38) {
-      await _runMigrationStep(db, 38, 'add_fssai_code_to_company_info', () async {
+      await _runMigrationStep(db, 38, 'add_fssai_code_to_company_info',
+          () async {
         await db.execute(
           "ALTER TABLE company_info ADD COLUMN fssai_code TEXT DEFAULT ''",
         );
@@ -792,7 +878,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 38) {
-      await _runMigrationStep(db, 38, 'add_price_includes_tax_to_products', () async {
+      await _runMigrationStep(db, 38, 'add_price_includes_tax_to_products',
+          () async {
         await db.execute(
           "ALTER TABLE products ADD COLUMN price_includes_tax INTEGER DEFAULT 0",
         );
@@ -805,10 +892,9 @@ class DatabaseHelper {
       });
     }
 
-    if(oldVersion < 39)
-    {
-      await _runMigrationStep(
-          db, 39, 'add_invoice_discount_to_invoices', () async {
+    if (oldVersion < 39) {
+      await _runMigrationStep(db, 39, 'add_invoice_discount_to_invoices',
+          () async {
         await db.execute(
           "ALTER TABLE invoices ADD COLUMN invoice_discount_type TEXT DEFAULT 'percent'",
         );
@@ -819,8 +905,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 40) {
-      await _runMigrationStep(
-          db, 40, 'add_custom_invoice_number_to_invoices', () async {
+      await _runMigrationStep(db, 40, 'add_custom_invoice_number_to_invoices',
+          () async {
         await db.execute(
           'ALTER TABLE invoices ADD COLUMN hide_invoice_number INTEGER DEFAULT 0',
         );
@@ -831,7 +917,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 41) {
-      await _runMigrationStep(db, 41, 'backfill_onboarding_completed', () async {
+      await _runMigrationStep(db, 41, 'backfill_onboarding_completed',
+          () async {
         // The first-login onboarding wizard shipped without a backfill, so
         // every upgrading user would be forced through it. If no account is
         // still on a forced default password, the app was already set up the
@@ -859,8 +946,8 @@ class DatabaseHelper {
       // invoice time) so editing a line never touches the product catalogue.
       // NULL on every pre-v42 row, which reads back as "no description" and
       // prints exactly as those invoices always did.
-      await _runMigrationStep(
-          db, 42, 'add_description_to_invoice_items', () async {
+      await _runMigrationStep(db, 42, 'add_description_to_invoice_items',
+          () async {
         await db.execute(
           'ALTER TABLE invoice_items ADD COLUMN description TEXT',
         );
@@ -871,7 +958,8 @@ class DatabaseHelper {
       // India interstate-supply flag. Drives IGST vs CGST/SGST display only —
       // no effect on totals. NULL/0 on every pre-v43 row = intrastate, prints
       // exactly as before.
-      await _runMigrationStep(db, 43, 'add_is_interstate_to_invoices', () async {
+      await _runMigrationStep(db, 43, 'add_is_interstate_to_invoices',
+          () async {
         await db.execute(
           'ALTER TABLE invoices ADD COLUMN is_interstate INTEGER DEFAULT 0',
         );
@@ -891,7 +979,12 @@ class DatabaseHelper {
         ''');
         // Seed default terms
         final defaults = [
-          {'id': 'term-0', 'name': 'Due on Receipt', 'days': 0, 'is_default': 1},
+          {
+            'id': 'term-0',
+            'name': 'Due on Receipt',
+            'days': 0,
+            'is_default': 1
+          },
           {'id': 'term-15', 'name': 'Net 15', 'days': 15, 'is_default': 0},
           {'id': 'term-30', 'name': 'Net 30', 'days': 30, 'is_default': 0},
           {'id': 'term-45', 'name': 'Net 45', 'days': 45, 'is_default': 0},
@@ -904,15 +997,20 @@ class DatabaseHelper {
       });
 
       // Phase 2: Add credit limit + payment term to customers
-      await _runMigrationStep(db, 44, 'add_credit_limit_to_customers', () async {
-        await db.execute("ALTER TABLE customers ADD COLUMN credit_limit REAL DEFAULT 0");
-        await db.execute("ALTER TABLE customers ADD COLUMN credit_limit_enabled INTEGER DEFAULT 0");
-        await db.execute("ALTER TABLE customers ADD COLUMN payment_term_id TEXT DEFAULT ''");
+      await _runMigrationStep(db, 44, 'add_credit_limit_to_customers',
+          () async {
+        await db.execute(
+            "ALTER TABLE customers ADD COLUMN credit_limit REAL DEFAULT 0");
+        await db.execute(
+            "ALTER TABLE customers ADD COLUMN credit_limit_enabled INTEGER DEFAULT 0");
+        await db.execute(
+            "ALTER TABLE customers ADD COLUMN payment_term_id TEXT DEFAULT ''");
       });
 
       // Phase 2: Add payment_term_id to invoices
       await _runMigrationStep(db, 44, 'add_payment_term_to_invoices', () async {
-        await db.execute("ALTER TABLE invoices ADD COLUMN payment_term_id TEXT DEFAULT ''");
+        await db.execute(
+            "ALTER TABLE invoices ADD COLUMN payment_term_id TEXT DEFAULT ''");
       });
 
       // Phase 3: Expenses tables
@@ -934,8 +1032,10 @@ class DatabaseHelper {
             notes TEXT
           )
         ''');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id)');
         // Seed default categories
         final cats = [
           {'id': 'cat-rent', 'name': 'Rent'},
@@ -954,7 +1054,8 @@ class DatabaseHelper {
       });
 
       // Phase 4: Purchase Orders tables
-      await _runMigrationStep(db, 44, 'create_purchase_orders_tables', () async {
+      await _runMigrationStep(db, 44, 'create_purchase_orders_tables',
+          () async {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS purchase_orders (
             id TEXT PRIMARY KEY,
@@ -986,9 +1087,12 @@ class DatabaseHelper {
             description TEXT
           )
         ''');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_po_items_order ON purchase_order_items(purchase_order_id)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_po_date ON purchase_orders(date)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_po_items_order ON purchase_order_items(purchase_order_id)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_po_date ON purchase_orders(date)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status)');
       });
 
       // Phase 5: Batch/Serial tracking table
@@ -1006,7 +1110,8 @@ class DatabaseHelper {
             size TEXT
           )
         ''');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_batch_product ON batch_info(product_id)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_batch_product ON batch_info(product_id)');
       });
 
       // Phase 6: Custom fields table
@@ -1020,7 +1125,8 @@ class DatabaseHelper {
           )
         ''');
         // Add custom_fields column to invoices
-        await db.execute("ALTER TABLE invoices ADD COLUMN custom_fields TEXT DEFAULT ''");
+        await db.execute(
+            "ALTER TABLE invoices ADD COLUMN custom_fields TEXT DEFAULT ''");
       });
     }
 
@@ -1043,6 +1149,93 @@ class DatabaseHelper {
 
       await _runMigrationStep(db, 45, 'backfill_sync_columns', () async {
         await backfillSyncColumns(db);
+      });
+    }
+
+    if (oldVersion < 46) {
+      await _runMigrationStep(db, 46, 'create_purchase_bills', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS purchase_bills (
+            id TEXT PRIMARY KEY,
+            bill_number TEXT,
+            supplier_name TEXT NOT NULL,
+            supplier_gstin TEXT,
+            supplier_phone TEXT,
+            supplier_email TEXT,
+            supplier_address TEXT,
+            date TEXT NOT NULL,
+            due_date TEXT,
+            total_amount REAL DEFAULT 0,
+            total_tax REAL DEFAULT 0,
+            amount_paid REAL DEFAULT 0,
+            itc_eligible INTEGER DEFAULT 1,
+            reverse_charge INTEGER DEFAULT 0,
+            notes TEXT,
+            currency_code TEXT DEFAULT 'INR',
+            currency_symbol TEXT DEFAULT '?'
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS purchase_bill_items (
+            id TEXT PRIMARY KEY,
+            purchase_bill_id TEXT NOT NULL,
+            product_id TEXT,
+            product_name TEXT NOT NULL,
+            hsn_code TEXT,
+            quantity REAL DEFAULT 1,
+            unit TEXT,
+            rate REAL DEFAULT 0,
+            tax_rate REAL DEFAULT 0,
+            discount REAL DEFAULT 0,
+            taxable_value REAL DEFAULT 0,
+            igst REAL DEFAULT 0,
+            cgst REAL DEFAULT 0,
+            sgst REAL DEFAULT 0,
+            amount REAL DEFAULT 0
+          )
+        ''');
+      });
+
+      await _runMigrationStep(db, 46, 'invoicing_v46_columns', () async {
+        for (final stmt in [
+          "ALTER TABLE invoices ADD COLUMN reference_invoice_id TEXT",
+          "ALTER TABLE invoices ADD COLUMN is_recurring INTEGER DEFAULT 0",
+          "ALTER TABLE invoices ADD COLUMN recurring_frequency TEXT",
+          "ALTER TABLE invoices ADD COLUMN recurring_next_date TEXT",
+          "ALTER TABLE products ADD COLUMN reorder_level REAL DEFAULT 0",
+          "ALTER TABLE products ADD COLUMN barcode TEXT DEFAULT ''",
+          "ALTER TABLE invoice_payments ADD COLUMN cheque_number TEXT",
+          "ALTER TABLE invoice_payments ADD COLUMN cheque_date TEXT",
+          "ALTER TABLE invoice_payments ADD COLUMN cheque_cleared INTEGER DEFAULT 0",
+        ]) {
+          try {
+            await db.execute(stmt);
+          } catch (e) {
+            final msg = e.toString().toLowerCase();
+            if (!msg.contains('duplicate column name')) rethrow;
+          }
+        }
+      });
+
+      await _runMigrationStep(db, 46, 'audit_log_table', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS audit_log (
+            id TEXT PRIMARY KEY,
+            username TEXT,
+            action TEXT NOT NULL,
+            entity TEXT,
+            entity_id TEXT,
+            details TEXT,
+            created_at TEXT NOT NULL
+          )
+        ''');
+      });
+
+      await _runMigrationStep(db, 46, 'sync_register_purchase_bills', () async {
+        for (final table in ['purchase_bills', 'purchase_bill_items']) {
+          await addSyncColumns(db, table);
+        }
+        await installSyncCapture(db);
       });
     }
   }
@@ -1069,7 +1262,8 @@ class DatabaseHelper {
       final msg = e.toString().toLowerCase();
       if (msg.contains('duplicate column name') ||
           msg.contains('already exists')) {
-        AppLogger.d(_tag, 'Migration v$version/$step: already applied, skipping');
+        AppLogger.d(
+            _tag, 'Migration v$version/$step: already applied, skipping');
         await db.insert('_migration_log', {
           'version': version,
           'step': step,

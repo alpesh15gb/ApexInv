@@ -3,8 +3,7 @@ import 'package:apexbooks/database/settings_service.dart';
 import 'package:apexbooks/repositories/installation_repository.dart';
 import 'package:uuid/uuid.dart';
 
-class SqliteInstallationRepository implements InstallationRepository
-{
+class SqliteInstallationRepository implements InstallationRepository {
   /// Returns the unique identifier for this installation.
   ///
   /// If an identifier doesn't already exist, one is generated,

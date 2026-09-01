@@ -10,7 +10,8 @@ class UserManagementScreen extends ConsumerStatefulWidget {
   const UserManagementScreen({super.key, required this.currentUser});
 
   @override
-  ConsumerState<UserManagementScreen> createState() => _UserManagementScreenState();
+  ConsumerState<UserManagementScreen> createState() =>
+      _UserManagementScreenState();
 }
 
 class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
@@ -57,7 +58,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
           _isLoading = false;
         });
       } else {
-        final fresh = await ref.read(authRepositoryProvider).getUserById(widget.currentUser.id);
+        final fresh = await ref
+            .read(authRepositoryProvider)
+            .getUserById(widget.currentUser.id);
         final user = fresh ?? widget.currentUser;
         setState(() {
           _users = [user];
@@ -81,8 +84,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
       } else {
         _filteredUsers = _users
             .where((user) =>
-        user.username.toLowerCase().contains(query) ||
-            user.userType.toLowerCase().contains(query))
+                user.username.toLowerCase().contains(query) ||
+                user.userType.toLowerCase().contains(query))
             .toList();
       }
     });
@@ -234,10 +237,13 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                               },
                             ),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                              borderRadius:
+                                  BorderRadius.circular(AppBorderRadius.xsmall),
                             ),
                             filled: true,
-                            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -266,10 +272,13 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                               },
                             ),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                              borderRadius:
+                                  BorderRadius.circular(AppBorderRadius.xsmall),
                             ),
                             filled: true,
-                            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -297,15 +306,18 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                               onPressed: () {
                                 setState(() {
                                   obscureConfirmPassword =
-                                  !obscureConfirmPassword;
+                                      !obscureConfirmPassword;
                                 });
                               },
                             ),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                              borderRadius:
+                                  BorderRadius.circular(AppBorderRadius.xsmall),
                             ),
                             filled: true,
-                            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -340,7 +352,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                      borderRadius:
+                          BorderRadius.circular(AppBorderRadius.xsmall),
                     ),
                   ),
                   icon: const Icon(Icons.check_circle_outline),
@@ -349,9 +362,11 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
                       final user = _users.firstWhere((u) => u.id == userId);
-                      if (user.password == PasswordUtils.hash(oldPasswordController.text)) {
-                        await ref.read(authRepositoryProvider).updatePassword(
-                            userId, newPasswordController.text);
+                      if (user.password ==
+                          PasswordUtils.hash(oldPasswordController.text)) {
+                        await ref
+                            .read(authRepositoryProvider)
+                            .updatePassword(userId, newPasswordController.text);
                         if (!context.mounted) return;
                         Navigator.of(context).pop();
                         _showSnackBar(
@@ -397,7 +412,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child:
-                  const Icon(Icons.warning, color: Colors.white, size: 24),
+                      const Icon(Icons.warning, color: Colors.white, size: 24),
                 ),
                 const SizedBox(width: 12),
                 const Text('Delete User', style: TextStyle(fontSize: 20)),
@@ -409,7 +424,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
             children: [
               Text(
                 'Are you sure you want to delete user:',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                style:
+                    TextStyle(color: Theme.of(context).colorScheme.onSurface),
               ),
               const SizedBox(height: 8),
               Container(
@@ -448,7 +464,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
             TextButton(
               style: TextButton.styleFrom(
                 padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
               child: const Text('Cancel', style: TextStyle(fontSize: 15)),
               onPressed: () {
@@ -460,7 +476,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
                 padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
                 ),
@@ -468,7 +484,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
               icon: const Icon(Icons.delete_forever),
               label: const Text('Delete', style: TextStyle(fontSize: 15)),
               onPressed: () async {
-                await ref.read(authRepositoryProvider).deleteUserSafely(user.id);
+                await ref
+                    .read(authRepositoryProvider)
+                    .deleteUserSafely(user.id);
                 if (!context.mounted) return;
                 Navigator.of(context).pop();
                 _showSnackBar('User deleted successfully', Colors.orange);
@@ -490,8 +508,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
               color == Colors.green
                   ? Icons.check_circle
                   : color == Colors.red
-                  ? Icons.error
-                  : Icons.info,
+                      ? Icons.error
+                      : Icons.info,
               color: Colors.white,
             ),
             const SizedBox(width: 12),
@@ -575,7 +593,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
             ),
           ),
           const SizedBox(height: 2),
-          Divider(color: Theme.of(context).colorScheme.outlineVariant, height: 20),
+          Divider(
+              color: Theme.of(context).colorScheme.outlineVariant, height: 20),
           Expanded(
             child: Form(
               key: _formKey,
@@ -591,12 +610,16 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                         hintText: 'Enter username',
                         prefixIcon: const Icon(Icons.person_outline),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                          borderRadius:
+                              BorderRadius.circular(AppBorderRadius.xsmall),
                         ),
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                          borderRadius:
+                              BorderRadius.circular(AppBorderRadius.xsmall),
                           borderSide: BorderSide(color: primaryColor, width: 2),
                         ),
                       ),
@@ -623,21 +646,27 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                             icon: Icon(_obscurePassword
                                 ? Icons.visibility_off
                                 : Icons.visibility),
-                            onPressed: () =>
-                                setState(() => _obscurePassword = !_obscurePassword),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
                           ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall),
                           ),
                           filled: true,
-                          fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          fillColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                            borderSide: BorderSide(color: primaryColor, width: 2),
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall),
+                            borderSide:
+                                BorderSide(color: primaryColor, width: 2),
                           ),
                         ),
                         validator: (value) {
-                          if (value == null || value.isEmpty) return 'Password is required';
+                          if (value == null || value.isEmpty)
+                            return 'Password is required';
                           if (value.length < 6) return 'Minimum 6 characters';
                           return null;
                         },
@@ -650,14 +679,19 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                           : null,
                       decoration: InputDecoration(
                         labelText: 'Role',
-                        prefixIcon: const Icon(Icons.admin_panel_settings_outlined),
+                        prefixIcon:
+                            const Icon(Icons.admin_panel_settings_outlined),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                          borderRadius:
+                              BorderRadius.circular(AppBorderRadius.xsmall),
                         ),
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                          borderRadius:
+                              BorderRadius.circular(AppBorderRadius.xsmall),
                           borderSide: BorderSide(color: primaryColor, width: 2),
                         ),
                       ),
@@ -688,14 +722,16 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white),
                               )
-                            : Icon(isAdding ? Icons.add : Icons.check, size: 18),
+                            : Icon(isAdding ? Icons.add : Icons.check,
+                                size: 18),
                         label: Text(isAdding ? 'Add User' : 'Save Changes'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryColor,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall),
                           ),
                           elevation: 0,
                         ),
@@ -709,10 +745,15 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                           onPressed: _resetForm,
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 12),
-                            side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-                            foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                            side: BorderSide(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant),
+                            foregroundColor:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+                              borderRadius:
+                                  BorderRadius.circular(AppBorderRadius.xsmall),
                             ),
                           ),
                           child: const Text('Cancel'),
@@ -743,8 +784,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
             padding: const EdgeInsets.fromLTRB(16, 14, 12, 0),
             child: Row(
               children: [
-                Icon(Icons.people_outline, size: 18,
-                    color: Theme.of(context).primaryColor),
+                Icon(Icons.people_outline,
+                    size: 18, color: Theme.of(context).primaryColor),
                 const SizedBox(width: 8),
                 Text(
                   'Users',
@@ -756,11 +797,14 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                    border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant),
                   ),
                   child: Text(
                     '${_filteredUsers.length}',
@@ -782,8 +826,12 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Search users...',
-                  hintStyle: TextStyle(fontSize: AppFontSize.small, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  prefixIcon: Icon(Icons.search, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  hintStyle: TextStyle(
+                      fontSize: AppFontSize.small,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  prefixIcon: Icon(Icons.search,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear, size: 16),
@@ -792,22 +840,27 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                         )
                       : null,
                   filled: true,
-                  fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  fillColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                    borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                    borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                    borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                    borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
               ),
             ),
           ],
           const SizedBox(height: 4),
-          Divider(color: Theme.of(context).colorScheme.outlineVariant, height: 12),
+          Divider(
+              color: Theme.of(context).colorScheme.outlineVariant, height: 12),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -821,7 +874,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                                   ? Icons.search_off
                                   : Icons.person_add_outlined,
                               size: 48,
-                              color: Theme.of(context).colorScheme.outlineVariant,
+                              color:
+                                  Theme.of(context).colorScheme.outlineVariant,
                             ),
                             const SizedBox(height: 12),
                             Text(
@@ -829,7 +883,10 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                                   ? 'No users found'
                                   : 'No users yet',
                               style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: AppFontSize.small),
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                  fontSize: AppFontSize.small),
                             ),
                           ],
                         ),
@@ -839,25 +896,31 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                         child: ListView.separated(
                           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                           itemCount: _filteredUsers.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final user = _filteredUsers[index];
                             final isEditing = _editingUserId == user.id;
                             final isAdmin = user.userType == 'admin';
                             final primaryColor = Theme.of(context).primaryColor;
-                            final avatarColor = isAdmin ? Colors.purple : Colors.blue;
+                            final avatarColor =
+                                isAdmin ? Colors.purple : Colors.blue;
 
                             return Container(
                               decoration: BoxDecoration(
                                 color: isEditing
                                     ? primaryColor.withValues(alpha: 0.05)
-                                    : Theme.of(context).colorScheme.surfaceContainerHighest,
-                                borderRadius:
-                                    BorderRadius.circular(AppBorderRadius.xsmall),
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(
+                                    AppBorderRadius.xsmall),
                                 border: Border.all(
                                   color: isEditing
                                       ? primaryColor.withValues(alpha: 0.4)
-                                      : Theme.of(context).colorScheme.outlineVariant,
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .outlineVariant,
                                 ),
                               ),
                               child: ListTile(
@@ -881,7 +944,11 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: AppFontSize.medium,
-                                    color: isEditing ? primaryColor : Theme.of(context).colorScheme.onSurface,
+                                    color: isEditing
+                                        ? primaryColor
+                                        : Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
                                   ),
                                 ),
                                 subtitle: Padding(
@@ -896,10 +963,14 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                                       color: Colors.blue,
                                       tooltip: 'Edit',
                                       onPressed: () {
-                                        _usernameController.text = user.username;
-                                        _passwordController.text = user.password;
-                                        _userTypeController.text = user.userType;
-                                        setState(() => _editingUserId = user.id);
+                                        _usernameController.text =
+                                            user.username;
+                                        _passwordController.text =
+                                            user.password;
+                                        _userTypeController.text =
+                                            user.userType;
+                                        setState(
+                                            () => _editingUserId = user.id);
                                       },
                                     ),
                                     const SizedBox(width: 6),
@@ -907,8 +978,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                                       icon: Icons.lock_reset,
                                       color: Colors.orange,
                                       tooltip: 'Change Password',
-                                      onPressed: () => _showChangePasswordDialog(
-                                          user.id, user.username),
+                                      onPressed: () =>
+                                          _showChangePasswordDialog(
+                                              user.id, user.username),
                                     ),
                                     if (widget.currentUser.isAdmin()) ...[
                                       const SizedBox(width: 6),
@@ -916,7 +988,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
                                         icon: Icons.delete_outline,
                                         color: Colors.red,
                                         tooltip: 'Delete',
-                                        onPressed: () => _confirmDeleteUser(user),
+                                        onPressed: () =>
+                                            _confirmDeleteUser(user),
                                       ),
                                     ],
                                   ],
@@ -1019,4 +1092,3 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen>
     );
   }
 }
-

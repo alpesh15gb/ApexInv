@@ -42,7 +42,9 @@ class PurchaseOrder {
       vendorEmail: map['vendor_email'] as String?,
       vendorAddress: map['vendor_address'] as String?,
       date: map['date'] != null ? DateTime.parse(map['date']) : DateTime.now(),
-      expectedDate: map['expected_date'] != null ? DateTime.parse(map['expected_date']) : null,
+      expectedDate: map['expected_date'] != null
+          ? DateTime.parse(map['expected_date'])
+          : null,
       status: map['status'] ?? 'draft',
       totalAmount: (map['total_amount'] as num?)?.toDouble() ?? 0.0,
       amountPaid: (map['amount_paid'] as num?)?.toDouble() ?? 0.0,

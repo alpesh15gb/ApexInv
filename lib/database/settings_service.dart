@@ -207,13 +207,16 @@ class SettingsService {
   static Future<ProductColumnsConfig> getProductColumnsConfig() async {
     final json = await getSetting(SettingKey.productColumnsConfig);
     if (json != null && json.isNotEmpty) {
-      return ProductColumnsConfig.fromJson(jsonDecode(json) as Map<String, dynamic>);
+      return ProductColumnsConfig.fromJson(
+          jsonDecode(json) as Map<String, dynamic>);
     }
     return const ProductColumnsConfig();
   }
 
-  static Future<void> setProductColumnsConfig(ProductColumnsConfig config) async {
-    await setSetting(SettingKey.productColumnsConfig, jsonEncode(config.toJson()));
+  static Future<void> setProductColumnsConfig(
+      ProductColumnsConfig config) async {
+    await setSetting(
+        SettingKey.productColumnsConfig, jsonEncode(config.toJson()));
   }
 
   static Future<bool> getShowBankDetails() async {
@@ -312,8 +315,7 @@ class SettingsService {
   }
 
   static Future<void> setShowCustomerBusinessName(bool show) async {
-    await setSetting(
-        SettingKey.showCustomerBusinessNameInPdf, show.toString());
+    await setSetting(SettingKey.showCustomerBusinessNameInPdf, show.toString());
   }
 
   /// Whether the customer address is shown on PDFs. Defaults to true.
@@ -477,14 +479,12 @@ class SettingsService {
     await setSetting(SettingKey.showTotalQuantity, show.toString());
   }
 
-  static Future<bool> getShowAliasNameInPdf() async
-  {
+  static Future<bool> getShowAliasNameInPdf() async {
     final val = await getSetting(SettingKey.showAliasNameInPdf);
     return val == 'true';
   }
 
-  static Future<bool> getShowTaxButtonInInvoicePage() async
-  {
+  static Future<bool> getShowTaxButtonInInvoicePage() async {
     final val = await getSetting(SettingKey.showTaxButtonInInvoicePage);
     return val != 'false';
   }

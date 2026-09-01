@@ -43,7 +43,8 @@ class ExpenseService {
   static Future<void> updateExpense(Expense expense) async {
     final db = await dbHelper.database;
     final updateMap = expense.toMap()..remove('category_name');
-    await db.update('expenses', updateMap, where: 'id = ?', whereArgs: [expense.id]);
+    await db.update('expenses', updateMap,
+        where: 'id = ?', whereArgs: [expense.id]);
   }
 
   static Future<Expense?> getExpenseById(String id) async {
@@ -106,7 +107,8 @@ class ExpenseService {
     return maps.map((m) => Expense.fromMap(m)).toList();
   }
 
-  static Future<int> getExpenseCount({String query = '', String? categoryId}) async {
+  static Future<int> getExpenseCount(
+      {String query = '', String? categoryId}) async {
     final db = await dbHelper.database;
     final conditions = <String>[];
     final args = <dynamic>[];
@@ -133,7 +135,8 @@ class ExpenseService {
     await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
   }
 
-  static Future<double> getTotalExpenses({DateTime? fromDate, DateTime? toDate}) async {
+  static Future<double> getTotalExpenses(
+      {DateTime? fromDate, DateTime? toDate}) async {
     final db = await dbHelper.database;
     final conditions = <String>[];
     final args = <dynamic>[];

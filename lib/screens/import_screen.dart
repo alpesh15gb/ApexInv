@@ -63,7 +63,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       }
 
       final tempDir = await getTemporaryDirectory();
-      final vypPath = await VyaparImportService.extractVypFile(bytes, tempDir.path);
+      final vypPath =
+          await VyaparImportService.extractVypFile(bytes, tempDir.path);
       final preview = await VyaparImportService.preview(vypPath);
 
       setState(() {
@@ -130,7 +131,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.upload_file, color: colorScheme.primary, size: 32),
+                        Icon(Icons.upload_file,
+                            color: colorScheme.primary, size: 32),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -143,9 +145,12 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 'Import customers, products, and invoices from a Vyapar .vyb backup file.',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
                               ),
                             ],
                           ),
@@ -161,10 +166,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.folder_open),
-                        label: Text(_isLoading ? 'Reading file...' : 'Select .vyb File'),
+                        label: Text(_isLoading
+                            ? 'Reading file...'
+                            : 'Select .vyb File'),
                       ),
                     ),
                   ],
@@ -211,17 +219,22 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                         const SizedBox(height: 8),
                         Text(
                           'Company: ${_preview!.firmName}',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                         ),
                       ],
                       const SizedBox(height: 16),
-                      _buildPreviewRow(Icons.people, 'Customers', _preview!.customerCount),
-                      _buildPreviewRow(Icons.inventory_2, 'Products', _preview!.productCount),
-                      _buildPreviewRow(Icons.receipt_long, 'Invoices', _preview!.invoiceCount),
+                      _buildPreviewRow(
+                          Icons.people, 'Customers', _preview!.customerCount),
+                      _buildPreviewRow(Icons.inventory_2, 'Products',
+                          _preview!.productCount),
+                      _buildPreviewRow(Icons.receipt_long, 'Invoices',
+                          _preview!.invoiceCount),
                       if (_preview!.vendorCount > 0)
-                        _buildPreviewRow(Icons.local_shipping, 'Vendors', _preview!.vendorCount),
+                        _buildPreviewRow(Icons.local_shipping, 'Vendors',
+                            _preview!.vendorCount),
                       const SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
@@ -265,41 +278,55 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.check_circle, color: Colors.green, size: 28),
+                          Icon(Icons.check_circle,
+                              color: Colors.green, size: 28),
                           const SizedBox(width: 12),
                           Text(
                             'Import Complete!',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
-                      _buildResultRow('Customers imported', _result!.customersImported),
-                      _buildResultRow('Customers skipped', _result!.customersSkipped),
-                      _buildResultRow('Products imported', _result!.productsImported),
-                      _buildResultRow('Products skipped', _result!.productsSkipped),
-                      _buildResultRow('Invoices imported', _result!.invoicesImported),
-                      _buildResultRow('Invoices skipped', _result!.invoicesSkipped),
+                      _buildResultRow(
+                          'Customers imported', _result!.customersImported),
+                      _buildResultRow(
+                          'Customers skipped', _result!.customersSkipped),
+                      _buildResultRow(
+                          'Products imported', _result!.productsImported),
+                      _buildResultRow(
+                          'Products skipped', _result!.productsSkipped),
+                      _buildResultRow(
+                          'Invoices imported', _result!.invoicesImported),
+                      _buildResultRow(
+                          'Invoices skipped', _result!.invoicesSkipped),
                       if (_result!.warnings.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         Text(
                           'Warnings (${_result!.warnings.length})',
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Colors.orange.shade800,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: Colors.orange.shade800,
+                                  ),
                         ),
                         const SizedBox(height: 8),
                         ...(_result!.warnings.take(10).map((w) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            '• $w',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ))),
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                '• $w',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                            ))),
                         if (_result!.warnings.length > 10)
                           Text(
                             '... and ${_result!.warnings.length - 10} more',
@@ -334,10 +361,14 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                       ),
                       const SizedBox(height: 12),
                       _buildInstructionStep(1, 'Open the Vyapar app'),
-                      _buildInstructionStep(2, 'Go to Settings → Data Backup & Restore'),
-                      _buildInstructionStep(3, 'Tap "Create Backup" to generate a .vyb file'),
-                      _buildInstructionStep(4, 'Transfer the file to this computer'),
-                      _buildInstructionStep(5, 'Click "Select .vyb File" above'),
+                      _buildInstructionStep(
+                          2, 'Go to Settings → Data Backup & Restore'),
+                      _buildInstructionStep(
+                          3, 'Tap "Create Backup" to generate a .vyb file'),
+                      _buildInstructionStep(
+                          4, 'Transfer the file to this computer'),
+                      _buildInstructionStep(
+                          5, 'Click "Select .vyb File" above'),
                     ],
                   ),
                 ),

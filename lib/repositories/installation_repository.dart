@@ -1,4 +1,3 @@
-abstract class InstallationRepository
-{
+abstract class InstallationRepository {
   Future<String> getOrCreateInstallationId();
 }

@@ -125,15 +125,14 @@ const minimalPdfStyle = PdfTemplateStyle(
   headerGap: 5,
 );
 const modernPdfStyle = PdfTemplateStyle(
-  titleFontSize: 15,
-  subtitleFontSize: 10,
-  labelFontSize: 10,
-  bodyFontSize: 8,
-  sectionPadding: 10,
-  headerGap: 8,
-  tableFontSize: 8,
-  typeFont: 10
-);
+    titleFontSize: 15,
+    subtitleFontSize: 10,
+    labelFontSize: 10,
+    bodyFontSize: 8,
+    sectionPadding: 10,
+    headerGap: 8,
+    tableFontSize: 8,
+    typeFont: 10);
 const gridClassicPdfStyle = PdfTemplateStyle(
   titleFontSize: 12,
   subtitleFontSize: 8,

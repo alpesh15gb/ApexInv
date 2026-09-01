@@ -1,4 +1,3 @@
-
 class BackupResult {
   final bool success;
   final String message;

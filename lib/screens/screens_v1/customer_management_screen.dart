@@ -24,7 +24,8 @@ class CustomerManagementScreen extends ConsumerStatefulWidget {
       _CustomerManagementScreenState();
 }
 
-class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScreen> {
+class _CustomerManagementScreenState
+    extends ConsumerState<CustomerManagementScreen> {
   List<Customer> _customers = [];
   List<Customer> _filteredCustomers = [];
   String _searchQuery = '';
@@ -66,10 +67,10 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
   }
 
   Future<void> _loadCustomers() async {
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      if(!mounted) return;
+      if (!mounted) return;
       final customerRepo = ref.read(customerRepositoryProvider);
       final results = await Future.wait([
         customerRepo.getAllCustomers(),
@@ -77,7 +78,7 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       ]);
       final data = results[0] as List<Customer>;
       final count = results[1] as int;
-      if(!mounted) return;
+      if (!mounted) return;
       setState(() {
         _customers = data;
         _totalCustomerCount = count;
@@ -121,7 +122,7 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
   }
 
   void _toggleSortOrder() {
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() {
       _isAscending = !_isAscending;
       _filterAndSort();
@@ -129,7 +130,7 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
   }
 
   void _changePage(int page) {
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() => _currentPage = page);
   }
 
@@ -191,13 +192,14 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
         ),
         backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
         duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  void _showCustomerDialog(Customer customer,bool isEdit) {
+  void _showCustomerDialog(Customer customer, bool isEdit) {
     //final isEdit = customer != null;
     final nameCtrl = TextEditingController(text: customer.name);
     final emailCtrl = TextEditingController(text: customer.email);
@@ -212,100 +214,113 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       builder: (context) {
         bool isSaving = false;
         return StatefulBuilder(builder: (context, setDialogState) {
-        return AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(
-              isEdit ? Icons.edit : Icons.visibility,
-              color: Theme.of(context).primaryColor,
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(
+                  isEdit ? Icons.edit : Icons.visibility,
+                  color: Theme.of(context).primaryColor,
+                ),
+                const SizedBox(width: 8),
+                Text(isEdit ? 'Edit Customer' : 'View Customer'),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text(isEdit ? 'Edit Customer' : 'View Customer'),
-          ],
-        ),
-        content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.4,
-          child: Form(
-            key: dialogFormKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildDialogTextField(nameCtrl, 'Name', Icons.person,
-                      readOnly: !isEdit),
-                  const SizedBox(height: 16),
-                  _buildDialogTextField(businessNameCtrl, 'Business Name', Icons.business_center,
-                      readOnly: !isEdit, maxLength: 100),
-                  const SizedBox(height: 16),
-                  _buildDialogTextField(emailCtrl, 'Email', Icons.email,
-                      readOnly: !isEdit, keyboardType: TextInputType.emailAddress),
-                  const SizedBox(height: 16),
-                  _buildDialogTextField(phoneCtrl, 'Phone', Icons.phone,
-                      readOnly: !isEdit,
-                      keyboardType: TextInputType.phone,
-                      maxLength: 12),
-                  const SizedBox(height: 16),
-                  _buildDialogTextField(gstinCtrl, 'Tax/VAT Number (GSTIN)', Icons.receipt_long,
-                      readOnly: !isEdit, maxLength: 50),
-                  const SizedBox(height: 16),
-                  _buildDialogTextField(addressCtrl, 'Address', Icons.location_on,
-                      readOnly: !isEdit, maxLines: 3, maxLength: 100),
-                ],
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.4,
+              child: Form(
+                key: dialogFormKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildDialogTextField(nameCtrl, 'Name', Icons.person,
+                          readOnly: !isEdit),
+                      const SizedBox(height: 16),
+                      _buildDialogTextField(businessNameCtrl, 'Business Name',
+                          Icons.business_center,
+                          readOnly: !isEdit, maxLength: 100),
+                      const SizedBox(height: 16),
+                      _buildDialogTextField(emailCtrl, 'Email', Icons.email,
+                          readOnly: !isEdit,
+                          keyboardType: TextInputType.emailAddress),
+                      const SizedBox(height: 16),
+                      _buildDialogTextField(phoneCtrl, 'Phone', Icons.phone,
+                          readOnly: !isEdit,
+                          keyboardType: TextInputType.phone,
+                          maxLength: 12),
+                      const SizedBox(height: 16),
+                      _buildDialogTextField(gstinCtrl, 'Tax/VAT Number (GSTIN)',
+                          Icons.receipt_long,
+                          readOnly: !isEdit, maxLength: 50),
+                      const SizedBox(height: 16),
+                      _buildDialogTextField(
+                          addressCtrl, 'Address', Icons.location_on,
+                          readOnly: !isEdit, maxLines: 3, maxLength: 100),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          if (isEdit)
-            FilledButton.icon(
-              onPressed: isSaving ? null : () async {
-                if (!dialogFormKey.currentState!.validate()) return;
-                setDialogState(() => isSaving = true);
-                try {
-                  final updatedCustomer = Customer(
-                    id: customer.id,
-                    name: nameCtrl.text.trim(),
-                    email: emailCtrl.text.trim(),
-                    phone: phoneCtrl.text.trim(),
-                    address: addressCtrl.text.trim(),
-                    gstin: gstinCtrl.text.trim(),
-                    businessName: businessNameCtrl.text.trim(),
-                  );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+              if (isEdit)
+                FilledButton.icon(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (!dialogFormKey.currentState!.validate()) return;
+                          setDialogState(() => isSaving = true);
+                          try {
+                            final updatedCustomer = Customer(
+                              id: customer.id,
+                              name: nameCtrl.text.trim(),
+                              email: emailCtrl.text.trim(),
+                              phone: phoneCtrl.text.trim(),
+                              address: addressCtrl.text.trim(),
+                              gstin: gstinCtrl.text.trim(),
+                              businessName: businessNameCtrl.text.trim(),
+                            );
 
-                  await ref.read(customerRepositoryProvider).updateCustomer(updatedCustomer);
-                  await _loadCustomers();
-                  if (context.mounted) Navigator.pop(context);
-                  _showSnackBar('Customer updated successfully!');
-                } finally {
-                  setDialogState(() => isSaving = false);
-                }
-              },
-              icon: isSaving
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.save),
-              label: Text(isSaving ? 'Saving...' : 'Update'),
-            ),
-        ],
-        );
+                            await ref
+                                .read(customerRepositoryProvider)
+                                .updateCustomer(updatedCustomer);
+                            await _loadCustomers();
+                            if (context.mounted) Navigator.pop(context);
+                            _showSnackBar('Customer updated successfully!');
+                          } finally {
+                            setDialogState(() => isSaving = false);
+                          }
+                        },
+                  icon: isSaving
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.save),
+                  label: Text(isSaving ? 'Saving...' : 'Update'),
+                ),
+            ],
+          );
         });
       },
     );
   }
 
   Widget _buildDialogTextField(
-      TextEditingController controller,
-      String label,
-      IconData icon, {
-        bool readOnly = false,
-        int maxLines = 1,
-        int? maxLength,
-        TextInputType? keyboardType,
-      }) {
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    bool readOnly = false,
+    int maxLines = 1,
+    int? maxLength,
+    TextInputType? keyboardType,
+  }) {
     return TextFormField(
       controller: controller,
       readOnly: readOnly,
@@ -315,9 +330,12 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
         filled: readOnly,
-        fillColor: readOnly ? Theme.of(context).colorScheme.surfaceContainerHighest : null,
+        fillColor: readOnly
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
+            : null,
       ),
       validator: (value) {
         if (label == 'Name' && (value == null || value.trim().isEmpty)) {
@@ -363,7 +381,8 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
   }
 
   Future<void> _downloadSampleCSV() async {
-    const sample = '"name","email","phone","address","business_name","tax_number"\n'
+    const sample =
+        '"name","email","phone","address","business_name","tax_number"\n'
         '"John Smith","john@example.com","+27821234567","123 Main St, Cape Town","Acme (Pty) Ltd","ZA123456789"\n'
         '"Jane Doe","jane@example.com","+27831234567","456 Oak Ave, Johannesburg","",""\n';
 
@@ -390,7 +409,14 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
   // ── CSV Import ────────────────────────────────────────────────────────────
 
   static const _csvMaxRows = 200;
-  static const _csvHeaders = ['name', 'email', 'phone', 'address', 'business_name', 'tax_number'];
+  static const _csvHeaders = [
+    'name',
+    'email',
+    'phone',
+    'address',
+    'business_name',
+    'tax_number'
+  ];
 
   Future<void> _showImportDialog() async {
     final proceed = await showDialog<bool>(
@@ -416,7 +442,9 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
                 const SizedBox(height: 12),
                 // Columns table
                 Table(
-                  border: TableBorder.all(color: Theme.of(context).colorScheme.outlineVariant, borderRadius: BorderRadius.circular(6)),
+                  border: TableBorder.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(6)),
                   columnWidths: const {
                     0: FlexColumnWidth(1.4),
                     1: FlexColumnWidth(0.7),
@@ -424,27 +452,36 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
                   },
                   children: [
                     TableRow(
-                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+                      decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest),
                       children: const [
                         _TableHeader('Column'),
                         _TableHeader('Required'),
                         _TableHeader('Description'),
                       ],
                     ),
-                    _csvRuleRow(context, 'name',          'Yes', 'Customer full name'),
-                    _csvRuleRow(context, 'email',         'No',  'Email address'),
-                    _csvRuleRow(context, 'phone',         'No',  'Phone number'),
-                    _csvRuleRow(context, 'address',       'No',  'Full address'),
-                    _csvRuleRow(context, 'business_name', 'No',  'Company / business name'),
-                    _csvRuleRow(context, 'tax_number',    'No',  'Tax / VAT / GSTIN number'),
+                    _csvRuleRow(context, 'name', 'Yes', 'Customer full name'),
+                    _csvRuleRow(context, 'email', 'No', 'Email address'),
+                    _csvRuleRow(context, 'phone', 'No', 'Phone number'),
+                    _csvRuleRow(context, 'address', 'No', 'Full address'),
+                    _csvRuleRow(context, 'business_name', 'No',
+                        'Company / business name'),
+                    _csvRuleRow(context, 'tax_number', 'No',
+                        'Tax / VAT / GSTIN number'),
                   ],
                 ),
                 const SizedBox(height: 16),
                 // Notes
-                _ruleNote(context, Icons.info_outline, 'Maximum $_csvMaxRows rows per import.'),
-                _ruleNote(context, Icons.info_outline, 'Duplicates are detected by email or phone. You will be asked to overwrite or skip each one.'),
-                _ruleNote(context, Icons.info_outline, 'Rows missing a name are skipped and reported at the end.'),
-                _ruleNote(context, Icons.info_outline, 'UTF-8 encoding recommended. Excel BOM is handled automatically.'),
+                _ruleNote(context, Icons.info_outline,
+                    'Maximum $_csvMaxRows rows per import.'),
+                _ruleNote(context, Icons.info_outline,
+                    'Duplicates are detected by email or phone. You will be asked to overwrite or skip each one.'),
+                _ruleNote(context, Icons.info_outline,
+                    'Rows missing a name are skipped and reported at the end.'),
+                _ruleNote(context, Icons.info_outline,
+                    'UTF-8 encoding recommended. Excel BOM is handled automatically.'),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: () async {
@@ -474,12 +511,14 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
     if (proceed == true) await _importFromCSV();
   }
 
-  static TableRow _csvRuleRow(BuildContext context, String col, String req, String desc) {
+  static TableRow _csvRuleRow(
+      BuildContext context, String col, String req, String desc) {
     return TableRow(
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Text(col, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+          child: Text(col,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -488,7 +527,9 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: req == 'Yes' ? Colors.red.shade700 : Theme.of(context).colorScheme.onSurfaceVariant,
+              color: req == 'Yes'
+                  ? Colors.red.shade700
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -508,7 +549,11 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
         children: [
           Icon(icon, size: 15, color: Colors.blueGrey),
           const SizedBox(width: 6),
-          Expanded(child: Text(text, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface))),
+          Expanded(
+              child: Text(text,
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurface))),
         ],
       ),
     );
@@ -528,7 +573,10 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       final bytes = await File(result.files.single.path!).readAsBytes();
       // Strip UTF-8 BOM if present
       final content = utf8.decode(
-        bytes.length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF
+        bytes.length >= 3 &&
+                bytes[0] == 0xEF &&
+                bytes[1] == 0xBB &&
+                bytes[2] == 0xBF
             ? bytes.sublist(3)
             : bytes,
       );
@@ -536,23 +584,26 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       final rows = const CsvToListConverter(eol: '\n').convert(content);
       if (rows.isEmpty) {
         _showSnackBar('CSV file is empty.', isError: true);
-        if(!mounted) return;
+        if (!mounted) return;
         setState(() => _isLoading = false);
         return;
       }
 
       // Parse and validate headers
-      final headers = rows.first.map((h) => h.toString().trim().toLowerCase()).toList();
+      final headers =
+          rows.first.map((h) => h.toString().trim().toLowerCase()).toList();
       if (!headers.contains('name')) {
         _showSnackBar('CSV missing required column: "name"', isError: true);
-        if(!mounted) return;
+        if (!mounted) return;
         setState(() => _isLoading = false);
         return;
       }
       for (final col in headers) {
         if (!_csvHeaders.contains(col)) {
-          _showSnackBar('Unknown column "$col". Expected: ${_csvHeaders.join(', ')}', isError: true);
-          if(!mounted) return;
+          _showSnackBar(
+              'Unknown column "$col". Expected: ${_csvHeaders.join(', ')}',
+              isError: true);
+          if (!mounted) return;
           setState(() => _isLoading = false);
           return;
         }
@@ -562,8 +613,10 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
 
       // Hard limit
       if (dataRows.length > _csvMaxRows) {
-        _showSnackBar('CSV has ${dataRows.length} rows. Maximum is $_csvMaxRows. Please split the file.', isError: true);
-        if(!mounted) return;
+        _showSnackBar(
+            'CSV has ${dataRows.length} rows. Maximum is $_csvMaxRows. Please split the file.',
+            isError: true);
+        if (!mounted) return;
         setState(() => _isLoading = false);
         return;
       }
@@ -587,7 +640,9 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
         }
         final email = getField(row, 'email');
         final phone = getField(row, 'phone');
-        final existing = await ref.read(customerRepositoryProvider).findDuplicate(email, phone);
+        final existing = await ref
+            .read(customerRepositoryProvider)
+            .findDuplicate(email, phone);
         final customer = Customer(
           id: existing?.id ?? const Uuid().v4(),
           name: name,
@@ -603,13 +658,13 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
           valid.add(customer);
         }
       }
-      if(!mounted) return;
+      if (!mounted) return;
       setState(() => _isLoading = false);
 
       if (!mounted) return;
       await _showImportPreviewDialog(valid, duplicates, errors);
     } catch (e) {
-      if(!mounted) return;
+      if (!mounted) return;
       setState(() => _isLoading = false);
       _showSnackBar('Error reading CSV: $e', isError: true);
     }
@@ -628,7 +683,8 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          final total = newCustomers.length + overwriteFlags.where((f) => f).length;
+          final total =
+              newCustomers.length + overwriteFlags.where((f) => f).length;
 
           return AlertDialog(
             title: const Text('Import Preview'),
@@ -661,24 +717,28 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
                           ),
                       ],
                     ),
-
                     if (duplicates.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Row(
                         children: [
                           const Expanded(
-                            child: Text('Duplicates (matched by email or phone):',
+                            child: Text(
+                                'Duplicates (matched by email or phone):',
                                 style: TextStyle(fontWeight: FontWeight.bold)),
                           ),
                           TextButton(
                             onPressed: () => setDialogState(() {
-                              for (int i = 0; i < overwriteFlags.length; i++) { overwriteFlags[i] = true; }
+                              for (int i = 0; i < overwriteFlags.length; i++) {
+                                overwriteFlags[i] = true;
+                              }
                             }),
                             child: const Text('Overwrite All'),
                           ),
                           TextButton(
                             onPressed: () => setDialogState(() {
-                              for (int i = 0; i < overwriteFlags.length; i++) { overwriteFlags[i] = false; }
+                              for (int i = 0; i < overwriteFlags.length; i++) {
+                                overwriteFlags[i] = false;
+                              }
                             }),
                             child: const Text('Skip All'),
                           ),
@@ -691,36 +751,40 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
                           margin: const EdgeInsets.only(bottom: 6),
                           child: ListTile(
                             dense: true,
-                            title: Text('${c.name}${c.businessName.isNotEmpty ? ' — ${c.businessName}' : ''}'),
+                            title: Text(
+                                '${c.name}${c.businessName.isNotEmpty ? ' — ${c.businessName}' : ''}'),
                             subtitle: Text('${c.email} · ${c.phone}'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Text('Skip', style: TextStyle(fontSize: 12)),
+                                const Text('Skip',
+                                    style: TextStyle(fontSize: 12)),
                                 Switch(
                                   value: overwriteFlags[i],
-                                  onChanged: (v) => setDialogState(() => overwriteFlags[i] = v),
+                                  onChanged: (v) => setDialogState(
+                                      () => overwriteFlags[i] = v),
                                 ),
-                                const Text('Overwrite', style: TextStyle(fontSize: 12)),
+                                const Text('Overwrite',
+                                    style: TextStyle(fontSize: 12)),
                               ],
                             ),
                           ),
                         );
                       }),
                     ],
-
                     if (errors.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       const Text('Skipped rows (errors):',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, color: Colors.red)),
                       const SizedBox(height: 8),
                       ...errors.map((e) => Padding(
                             padding: const EdgeInsets.only(bottom: 4),
                             child: Text('• $e',
-                                style: const TextStyle(fontSize: 12, color: Colors.red)),
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.red)),
                           )),
                     ],
-
                     const SizedBox(height: 12),
                     Text(
                       'Will import $total customer${total == 1 ? '' : 's'}.',
@@ -740,7 +804,8 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
                     ? null
                     : () async {
                         Navigator.pop(ctx);
-                        await _executeImport(newCustomers, duplicates, overwriteFlags);
+                        await _executeImport(
+                            newCustomers, duplicates, overwriteFlags);
                       },
                 icon: const Icon(Icons.upload),
                 label: Text('Import $total'),
@@ -757,7 +822,7 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
     List<Customer> duplicates,
     List<bool> overwriteFlags,
   ) async {
-    if(!mounted) return;
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       if (newCustomers.isNotEmpty) {
@@ -765,14 +830,18 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       }
       for (int i = 0; i < duplicates.length; i++) {
         if (overwriteFlags[i]) {
-          await ref.read(customerRepositoryProvider).updateCustomer(duplicates[i]);
+          await ref
+              .read(customerRepositoryProvider)
+              .updateCustomer(duplicates[i]);
         }
       }
       await _loadCustomers();
-      final imported = newCustomers.length + overwriteFlags.where((f) => f).length;
-      _showSnackBar('Imported $imported customer${imported == 1 ? '' : 's'} successfully!');
+      final imported =
+          newCustomers.length + overwriteFlags.where((f) => f).length;
+      _showSnackBar(
+          'Imported $imported customer${imported == 1 ? '' : 's'} successfully!');
     } catch (e) {
-      if(!mounted) return;
+      if (!mounted) return;
       setState(() => _isLoading = false);
       _showSnackBar('Import error: $e', isError: true);
     }
@@ -813,7 +882,7 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       await _loadCustomers();
       _showSnackBar('All customers deleted.');
     } catch (e) {
-      if(!mounted) return;
+      if (!mounted) return;
       setState(() => _isLoading = false);
       _showSnackBar('Error deleting customers: $e', isError: true);
     }
@@ -824,13 +893,13 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       List<List<String>> csvData = [
         ['name', 'email', 'phone', 'address', 'business_name', 'tax_number'],
         ..._filteredCustomers.map((c) => [
-          c.name,
-          c.email,
-          c.phone,
-          c.address,
-          c.businessName,
-          c.gstin,
-        ]),
+              c.name,
+              c.email,
+              c.phone,
+              c.address,
+              c.businessName,
+              c.gstin,
+            ]),
       ];
 
       final csv = buildQuotedCsv(csvData);
@@ -865,7 +934,8 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
             children: [
               pw.Text(
                 'Customer Export - $totalCount customer${totalCount == 1 ? '' : 's'}',
-                style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                style:
+                    pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
               ),
               pw.SizedBox(height: 8),
             ],
@@ -875,11 +945,13 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
             children: [
               pw.Text(
                 'Generated by Apex Books',
-                style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                style:
+                    const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
               ),
               pw.Text(
                 'Page ${context.pageNumber} of ${context.pagesCount}',
-                style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                style:
+                    const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
               ),
             ],
           ),
@@ -887,7 +959,15 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
             pw.TableHelper.fromTextArray(
               context: context,
               data: [
-                ['#', 'Name', 'Business Name', 'Email', 'Phone', 'Tax/VAT No', 'Address'],
+                [
+                  '#',
+                  'Name',
+                  'Business Name',
+                  'Email',
+                  'Phone',
+                  'Tax/VAT No',
+                  'Address'
+                ],
                 ..._filteredCustomers.indexed.map(((int, dynamic) e) => [
                       e.$1 + 1,
                       e.$2.name,
@@ -954,7 +1034,8 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
               child: SingleChildScrollView(child: _buildAddCustomerCard()),
             ),
             const SizedBox(width: 16),
-            Expanded(child: _buildCustomerTable(currentPageCustomers, totalPages)),
+            Expanded(
+                child: _buildCustomerTable(currentPageCustomers, totalPages)),
           ],
         ),
       ),
@@ -971,7 +1052,8 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: CustomerManagementScreenColors.topBarBackgroundGradientColor,
+              gradient:
+                  CustomerManagementScreenColors.topBarBackgroundGradientColor,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -1001,20 +1083,28 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
                 key: _formKey,
                 child: Column(
                   children: [
-                    _buildFormField(_nameController, 'Name', Icons.person, true, maxLength: 50),
-                    const SizedBox(height: 16),
-                    _buildFormField(_businessNameController, 'Business Name', Icons.business_center, false, maxLength: 100),
-                    const SizedBox(height: 16),
-                    _buildFormField(_emailController, 'Email', Icons.email, false, maxLength: 100,
-                        keyboardType: TextInputType.emailAddress),
-                    const SizedBox(height: 16),
-                    _buildFormField(_phoneController, 'Phone', Icons.phone, false,
-                        keyboardType: TextInputType.phone, maxLength: 12),
-                    const SizedBox(height: 16),
-                    _buildFormField(_gstinController, 'Tax/VAT Number (GSTIN)', Icons.receipt_long, false,
+                    _buildFormField(_nameController, 'Name', Icons.person, true,
                         maxLength: 50),
                     const SizedBox(height: 16),
-                    _buildFormField(_addressController, 'Address', Icons.location_on, false,
+                    _buildFormField(_businessNameController, 'Business Name',
+                        Icons.business_center, false,
+                        maxLength: 100),
+                    const SizedBox(height: 16),
+                    _buildFormField(
+                        _emailController, 'Email', Icons.email, false,
+                        maxLength: 100,
+                        keyboardType: TextInputType.emailAddress),
+                    const SizedBox(height: 16),
+                    _buildFormField(
+                        _phoneController, 'Phone', Icons.phone, false,
+                        keyboardType: TextInputType.phone, maxLength: 12),
+                    const SizedBox(height: 16),
+                    _buildFormField(_gstinController, 'Tax/VAT Number (GSTIN)',
+                        Icons.receipt_long, false,
+                        maxLength: 50),
+                    const SizedBox(height: 16),
+                    _buildFormField(
+                        _addressController, 'Address', Icons.location_on, false,
                         maxLines: 3, maxLength: 100),
                     const SizedBox(height: 24),
                     Row(
@@ -1054,14 +1144,14 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
   }
 
   Widget _buildFormField(
-      TextEditingController controller,
-      String label,
-      IconData icon,
-      bool required, {
-        int maxLines = 1,
-        int? maxLength,
-        TextInputType? keyboardType,
-      }) {
+    TextEditingController controller,
+    String label,
+    IconData icon,
+    bool required, {
+    int maxLines = 1,
+    int? maxLength,
+    TextInputType? keyboardType,
+  }) {
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
@@ -1073,16 +1163,17 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
         counterText: '',
       ),
       validator: required
           ? (value) {
-        if (value == null || value.trim().isEmpty) {
-          return 'Please enter $label';
-        }
-        return null;
-      }
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter $label';
+              }
+              return null;
+            }
           : null,
     );
   }
@@ -1099,27 +1190,27 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : customers.isEmpty
-                ? _buildEmptyState()
-                : Scrollbar(
-                    controller: _horizontalScrollController,
-                    thumbVisibility: true,
-                    trackVisibility: true,
-                    thickness: 12,
-                    radius: const Radius.circular(6),
-                    interactive: true,
-                    notificationPredicate: (notif) => notif.depth == 1,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.vertical,
-                      child: SingleChildScrollView(
+                    ? _buildEmptyState()
+                    : Scrollbar(
                         controller: _horizontalScrollController,
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 800),
-                          child: _buildDataTable(customers),
+                        thumbVisibility: true,
+                        trackVisibility: true,
+                        thickness: 12,
+                        radius: const Radius.circular(6),
+                        interactive: true,
+                        notificationPredicate: (notif) => notif.depth == 1,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.vertical,
+                          child: SingleChildScrollView(
+                            controller: _horizontalScrollController,
+                            scrollDirection: Axis.horizontal,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minWidth: 800),
+                              child: _buildDataTable(customers),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
           ),
           _buildPaginationControls(totalPages),
         ],
@@ -1227,12 +1318,15 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
               decoration: InputDecoration(
                 labelText: 'Search customers...',
                 prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+                border: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppBorderRadius.xsmall)),
                 filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                fillColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
               ),
               onChanged: (value) {
-                if(!mounted) return;
+                if (!mounted) return;
                 setState(() {
                   _searchQuery = value;
                   _filterAndSort();
@@ -1244,7 +1338,8 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+              border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
             ),
@@ -1258,7 +1353,7 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
                 ],
                 onChanged: (value) {
                   if (value != null) {
-                    if(!mounted) return;
+                    if (!mounted) return;
                     setState(() {
                       _sortBy = value;
                       _filterAndSort();
@@ -1271,7 +1366,8 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
           const SizedBox(width: 8),
           IconButton.filled(
             onPressed: _toggleSortOrder,
-            icon: Icon(_isAscending ? Icons.arrow_upward : Icons.arrow_downward),
+            icon:
+                Icon(_isAscending ? Icons.arrow_upward : Icons.arrow_downward),
             tooltip: _isAscending ? 'Ascending' : 'Descending',
           ),
         ],
@@ -1284,18 +1380,22 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.person_off, size: 80, color: Theme.of(context).colorScheme.outlineVariant),
+          Icon(Icons.person_off,
+              size: 80, color: Theme.of(context).colorScheme.outlineVariant),
           const SizedBox(height: 16),
           Text(
             'No customers found',
-            style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(
+                fontSize: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
           Text(
             _searchQuery.isEmpty
                 ? 'Add your first customer to get started'
                 : 'Try adjusting your search',
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -1310,25 +1410,43 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
       dataRowMinHeight: 56,
       dataRowMaxHeight: 72,
       columns: [
-        const DataColumn(label: Text('Sl. No', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('Business Name', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('Phone', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('Tax/VAT No', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('Address', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+        const DataColumn(
+            label:
+                Text('Sl. No', style: TextStyle(fontWeight: FontWeight.bold))),
+        const DataColumn(
+            label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
+        const DataColumn(
+            label: Text('Business Name',
+                style: TextStyle(fontWeight: FontWeight.bold))),
+        const DataColumn(
+            label:
+                Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
+        const DataColumn(
+            label:
+                Text('Phone', style: TextStyle(fontWeight: FontWeight.bold))),
+        const DataColumn(
+            label: Text('Tax/VAT No',
+                style: TextStyle(fontWeight: FontWeight.bold))),
+        const DataColumn(
+            label:
+                Text('Address', style: TextStyle(fontWeight: FontWeight.bold))),
+        const DataColumn(
+            label:
+                Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
       ],
       rows: List.generate(customers.length, (index) {
         final customer = customers[index];
         final serial = (_currentPage * _pageSize) + index + 1;
         return DataRow(
           color: WidgetStateProperty.all(
-            index.isEven ? Colors.transparent : Theme.of(context).colorScheme.surfaceContainerHighest,
+            index.isEven
+                ? Colors.transparent
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
           cells: [
             DataCell(Text(serial.toString())),
-            DataCell(Text(customer.name, style: const TextStyle(fontWeight: FontWeight.w500))),
+            DataCell(Text(customer.name,
+                style: const TextStyle(fontWeight: FontWeight.w500))),
             DataCell(Text(customer.businessName)),
             DataCell(Text(customer.email)),
             DataCell(Text(customer.phone)),
@@ -1351,13 +1469,13 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
                   IconButton(
                     icon: const Icon(Icons.visibility, size: 20),
                     color: Colors.blue,
-                    onPressed: () => _showCustomerDialog(customer,false),
+                    onPressed: () => _showCustomerDialog(customer, false),
                     tooltip: 'View',
                   ),
                   IconButton(
                     icon: const Icon(Icons.edit, size: 20),
                     color: Colors.orange,
-                    onPressed: () => _showCustomerDialog(customer,true),
+                    onPressed: () => _showCustomerDialog(customer, true),
                     tooltip: 'Edit',
                   ),
                   if (widget.user.isAdmin())
@@ -1391,12 +1509,17 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
         children: [
           Row(
             children: [
-              Text('Rows per page:', style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13)),
+              Text('Rows per page:',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontSize: 13)),
               const SizedBox(width: 8),
               DropdownButton<int>(
                 value: _pageSize,
                 underline: const SizedBox(),
-                items: [10, 25, 50, 100].map((n) => DropdownMenuItem(value: n, child: Text('$n'))).toList(),
+                items: [10, 25, 50, 100]
+                    .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
+                    .toList(),
                 onChanged: (n) {
                   if (n == null || !mounted) return;
                   setState(() {
@@ -1408,19 +1531,23 @@ class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScr
               const SizedBox(width: 16),
               Text(
                 'Showing ${_currentPage * _pageSize + 1} - ${(_currentPage * _pageSize + _pageSize).clamp(0, _filteredCustomers.length)} of ${_filteredCustomers.length}',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                style:
+                    TextStyle(color: Theme.of(context).colorScheme.onSurface),
               ),
             ],
           ),
           Row(
             children: [
               IconButton(
-                onPressed: _currentPage > 0 ? () => _changePage(_currentPage - 1) : null,
+                onPressed: _currentPage > 0
+                    ? () => _changePage(_currentPage - 1)
+                    : null,
                 icon: const Icon(Icons.chevron_left),
                 tooltip: 'Previous',
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -1461,7 +1588,6 @@ class _TableHeader extends StatelessWidget {
     );
   }
 }
-
 
 // class CustomerManagementScreen1 extends StatefulWidget {
 //   const CustomerManagementScreen1({super.key});

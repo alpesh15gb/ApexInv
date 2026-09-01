@@ -28,22 +28,29 @@ class PdfReportHeader {
                 children: [
                   pw.Text(company?.name ?? '',
                       style: pw.TextStyle(
-                          fontSize: 14, fontWeight: pw.FontWeight.bold, color: accentColor)),
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                          color: accentColor)),
                   if ((company?.address ?? '').isNotEmpty)
                     pw.Text(company!.address,
-                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey700)),
                   if ((company?.phone ?? '').isNotEmpty)
                     pw.Text('Phone: ${company!.phone}',
-                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey700)),
                   if ((company?.email ?? '').isNotEmpty)
                     pw.Text('Email: ${company!.email}',
-                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey700)),
                   if ((company?.website ?? '').isNotEmpty)
                     pw.Text(company!.website,
-                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey700)),
                   if ((company?.gstin ?? '').isNotEmpty)
                     pw.Text('${taxLabel(company?.country)}: ${company!.gstin}',
-                        style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        style: const pw.TextStyle(
+                            fontSize: 9, color: PdfColors.grey700)),
                 ],
               ),
             ),
@@ -52,10 +59,13 @@ class PdfReportHeader {
               children: [
                 pw.Text(title,
                     style: pw.TextStyle(
-                        fontSize: 12, fontWeight: pw.FontWeight.bold, color: accentColor)),
+                        fontSize: 12,
+                        fontWeight: pw.FontWeight.bold,
+                        color: accentColor)),
                 pw.SizedBox(height: 4),
                 pw.Text('Date: $generatedOn',
-                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    style: const pw.TextStyle(
+                        fontSize: 9, color: PdfColors.grey700)),
               ],
             ),
           ],

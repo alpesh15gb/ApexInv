@@ -963,7 +963,8 @@ class _InvoiceSettingsScreenState extends ConsumerState<InvoiceSettingsScreen> {
                                                 .outlineVariant),
                                       ),
                                       child: SwitchListTile(
-                                        title: const Text('Show CGST/SGST/IGST'),
+                                        title:
+                                            const Text('Show CGST/SGST/IGST'),
                                         subtitle: const Text(
                                           "Split tax into CGST + SGST, or IGST for interstate invoices (India only).",
                                         ),

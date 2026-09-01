@@ -4,23 +4,29 @@ import 'package:apexbooks/repositories/settings_repository.dart';
 
 class SqliteSettingsRepository implements SettingsRepository {
   @override
-  Future<void> setSetting(SettingKey key, String value) => SettingsService.setSetting(key, value);
+  Future<void> setSetting(SettingKey key, String value) =>
+      SettingsService.setSetting(key, value);
   @override
   Future<String?> getSetting(SettingKey key) => SettingsService.getSetting(key);
   @override
-  Future<void> deleteSetting(SettingKey key) => SettingsService.deleteSetting(key);
+  Future<void> deleteSetting(SettingKey key) =>
+      SettingsService.deleteSetting(key);
   @override
-  Future<void> setInvoiceTemplate(InvoiceTemplate template) => SettingsService.setInvoiceTemplate(template);
+  Future<void> setInvoiceTemplate(InvoiceTemplate template) =>
+      SettingsService.setInvoiceTemplate(template);
   @override
-  Future<InvoiceTemplate> getInvoiceTemplate() => SettingsService.getInvoiceTemplate();
+  Future<InvoiceTemplate> getInvoiceTemplate() =>
+      SettingsService.getInvoiceTemplate();
   @override
-  Future<void> setPdfThemeColor(String hexColor) => SettingsService.setPdfThemeColor(hexColor);
+  Future<void> setPdfThemeColor(String hexColor) =>
+      SettingsService.setPdfThemeColor(hexColor);
   @override
   Future<void> clearPdfThemeColor() => SettingsService.clearPdfThemeColor();
   @override
   Future<String?> getPdfThemeColor() => SettingsService.getPdfThemeColor();
   @override
-  Future<void> setCompanyLogo(String base64Logo) => SettingsService.setCompanyLogo(base64Logo);
+  Future<void> setCompanyLogo(String base64Logo) =>
+      SettingsService.setCompanyLogo(base64Logo);
   @override
   Future<String?> getCompanyLogo() => SettingsService.getCompanyLogo();
   @override
@@ -28,25 +34,32 @@ class SqliteSettingsRepository implements SettingsRepository {
   @override
   Future<String> getLogoSize() => SettingsService.getLogoSize();
   @override
-  Future<void> setCurrency(String currencyCode) => SettingsService.setCurrency(currencyCode);
+  Future<void> setCurrency(String currencyCode) =>
+      SettingsService.setCurrency(currencyCode);
   @override
   Future<CurrencyOption> getCurrency() => SettingsService.getCurrency();
   @override
   Future<List<UpiEntry>> getUpiIds() => SettingsService.getUpiIds();
   @override
-  Future<void> setUpiIds(List<UpiEntry> entries) => SettingsService.setUpiIds(entries);
+  Future<void> setUpiIds(List<UpiEntry> entries) =>
+      SettingsService.setUpiIds(entries);
   @override
-  Future<List<BankAccount>> getBankAccounts() => SettingsService.getBankAccounts();
+  Future<List<BankAccount>> getBankAccounts() =>
+      SettingsService.getBankAccounts();
   @override
-  Future<void> setBankAccounts(List<BankAccount> accounts) => SettingsService.setBankAccounts(accounts);
+  Future<void> setBankAccounts(List<BankAccount> accounts) =>
+      SettingsService.setBankAccounts(accounts);
   @override
-  Future<ProductColumnsConfig> getProductColumnsConfig() => SettingsService.getProductColumnsConfig();
+  Future<ProductColumnsConfig> getProductColumnsConfig() =>
+      SettingsService.getProductColumnsConfig();
   @override
-  Future<void> setProductColumnsConfig(ProductColumnsConfig config) => SettingsService.setProductColumnsConfig(config);
+  Future<void> setProductColumnsConfig(ProductColumnsConfig config) =>
+      SettingsService.setProductColumnsConfig(config);
   @override
   Future<bool> getShowBankDetails() => SettingsService.getShowBankDetails();
   @override
-  Future<void> setShowBankDetails(bool show) => SettingsService.setShowBankDetails(show);
+  Future<void> setShowBankDetails(bool show) =>
+      SettingsService.setShowBankDetails(show);
   @override
   Future<bool> getShowPhone() => SettingsService.getShowPhone();
   @override
@@ -58,7 +71,8 @@ class SqliteSettingsRepository implements SettingsRepository {
   @override
   Future<bool> getShowCompanyName() => SettingsService.getShowCompanyName();
   @override
-  Future<void> setShowCompanyName(bool show) => SettingsService.setShowCompanyName(show);
+  Future<void> setShowCompanyName(bool show) =>
+      SettingsService.setShowCompanyName(show);
   @override
   Future<bool> getShowPan() => SettingsService.getShowPan();
   @override
@@ -70,11 +84,13 @@ class SqliteSettingsRepository implements SettingsRepository {
   @override
   Future<bool> getShowWebsite() => SettingsService.getShowWebsite();
   @override
-  Future<void> setShowWebsite(bool show) => SettingsService.setShowWebsite(show);
+  Future<void> setShowWebsite(bool show) =>
+      SettingsService.setShowWebsite(show);
   @override
   Future<bool> getShowAddress() => SettingsService.getShowAddress();
   @override
-  Future<void> setShowAddress(bool show) => SettingsService.setShowAddress(show);
+  Future<void> setShowAddress(bool show) =>
+      SettingsService.setShowAddress(show);
   @override
   Future<bool> getShowLogo() => SettingsService.getShowLogo();
   @override
@@ -92,20 +108,17 @@ class SqliteSettingsRepository implements SettingsRepository {
   Future<void> setShowCustomerAddress(bool show) =>
       SettingsService.setShowCustomerAddress(show);
   @override
-  Future<bool> getShowCustomerPhone() =>
-      SettingsService.getShowCustomerPhone();
+  Future<bool> getShowCustomerPhone() => SettingsService.getShowCustomerPhone();
   @override
   Future<void> setShowCustomerPhone(bool show) =>
       SettingsService.setShowCustomerPhone(show);
   @override
-  Future<bool> getShowCustomerEmail() =>
-      SettingsService.getShowCustomerEmail();
+  Future<bool> getShowCustomerEmail() => SettingsService.getShowCustomerEmail();
   @override
   Future<void> setShowCustomerEmail(bool show) =>
       SettingsService.setShowCustomerEmail(show);
   @override
-  Future<bool> getShowCustomerGstin() =>
-      SettingsService.getShowCustomerGstin();
+  Future<bool> getShowCustomerGstin() => SettingsService.getShowCustomerGstin();
   @override
   Future<void> setShowCustomerGstin(bool show) =>
       SettingsService.setShowCustomerGstin(show);
@@ -122,51 +135,65 @@ class SqliteSettingsRepository implements SettingsRepository {
   @override
   Future<bool> getShowGstFields() => SettingsService.getShowGstFields();
   @override
-  Future<bool> getShowInvoiceFooterBranding() => SettingsService.getShowInvoiceFooterBranding();
+  Future<bool> getShowInvoiceFooterBranding() =>
+      SettingsService.getShowInvoiceFooterBranding();
   @override
-  Future<bool> getFractionalQuantity() => SettingsService.getFractionalQuantity();
+  Future<bool> getFractionalQuantity() =>
+      SettingsService.getFractionalQuantity();
   @override
   Future<String> getQuantityLabel() => SettingsService.getQuantityLabel();
   @override
   Future<bool> getShowQuantity() => SettingsService.getShowQuantity();
   @override
-  Future<void> setShowQuantity(bool show) => SettingsService.setShowQuantity(show);
+  Future<void> setShowQuantity(bool show) =>
+      SettingsService.setShowQuantity(show);
   @override
   Future<bool> getShowDiscount() => SettingsService.getShowDiscount();
   @override
-  Future<void> setShowDiscount(bool show) => SettingsService.setShowDiscount(show);
+  Future<void> setShowDiscount(bool show) =>
+      SettingsService.setShowDiscount(show);
   @override
   Future<bool> getShowTypeTag() => SettingsService.getShowTypeTag();
   @override
-  Future<void> setShowTypeTag(bool show) => SettingsService.setShowTypeTag(show);
+  Future<void> setShowTypeTag(bool show) =>
+      SettingsService.setShowTypeTag(show);
   @override
   Future<bool> getShowTotalQuantity() => SettingsService.getShowTotalQuantity();
   @override
-  Future<void> setShowTotalQuantity(bool show) => SettingsService.setShowTotalQuantity(show);
+  Future<void> setShowTotalQuantity(bool show) =>
+      SettingsService.setShowTotalQuantity(show);
   @override
-  Future<bool> getShowPreviousBalance() => SettingsService.getShowPreviousBalance();
+  Future<bool> getShowPreviousBalance() =>
+      SettingsService.getShowPreviousBalance();
   @override
-  Future<void> setShowPreviousBalance(bool show) => SettingsService.setShowPreviousBalance(show);
+  Future<void> setShowPreviousBalance(bool show) =>
+      SettingsService.setShowPreviousBalance(show);
   @override
-  Future<void> setSignatureImage(String base64Image) => SettingsService.setSignatureImage(base64Image);
+  Future<void> setSignatureImage(String base64Image) =>
+      SettingsService.setSignatureImage(base64Image);
   @override
   Future<String?> getSignatureImage() => SettingsService.getSignatureImage();
   @override
-  Future<void> setWatermarkImage(String base64Image) => SettingsService.setWatermarkImage(base64Image);
+  Future<void> setWatermarkImage(String base64Image) =>
+      SettingsService.setWatermarkImage(base64Image);
   @override
   Future<String?> getWatermarkImage() => SettingsService.getWatermarkImage();
   @override
-  Future<void> setWatermarkOpacity(double opacity) => SettingsService.setWatermarkOpacity(opacity);
+  Future<void> setWatermarkOpacity(double opacity) =>
+      SettingsService.setWatermarkOpacity(opacity);
   @override
   Future<double> getWatermarkOpacity() => SettingsService.getWatermarkOpacity();
 
   @override
-  Future<void> setDefaultInvoiceTitle(String? title) => SettingsService.setDefaultInvoiceTitle(title);
+  Future<void> setDefaultInvoiceTitle(String? title) =>
+      SettingsService.setDefaultInvoiceTitle(title);
 
   @override
-  Future<String?> getDefaultInvoiceTitle() => SettingsService.getDefaultInvoiceTitle();
+  Future<String?> getDefaultInvoiceTitle() =>
+      SettingsService.getDefaultInvoiceTitle();
   @override
-  Future<String> getSignaturePosition() => SettingsService.getSignaturePosition();
+  Future<String> getSignaturePosition() =>
+      SettingsService.getSignaturePosition();
   @override
   Future<String> getDefaultTaxMode() => SettingsService.getDefaultTaxMode();
   @override
@@ -174,21 +201,26 @@ class SqliteSettingsRepository implements SettingsRepository {
   @override
   Future<BusinessType> getBusinessType() => SettingsService.getBusinessType();
   @override
-  Future<void> setBusinessType(BusinessType type) => SettingsService.setBusinessType(type);
+  Future<void> setBusinessType(BusinessType type) =>
+      SettingsService.setBusinessType(type);
   @override
   Future<DateFormatOption> getDateFormat() => SettingsService.getDateFormat();
   @override
-  Future<void> setDateFormat(DateFormatOption option) => SettingsService.setDateFormat(option);
+  Future<void> setDateFormat(DateFormatOption option) =>
+      SettingsService.setDateFormat(option);
   @override
   Future<PageSize> getPageSize() => SettingsService.getPageSize();
   @override
   Future<void> setPageSize(PageSize size) => SettingsService.setPageSize(size);
   @override
-  Future<bool> getShowAliasNameInPdf() => SettingsService.getShowAliasNameInPdf();
+  Future<bool> getShowAliasNameInPdf() =>
+      SettingsService.getShowAliasNameInPdf();
   @override
-  Future<bool> getShowTaxButtonInInvoicePage() => SettingsService.getShowTaxButtonInInvoicePage();
+  Future<bool> getShowTaxButtonInInvoicePage() =>
+      SettingsService.getShowTaxButtonInInvoicePage();
   @override
-  Future<bool> getHideInvoiceNumberByDefault() => SettingsService.getHideInvoiceNumberByDefault();
+  Future<bool> getHideInvoiceNumberByDefault() =>
+      SettingsService.getHideInvoiceNumberByDefault();
   @override
   Future<String> getThemeMode() => SettingsService.getThemeMode();
   @override
@@ -196,9 +228,12 @@ class SqliteSettingsRepository implements SettingsRepository {
   @override
   Future<String?> getAppLocale() => SettingsService.getAppLocale();
   @override
-  Future<void> setAppLocale(String? languageCode) => SettingsService.setAppLocale(languageCode);
+  Future<void> setAppLocale(String? languageCode) =>
+      SettingsService.setAppLocale(languageCode);
   @override
-  Future<bool> getAllowDuplicateInvoiceItems() => SettingsService.getAllowDuplicateInvoiceItems();
+  Future<bool> getAllowDuplicateInvoiceItems() =>
+      SettingsService.getAllowDuplicateInvoiceItems();
   @override
-  Future<void> setAllowDuplicateInvoiceItems(bool allow) => SettingsService.setAllowDuplicateInvoiceItems(allow);
+  Future<void> setAllowDuplicateInvoiceItems(bool allow) =>
+      SettingsService.setAllowDuplicateInvoiceItems(allow);
 }

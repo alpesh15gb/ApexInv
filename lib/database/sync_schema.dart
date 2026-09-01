@@ -36,6 +36,8 @@ const syncTableOrder = <String>[
   'company_info',
   'customers',
   'products',
+  'purchase_bills',
+  'purchase_bill_items',
   'invoices',
   'invoice_items',
   'invoice_payments',
@@ -60,10 +62,17 @@ const syncLocalOnlyColumns = <String>{
   'rowid',
 };
 
-/// Adds the sync columns to [table] if missing. Idempotent — safe to call
-/// from both create and upgrade paths.
+/// Adds the sync columns to [table] if the table exists and columns are
+/// missing. Idempotent — safe to call from both create and upgrade paths.
+/// Silently skips tables that don't exist yet (a later migration may create
+/// them and register sync columns itself).
 Future<void> addSyncColumns(Database db, String table,
     {bool withCloudId = false, bool withDeletedAt = false}) async {
+  final exists = Sqflite.firstIntValue(await db.rawQuery(
+          "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+          [table])) ==
+      1;
+  if (!exists) return;
   final cols = await db.rawQuery('PRAGMA table_info($table)');
   final names = cols.map((r) => r['name'] as String).toSet();
 
@@ -83,6 +92,8 @@ Future<void> addSyncColumns(Database db, String table,
 }
 
 /// Installs outbox + state tables and change-capture triggers. Idempotent.
+/// Only installs capture triggers for tables that exist — a later migration
+/// re-runs this to pick up newly created tables.
 Future<void> installSyncCapture(Database db) async {
   await db.execute('''
     CREATE TABLE IF NOT EXISTS _sync_outbox (
@@ -107,6 +118,11 @@ Future<void> installSyncCapture(Database db) async {
   ''');
 
   for (final table in syncTableOrder) {
+    final exists = Sqflite.firstIntValue(await db.rawQuery(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+            [table])) ==
+        1;
+    if (!exists) continue;
     await _installTableTriggers(db, table);
   }
 }
@@ -185,6 +201,11 @@ Future<void> _installTableTriggers(Database db, String table) async {
 /// creation order; every value is distinct-but-stable and in the past.
 Future<void> backfillSyncColumns(Database db) async {
   for (final table in syncTableOrder) {
+    final exists = Sqflite.firstIntValue(await db.rawQuery(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+            [table])) ==
+        1;
+    if (!exists) continue;
     await db.execute('''
       UPDATE $table SET updated_at =
         strftime('%Y-%m-%dT%H:%M:%fZ', '2000-01-01 00:00:00', '+' || rowid || ' seconds')

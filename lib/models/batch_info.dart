@@ -29,8 +29,12 @@ class BatchInfo {
       serialNumber: map['serial_number'] as String?,
       quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
       mrp: (map['mrp'] as num?)?.toDouble() ?? 0.0,
-      expiryDate: map['expiry_date'] != null ? DateTime.parse(map['expiry_date']) : null,
-      manufacturingDate: map['manufacturing_date'] != null ? DateTime.parse(map['manufacturing_date']) : null,
+      expiryDate: map['expiry_date'] != null
+          ? DateTime.parse(map['expiry_date'])
+          : null,
+      manufacturingDate: map['manufacturing_date'] != null
+          ? DateTime.parse(map['manufacturing_date'])
+          : null,
       size: map['size'] as String?,
     );
   }

@@ -10,7 +10,8 @@ class InvoiceNotifier extends AsyncNotifier<List<Invoice>> {
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => ref.read(invoiceRepositoryProvider).getAllInvoices());
+    state = await AsyncValue.guard(
+        () => ref.read(invoiceRepositoryProvider).getAllInvoices());
   }
 
   Future<void> deleteInvoice(String id) async {

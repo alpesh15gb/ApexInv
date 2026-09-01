@@ -25,7 +25,9 @@ class TestGateScreen extends StatelessWidget {
               Icon(isNoInternet ? Icons.wifi_off : Icons.timer_off, size: 64),
               AppSpacing.hLarge,
               Text(
-                isNoInternet ? l10n.testGateNoInternetTitle : l10n.testGateExpiredTitle,
+                isNoInternet
+                    ? l10n.testGateNoInternetTitle
+                    : l10n.testGateExpiredTitle,
                 style: const TextStyle(fontSize: AppFontSize.xlarge),
                 textAlign: TextAlign.center,
               ),
@@ -38,7 +40,8 @@ class TestGateScreen extends StatelessWidget {
               ),
               AppSpacing.hLarge,
               if (isNoInternet && onRetry != null)
-                ElevatedButton(onPressed: onRetry, child: Text(l10n.actionRetry)),
+                ElevatedButton(
+                    onPressed: onRetry, child: Text(l10n.actionRetry)),
             ],
           ),
         ),

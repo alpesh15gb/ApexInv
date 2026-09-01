@@ -58,7 +58,8 @@ class PDFService {
       _watermarkBase64Cache = null;
       return null;
     }
-    if (base64Watermark == _watermarkBase64Cache && _watermarkBytesCache != null) {
+    if (base64Watermark == _watermarkBase64Cache &&
+        _watermarkBytesCache != null) {
       return _watermarkBytesCache;
     }
     _watermarkBase64Cache = base64Watermark;
@@ -115,10 +116,13 @@ class PDFService {
       BackendServices.settings.getShowWebsite(), // 35
       BackendServices.settings.getShowAddress(), // 36
       BackendServices.settings.getShowLogo(), // 37
-      BackendServices.settings.getSetting(SettingKey.thermalCompanyNameSize), // 38
+      BackendServices.settings
+          .getSetting(SettingKey.thermalCompanyNameSize), // 38
       BackendServices.settings.getSetting(SettingKey.invoiceLeadingZeros), // 39
-      BackendServices.settings.getSetting(SettingKey.showDescriptionInPdf), // 40
-      BackendServices.settings.getSetting(SettingKey.descriptionNewLineInPdf), // 41
+      BackendServices.settings
+          .getSetting(SettingKey.showDescriptionInPdf), // 40
+      BackendServices.settings
+          .getSetting(SettingKey.descriptionNewLineInPdf), // 41
       BackendServices.settings.getShowCustomerBusinessName(), // 42
       BackendServices.settings.getShowCustomerAddress(), // 43
       BackendServices.settings.getShowCustomerPhone(), // 44
@@ -519,7 +523,7 @@ class PDFService {
           themeColor: s.themeColor,
           previousBalanceDue: effectivePreviousBalance,
           pageFormat: s.pageFormat,
-          pageSize:s.pageSize,
+          pageSize: s.pageSize,
           pdfTheme: pdfTheme,
           itemLayout: s.thermalItemLayout,
           showRoundOff: s.showRoundOff,
@@ -587,7 +591,8 @@ class PDFService {
       {String datePattern = 'dd/MM/yyyy'}) async {
     final settings = await fetchPdfSettings(datePattern: datePattern);
     final previousBalanceDue = settings.showPreviousBalance
-        ? await BackendServices.invoices.getPreviousBalanceDueForInvoice(invoice)
+        ? await BackendServices.invoices
+            .getPreviousBalanceDueForInvoice(invoice)
         : 0.0;
     return generateInvoicePDFWithSettings(
       invoice,
@@ -689,7 +694,8 @@ class PDFService {
                     icon: const Icon(Icons.print_outlined),
                     tooltip: 'Print',
                     onPressed: () async {
-                      final template = await BackendServices.settings.getInvoiceTemplate();
+                      final template =
+                          await BackendServices.settings.getInvoiceTemplate();
                       if (template == InvoiceTemplate.thermal) {
                         if (!dialogContext.mounted) return;
                         await ThermalPrinterService.printInvoice(

@@ -400,8 +400,8 @@ class InvoiceService {
       additionalCosts:
           AdditionalCost.listFromJson(i['additional_costs'] as String?),
       previousBalance: (i['previous_balance'] as num?)?.toDouble() ?? 0.0,
-      invoiceDiscountType:
-          InvoiceDiscountTypeExtension.fromKey(i['invoice_discount_type'] as String?),
+      invoiceDiscountType: InvoiceDiscountTypeExtension.fromKey(
+          i['invoice_discount_type'] as String?),
       invoiceDiscountValue:
           (i['invoice_discount_value'] as num?)?.toDouble() ?? 0.0,
       hideInvoiceNumber: (i['hide_invoice_number'] as int?) == 1,
@@ -619,8 +619,8 @@ class InvoiceService {
   // Soft Delete
   static Future<void> softDeleteInvoice(String id) async {
     final db = await dbHelper.database;
-    final rows = await db.query('invoices',
-        where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows =
+        await db.query('invoices', where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty || rows.first['deleted_at'] != null) return;
     await db.update(
       'invoices',
@@ -634,8 +634,8 @@ class InvoiceService {
 
   static Future<void> restoreInvoice(String id) async {
     final db = await dbHelper.database;
-    final rows = await db.query('invoices',
-        where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows =
+        await db.query('invoices', where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty || rows.first['deleted_at'] == null) return;
     await db.update(
       'invoices',
@@ -651,15 +651,17 @@ class InvoiceService {
     final db = await dbHelper.database;
     // Stock is only still reserved if the invoice was never soft-deleted
     // (soft delete already restored it; restoring again would double-count).
-    final rows = await db.query('invoices',
-        where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows =
+        await db.query('invoices', where: 'id = ?', whereArgs: [id], limit: 1);
     final wasSoftDeleted = rows.isNotEmpty && rows.first['deleted_at'] != null;
     if (!wasSoftDeleted) {
       await _adjustStockForInvoice(id, 1);
     }
     await db.transaction((txn) async {
-      await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
-      await txn.delete('invoice_payments', where: 'invoice_id = ?', whereArgs: [id]);
+      await txn
+          .delete('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
+      await txn
+          .delete('invoice_payments', where: 'invoice_id = ?', whereArgs: [id]);
       await txn.delete('invoices', where: 'id = ?', whereArgs: [id]);
     });
   }
@@ -901,7 +903,8 @@ class InvoiceService {
     final db = await dbHelper.database;
     final now = DateTime.now();
     final todayStart = AppDate.dateKeyStart(now);
-    final tomorrowEnd = AppDate.dateKeyStart(DateTime(now.year, now.month, now.day + 2));
+    final tomorrowEnd =
+        AppDate.dateKeyStart(DateTime(now.year, now.month, now.day + 2));
     final rows = await db.query(
       'invoices',
       where: 'deleted_at IS NULL AND type = ? AND due_date IS NOT NULL '
@@ -940,7 +943,8 @@ class InvoiceService {
 
   /// This customer's not-fully-paid invoices, oldest first, across all
   /// currencies — for applying one payment across several open invoices.
-  static Future<List<Invoice>> getOpenInvoicesForCustomer(String customerId) async {
+  static Future<List<Invoice>> getOpenInvoicesForCustomer(
+      String customerId) async {
     final db = await dbHelper.database;
     final rows = await db.query(
       'invoices',
@@ -960,7 +964,11 @@ class InvoiceService {
   static Future<List<({String id, String name})>> getCustomersWithInvoices(
       {String? filterType}) async {
     final db = await dbHelper.database;
-    final whereParts = ["deleted_at IS NULL", "customer_id IS NOT NULL", "customer_id != ''"];
+    final whereParts = [
+      "deleted_at IS NULL",
+      "customer_id IS NOT NULL",
+      "customer_id != ''"
+    ];
     final args = <Object?>[];
     if (filterType != null && filterType.isNotEmpty) {
       whereParts.add('type = ?');
@@ -1068,7 +1076,8 @@ class InvoiceService {
           int.tryParse(lastNumberStr.replaceAll(RegExp(r'\D'), ''));
       nextNumber = (numericPart != null) ? numericPart + 1 : 1;
     } else {
-      final startStr = await SettingsService.getSetting(SettingKey.invoiceStartingNumber);
+      final startStr =
+          await SettingsService.getSetting(SettingKey.invoiceStartingNumber);
       nextNumber = int.tryParse(startStr ?? '') ?? 1;
       if (nextNumber < 1) nextNumber = 1;
     }

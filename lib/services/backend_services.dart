@@ -31,14 +31,19 @@ class BackendServices {
     _installation = installation;
   }
 
-  static SettingsRepository get settings => _settings ??
+  static SettingsRepository get settings =>
+      _settings ??
       (throw StateError('BackendServices.configure() was never called.'));
-  static CompanyInfoRepository get companyInfo => _companyInfo ??
+  static CompanyInfoRepository get companyInfo =>
+      _companyInfo ??
       (throw StateError('BackendServices.configure() was never called.'));
-  static InvoiceRepository get invoices => _invoices ??
+  static InvoiceRepository get invoices =>
+      _invoices ??
       (throw StateError('BackendServices.configure() was never called.'));
-  static PaymentRepository get payments => _payments ??
+  static PaymentRepository get payments =>
+      _payments ??
       (throw StateError('BackendServices.configure() was never called.'));
-  static InstallationRepository get installation => _installation ??
+  static InstallationRepository get installation =>
+      _installation ??
       (throw StateError('BackendServices.configure() was never called.'));
 }

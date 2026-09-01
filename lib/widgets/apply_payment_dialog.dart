@@ -60,8 +60,12 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
   void dispose() {
     _amountController.dispose();
     _notesController.dispose();
+    _chequeController.dispose();
     super.dispose();
   }
+
+  final _chequeController = TextEditingController();
+  DateTime? _chequeDate;
 
   Future<void> _loadPayments() async {
     final payments = await ref
@@ -109,6 +113,12 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
             notes: _notesController.text.trim().isEmpty
                 ? null
                 : _notesController.text.trim(),
+            chequeNumber: _selectedMethod == 'Check'
+                ? (_chequeController.text.trim().isEmpty
+                    ? null
+                    : _chequeController.text.trim())
+                : null,
+            chequeDate: _selectedMethod == 'Check' ? _chequeDate : null,
           );
       widget.onPaymentRecorded();
       await _loadPayments();
@@ -405,6 +415,52 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
                               ],
                             ),
                             const SizedBox(height: 12),
+                            if (_selectedMethod == 'Check')
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Row(children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _chequeController,
+                                      decoration: InputDecoration(
+                                        labelText: 'Cheque number',
+                                        border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8)),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () async {
+                                        final picked = await showDatePicker(
+                                          context: context,
+                                          initialDate:
+                                              _chequeDate ?? DateTime.now(),
+                                          firstDate: DateTime(2000),
+                                          lastDate: DateTime.now()
+                                              .add(const Duration(days: 730)),
+                                        );
+                                        if (picked != null) {
+                                          setState(() => _chequeDate = picked);
+                                        }
+                                      },
+                                      child: InputDecorator(
+                                        decoration: const InputDecoration(
+                                          labelText: 'Cheque date',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        child: Text(_chequeDate == null
+                                            ? '—'
+                                            : '${_chequeDate!.year}-'
+                                                '${_chequeDate!.month.toString().padLeft(2, '0')}-'
+                                                '${_chequeDate!.day.toString().padLeft(2, '0')}'),
+                                      ),
+                                    ),
+                                  ),
+                                ]),
+                              ),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [

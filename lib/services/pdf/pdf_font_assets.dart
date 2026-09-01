@@ -23,8 +23,7 @@ class PdfFontAssets {
       'assets/fonts/NotoSansDevanagari-Bold.ttf';
 
   // Malayalam
-  static const malayalamFallback =
-      'assets/fonts/NotoSansMalayalam-Regular.ttf';
+  static const malayalamFallback = 'assets/fonts/NotoSansMalayalam-Regular.ttf';
   static const malayalamFallbackBold =
       'assets/fonts/NotoSansMalayalam-Bold.ttf';
 
@@ -49,16 +48,12 @@ class PdfFontAssets {
   static const khmerFallbackBold = 'assets/fonts/NotoSansKhmer-Bold.ttf';
 
   // Georgian
-  static const georgianFallback =
-      'assets/fonts/NotoSansGeorgian-Regular.ttf';
-  static const georgianFallbackBold =
-      'assets/fonts/NotoSansGeorgian-Bold.ttf';
+  static const georgianFallback = 'assets/fonts/NotoSansGeorgian-Regular.ttf';
+  static const georgianFallbackBold = 'assets/fonts/NotoSansGeorgian-Bold.ttf';
 
   // Armenian
-  static const armenianFallback =
-      'assets/fonts/NotoSansArmenian-Regular.ttf';
-  static const armenianFallbackBold =
-      'assets/fonts/NotoSansArmenian-Bold.ttf';
+  static const armenianFallback = 'assets/fonts/NotoSansArmenian-Regular.ttf';
+  static const armenianFallbackBold = 'assets/fonts/NotoSansArmenian-Bold.ttf';
 
   // Myanmar
   static const myanmarFallback = 'assets/fonts/NotoSansMyanmar-Regular.ttf';
@@ -69,6 +64,5 @@ class PdfFontAssets {
   static const tibetanFallbackBold = 'assets/fonts/NotoSerifTibetan-Bold.ttf';
 
   // Additional Unicode symbols
-  static const symbolsFallback =
-      'assets/fonts/NotoSansSymbols2-Regular.ttf';
+  static const symbolsFallback = 'assets/fonts/NotoSansSymbols2-Regular.ttf';
 }

@@ -33,9 +33,11 @@ class InvoiceItemService {
     });
   }
 
-  static Future<List<InvoiceItem>> getInvoiceItemsByInvoiceId(String invoiceId) async {
+  static Future<List<InvoiceItem>> getInvoiceItemsByInvoiceId(
+      String invoiceId) async {
     final db = await dbHelper.database;
-    final maps = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId], orderBy: 'rowid ASC');
+    final maps = await db.query('invoice_items',
+        where: 'invoice_id = ?', whereArgs: [invoiceId], orderBy: 'rowid ASC');
     final List<InvoiceItem> items = [];
 
     for (var map in maps) {
@@ -44,11 +46,15 @@ class InvoiceItemService {
         final rawUnitPrice = map['unit_price'];
         final unitPrice = rawUnitPrice == null
             ? null
-            : (rawUnitPrice is int ? rawUnitPrice.toDouble() : rawUnitPrice as double);
+            : (rawUnitPrice is int
+                ? rawUnitPrice.toDouble()
+                : rawUnitPrice as double);
         final rawExtraCost = map['extra_cost'];
         final extraCost = rawExtraCost == null
             ? null
-            : (rawExtraCost is int ? rawExtraCost.toDouble() : rawExtraCost as double);
+            : (rawExtraCost is int
+                ? rawExtraCost.toDouble()
+                : rawExtraCost as double);
         items.add(
           InvoiceItem(
             id: map['id'] as String?,
@@ -76,7 +82,8 @@ class InvoiceItemService {
     return items;
   }
 
-  static Future<void> markProductSaved(String invoiceId, String productId) async {
+  static Future<void> markProductSaved(
+      String invoiceId, String productId) async {
     final db = await dbHelper.database;
     await db.update(
       'invoice_items',

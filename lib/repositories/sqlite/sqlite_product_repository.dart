@@ -4,15 +4,18 @@ import 'package:apexbooks/repositories/product_repository.dart';
 
 class SqliteProductRepository implements ProductRepository {
   @override
-  Future<void> insertProduct(Product product) => ProductService.insertProduct(product);
+  Future<void> insertProduct(Product product) =>
+      ProductService.insertProduct(product);
   @override
   Future<List<Product>> getAllProducts() => ProductService.getAllProducts();
   @override
   Future<int> getTotalProductCount() => ProductService.getTotalProductCount();
   @override
-  Future<Product?> getProductById(String id) => ProductService.getProductById(id);
+  Future<Product?> getProductById(String id) =>
+      ProductService.getProductById(id);
   @override
-  Future<void> updateProduct(Product product) => ProductService.updateProduct(product);
+  Future<void> updateProduct(Product product) =>
+      ProductService.updateProduct(product);
   @override
   Future<List<Product>> searchProducts(String query, {String? type}) =>
       ProductService.searchProducts(query, type: type);
@@ -45,14 +48,16 @@ class SqliteProductRepository implements ProductRepository {
   Future<bool> hasSufficientStock(String productId, int quantity) =>
       ProductService.hasSufficientStock(productId, quantity);
   @override
-  Future<Product?> findDuplicateByName(String name) => ProductService.findDuplicateByName(name);
+  Future<Product?> findDuplicateByName(String name) =>
+      ProductService.findDuplicateByName(name);
   @override
   Future<void> deleteAllProducts() => ProductService.deleteAllProducts();
   @override
   Future<void> insertBatch(List<Product> products, {int batchSize = 50}) =>
       ProductService.insertBatch(products, batchSize: batchSize);
   @override
-  Future<List<Product>> getOutOfStockProducts() => ProductService.getOutOfStockProducts();
+  Future<List<Product>> getOutOfStockProducts() =>
+      ProductService.getOutOfStockProducts();
   @override
   Future<ProductMetadata?> getProductMetadata(String productId) =>
       ProductService.getProductMetadata(productId);
@@ -60,7 +65,8 @@ class SqliteProductRepository implements ProductRepository {
   Future<Map<String, ProductMetadata>> getAllProductMetadata() =>
       ProductService.getAllProductMetadata();
   @override
-  Future<Map<String, ProductMetadata>> getProductMetadataForIds(List<String> productIds) =>
+  Future<Map<String, ProductMetadata>> getProductMetadataForIds(
+          List<String> productIds) =>
       ProductService.getProductMetadataForIds(productIds);
   @override
   Future<void> upsertProductMetadata(ProductMetadata metadata) =>

@@ -8,6 +8,8 @@ abstract class PaymentRepository {
     required DateTime datePaid,
     String? paymentMethod,
     String? notes,
+    String? chequeNumber,
+    DateTime? chequeDate,
   });
   Future<int> addPaymentBatch({
     required List<Invoice> invoices,
@@ -15,6 +17,7 @@ abstract class PaymentRepository {
     String? paymentMethod,
     String? notes,
   });
+
   /// Applies a single payment across multiple invoices for the same
   /// customer (e.g. smallest outstanding balance first, so it clears as
   /// many whole invoices as possible). Writes one [InvoicePayment] per
@@ -30,6 +33,7 @@ abstract class PaymentRepository {
   Future<double> getTotalPaidForInvoice(String invoiceId);
   Future<Map<String, double>> getTotalPaidBatch(List<String> invoiceIds);
   Future<void> deletePayment(String paymentId);
-  Future<List<InvoicePayment>> getAllPaymentsBetween(DateTime from, DateTime to);
+  Future<List<InvoicePayment>> getAllPaymentsBetween(
+      DateTime from, DateTime to);
   Future<double> getTaxPaidBetween(DateTime from, DateTime to);
 }

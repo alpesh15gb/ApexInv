@@ -3904,15 +3904,23 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     );
   }
 
-  // `invoiceType` itself ('Invoice'/'Quotation'/'Receipt') is an internal
-  // English identifier compared elsewhere in this file's logic — this maps
-  // it to a translated display label without touching those comparisons.
+  // `invoiceType` itself ('Invoice'/'Quotation'/'Receipt'/'Credit Note'/...)
+  // is an internal English identifier compared elsewhere in this file's
+  // logic — this maps it to a display label without touching comparisons.
   String _invoiceTypeLabel(String type) {
     switch (type) {
       case 'Quotation':
         return AppLocalizations.of(context)!.labelQuotation;
       case 'Receipt':
         return AppLocalizations.of(context)!.labelReceipt;
+      case 'Credit Note':
+        return 'Credit Note';
+      case 'Debit Note':
+        return 'Debit Note';
+      case 'Delivery Challan':
+        return 'Delivery Challan';
+      case 'Proforma':
+        return 'Proforma';
       default:
         return AppLocalizations.of(context)!.labelInvoice;
     }
@@ -4317,6 +4325,14 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                 DropdownMenuItem(
                     value: 'Receipt',
                     child: Text(AppLocalizations.of(context)!.labelReceipt)),
+                const DropdownMenuItem(
+                    value: 'Credit Note', child: Text('Credit Note')),
+                const DropdownMenuItem(
+                    value: 'Debit Note', child: Text('Debit Note')),
+                const DropdownMenuItem(
+                    value: 'Delivery Challan', child: Text('Delivery Challan')),
+                const DropdownMenuItem(
+                    value: 'Proforma', child: Text('Proforma Invoice')),
               ],
               onChanged: isEditing
                   ? null

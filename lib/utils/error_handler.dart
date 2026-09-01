@@ -26,7 +26,8 @@ class AppError {
                 tooltip: 'Copy error',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
-                onPressed: () => Clipboard.setData(ClipboardData(text: message)),
+                onPressed: () =>
+                    Clipboard.setData(ClipboardData(text: message)),
               ),
           ],
         ),
@@ -51,7 +52,8 @@ class AppError {
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+            const Icon(Icons.check_circle_outline,
+                color: Colors.white, size: 20),
             const SizedBox(width: 8),
             Expanded(child: Text(message)),
           ],

@@ -48,6 +48,7 @@ import 'package:apexbooks/screens/more_menu_screen.dart';
 import 'package:apexbooks/screens/purchase_bill_screen.dart';
 import 'package:apexbooks/screens/reminders_screen.dart';
 import 'package:apexbooks/screens/audit_log_screen.dart';
+import 'package:apexbooks/screens/placeholder_screen.dart';
 import 'package:apexbooks/database/recurring_invoice_engine.dart';
 
 // invoice.type is a raw internal value ('Invoice'/'Quotation'/'Receipt'/
@@ -285,6 +286,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return const RemindersScreen();
       case 18:
         return const AuditLogScreen();
+      case 19:
+        return const PlaceholderScreen(
+            title: 'Sale Order', icon: Icons.shopping_bag_outlined);
+      case 20:
+        return const PlaceholderScreen(title: 'POS', icon: Icons.point_of_sale);
+      case 21:
+        return const PlaceholderScreen(
+            title: 'Payment Out', icon: Icons.payments_outlined);
+      case 22:
+        return const PlaceholderScreen(
+            title: 'Bank Accounts', icon: Icons.account_balance);
+      case 23:
+        return const PlaceholderScreen(
+            title: 'Cash In Hand', icon: Icons.account_balance_wallet);
+      case 24:
+        return const PlaceholderScreen(
+            title: 'Cheques', icon: Icons.confirmation_number_outlined);
+      case 25:
+        return const PlaceholderScreen(
+            title: 'Loan Accounts', icon: Icons.request_quote_outlined);
       case 10:
         return SettingsScreen(
           currentUser: _currentUser,
@@ -633,53 +654,63 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 thickness: 1),
             const SizedBox(height: 8),
 
-            // ── Nav Items ──────────────────────────────
+            // ── Nav Items — Tally-style grouped ─────────────────
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildNavItem(0, Icons.dashboard_outlined, Icons.dashboard,
                         AppLocalizations.of(context)!.navDashboard),
-                    _buildNavItem(1, Icons.receipt_outlined, Icons.receipt,
-                        AppLocalizations.of(context)!.navNewInvoice),
+                    const SizedBox(height: 4),
+                    _buildNavItem(5, Icons.people_outline, Icons.people, 'Parties'),
                     _buildNavItem(
-                        2,
-                        Icons.receipt_long_outlined,
-                        Icons.receipt_long,
-                        AppLocalizations.of(context)!.navInvoices),
+                        6, Icons.inventory_2_outlined, Icons.inventory_2, 'Items'),
+                    if (expanded) const Divider(height: 16),
+                    if (expanded) _buildSectionHeader('Sales (Master)'),
+                    _buildNavItem(2, Icons.receipt_long_outlined,
+                        Icons.receipt_long, 'Sales Invoices'),
+                    _buildNavItem(3, Icons.request_quote_outlined,
+                        Icons.request_quote, 'Estimates'),
+                    _buildNavItem(16, Icons.request_page_outlined,
+                        Icons.request_page, 'Proforma Invoice'),
+                    _buildNavItem(4, Icons.payments_outlined, Icons.payments,
+                        'Payment In'),
+                    _buildNavItem(19, Icons.shopping_bag_outlined,
+                        Icons.shopping_bag, 'Sale Order'),
+                    _buildNavItem(15, Icons.local_shipping_outlined,
+                        Icons.local_shipping, 'Delivery Challan'),
+                    _buildNavItem(13, Icons.note_alt_outlined, Icons.note_alt,
+                        'Credit Note'),
                     _buildNavItem(
-                        3,
-                        Icons.request_quote_outlined,
-                        Icons.request_quote,
-                        AppLocalizations.of(context)!.navQuotations),
-                    _buildNavItem(
-                        4,
-                        Icons.point_of_sale_outlined,
-                        Icons.point_of_sale,
-                        AppLocalizations.of(context)!.navReceipts),
-                    _buildNavItem(5, Icons.people_outline, Icons.people,
-                        AppLocalizations.of(context)!.navCustomers),
-                    _buildNavItem(
-                        6,
-                        Icons.inventory_2_outlined,
-                        Icons.inventory_2,
-                        AppLocalizations.of(context)!.navProducts),
-                    _buildNavItem(7, Icons.bar_chart_outlined, Icons.bar_chart,
-                        AppLocalizations.of(context)!.navReports),
-                    _buildNavItem(8, Icons.receipt_long_outlined,
-                        Icons.receipt_long, 'Expenses'),
-                    _buildNavItem(9, Icons.shopping_cart_outlined,
-                        Icons.shopping_cart, 'Purchase Orders'),
+                        20, Icons.point_of_sale_outlined, Icons.point_of_sale, 'POS'),
+                    if (expanded) const Divider(height: 16),
+                    if (expanded) _buildSectionHeader('Purchase (Master)'),
                     _buildNavItem(11, Icons.inventory_outlined, Icons.inventory,
                         'Purchase Bills'),
-                    _buildNavItem(13, Icons.note_alt_outlined, Icons.note_alt,
-                        'Credit Notes'),
+                    _buildNavItem(9, Icons.shopping_cart_outlined,
+                        Icons.shopping_cart, 'Purchase Order'),
+                    _buildNavItem(21, Icons.payments_outlined, Icons.payments,
+                        'Payment Out'),
+                    _buildNavItem(8, Icons.receipt_long_outlined,
+                        Icons.receipt_long, 'Expenses'),
                     _buildNavItem(14, Icons.note_add_outlined, Icons.note_add,
-                        'Debit Notes'),
-                    _buildNavItem(15, Icons.local_shipping_outlined,
-                        Icons.local_shipping, 'Delivery Challans'),
-                    _buildNavItem(16, Icons.request_page_outlined,
-                        Icons.request_page, 'Proforma'),
+                        'Debit Note'),
+                    if (expanded) const Divider(height: 16),
+                    if (expanded) _buildSectionHeader('Cash And Bank'),
+                    _buildNavItem(22, Icons.account_balance_outlined,
+                        Icons.account_balance, 'Bank Accounts'),
+                    _buildNavItem(23, Icons.account_balance_wallet_outlined,
+                        Icons.account_balance_wallet, 'Cash In Hand'),
+                    _buildNavItem(24, Icons.confirmation_number_outlined,
+                        Icons.confirmation_number, 'Cheques'),
+                    _buildNavItem(25, Icons.request_quote_outlined,
+                        Icons.request_quote, 'Loan Accounts'),
+                    if (expanded) const Divider(height: 16),
+                    _buildNavItem(7, Icons.bar_chart_outlined, Icons.bar_chart,
+                        AppLocalizations.of(context)!.navReports),
+                    _buildNavItem(1, Icons.receipt_outlined, Icons.receipt,
+                        AppLocalizations.of(context)!.navNewInvoice),
                     _buildNavItem(10, Icons.settings_outlined, Icons.settings,
                         AppLocalizations.of(context)!.navSettings,
                         showDot: _hasUpdate),
@@ -688,6 +719,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     if (_currentUser.isAdmin())
                       _buildNavItem(18, Icons.fact_check_outlined,
                           Icons.fact_check, 'Audit Log'),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -1010,6 +1042,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
   */
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
 
   Widget _buildNavItem(
       int index, IconData outlinedIcon, IconData filledIcon, String label,

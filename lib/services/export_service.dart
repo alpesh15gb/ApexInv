@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:apexbooks/models/invoice.dart';
 import 'package:apexbooks/services/pdf_service.dart';
+import 'package:apexbooks/utils/app_directories.dart';
 import 'package:apexbooks/utils/formatters.dart';
 
 class ExportService {
@@ -68,7 +69,7 @@ class ExportService {
     final rows = <List<dynamic>>[header, ...dataRows];
     final csv = buildQuotedCsv(rows);
     // Prepend UTF-8 BOM so Excel and other apps render Unicode correctly
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await appDocumentsDirectorySafe();
     final prefix = '${type.toLowerCase()}s'; // 'invoices' or 'quotations'
     final filename = '${prefix}_${DateTime.now().millisecondsSinceEpoch}.csv';
     final file = File('${dir.path}/$filename');
@@ -90,17 +91,21 @@ class ExportService {
     if (outputDirectory != null) {
       exportDir = Directory(outputDirectory);
     } else {
-      final docsDir = await getApplicationDocumentsDirectory();
-      final timestamp = DateFormat('yyyyMMdd_HHmmss', 'en_US').format(DateTime.now());
+      final docsDir = await appDocumentsDirectorySafe();
+      final timestamp =
+          DateFormat('yyyyMMdd_HHmmss', 'en_US').format(DateTime.now());
       exportDir = Directory('${docsDir.path}/invoice_pdfs_$timestamp');
     }
     await exportDir.create(recursive: true);
 
-    final s = settings ?? await PDFService.fetchPdfSettings(datePattern: (await BackendServices.settings.getDateFormat()).key);
+    final s = settings ??
+        await PDFService.fetchPdfSettings(
+            datePattern: (await BackendServices.settings.getDateFormat()).key);
     for (int i = 0; i < invoices.length; i++) {
       final invoice = invoices[i];
       final previousBalanceDue = s.showPreviousBalance
-          ? await BackendServices.invoices.getPreviousBalanceDueForInvoice(invoice)
+          ? await BackendServices.invoices
+              .getPreviousBalanceDueForInvoice(invoice)
           : 0.0;
       final pdf = PDFService.generateInvoicePDFWithSettings(
         invoice,
@@ -125,14 +130,17 @@ class ExportService {
     void Function(int completed, int total)? onProgress,
     PdfGenerationSettings? settings,
   }) async {
-    final s = settings ?? await PDFService.fetchPdfSettings(datePattern: (await BackendServices.settings.getDateFormat()).key);
+    final s = settings ??
+        await PDFService.fetchPdfSettings(
+            datePattern: (await BackendServices.settings.getDateFormat()).key);
     final output = OutputFileStream(savePath);
     final encoder = ZipEncoder()..startEncode(output);
 
     for (int i = 0; i < invoices.length; i++) {
       final invoice = invoices[i];
       final previousBalanceDue = s.showPreviousBalance
-          ? await BackendServices.invoices.getPreviousBalanceDueForInvoice(invoice)
+          ? await BackendServices.invoices
+              .getPreviousBalanceDueForInvoice(invoice)
           : 0.0;
       final pdf = PDFService.generateInvoicePDFWithSettings(
         invoice,

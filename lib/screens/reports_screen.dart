@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/database/report_service.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/services/customer_statement_pdf_service.dart';
+import 'package:apexbooks/services/gstr_export_service.dart';
 import 'package:apexbooks/providers/repositories.dart';
 
 import '../common/supported_currencies.dart';
@@ -80,6 +81,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   StatusBreakdown _status = StatusBreakdown.empty;
   List<AgedReceivable> _aged = [];
   List<TaxBucket> _taxBuckets = [];
+  bool _isExportingGstr = false;
+  bool _gstrExportError = false;
+  String? _gstrExportStatus;
   List<TopCustomer> _topCustomers = [];
   List<TopProduct> _topProducts = [];
   List<CustomerStatementCustomer> _statementCustomers = [];
@@ -2013,11 +2017,121 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                   ],
                 ),
               ),
+              // ── GST Offline Tool exports ────────────────────────────────
+              _sectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _cardTitle('GST Offline Tool exports'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'CSV files shaped for the GSTN Offline Tool — import '
+                      'each file via the tool\'s section import. Party '
+                      'Statement is in the Customers report; GSTR-2 needs '
+                      'purchase-bill data the app does not track yet.',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          height: 1.5),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _isExportingGstr ? null : _exportGstr1,
+                          icon: const Icon(Icons.file_download_outlined,
+                              size: 16),
+                          label: const Text('GSTR-1 (B2B + B2C + HSN)'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed:
+                              _isExportingGstr ? null : _exportGstr3bSummary,
+                          icon: const Icon(Icons.summarize_outlined, size: 16),
+                          label: const Text('GSTR-3B summary'),
+                        ),
+                      ],
+                    ),
+                    if (_gstrExportStatus != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _gstrExportStatus!,
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            color: _gstrExportError!
+                                ? Theme.of(context).colorScheme.error
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _exportGstr1() async {
+    setState(() {
+      _isExportingGstr = true;
+      _gstrExportError = false;
+      _gstrExportStatus = 'Building GSTR-1 sections…';
+    });
+    try {
+      final (from, to) = _range;
+      final files = await GstrExportService.buildGstr1(from: from, to: to);
+      for (final f in files) {
+        await _saveCsv(f.csv, f.filename);
+      }
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = false;
+        _gstrExportStatus =
+            'Saved ${files.map((f) => f.section).join(', ')} — import each '
+            'file into the Offline Tool\'s matching section.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = true;
+        _gstrExportStatus = e.toString();
+      });
+    }
+  }
+
+  Future<void> _exportGstr3bSummary() async {
+    setState(() {
+      _isExportingGstr = true;
+      _gstrExportError = false;
+      _gstrExportStatus = 'Building GSTR-3B summary…';
+    });
+    try {
+      final (from, to) = _range;
+      final f = await GstrExportService.buildGstr3bSummary(from: from, to: to);
+      await _saveCsv(f.csv, f.filename);
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = false;
+        _gstrExportStatus =
+            'Saved ${f.filename} — key the figures into the portal (3B is '
+            'filed online, not via the Offline Tool).';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isExportingGstr = false;
+        _gstrExportError = true;
+        _gstrExportStatus = e.toString();
+      });
+    }
   }
 
   Widget _taxTableHeader() {

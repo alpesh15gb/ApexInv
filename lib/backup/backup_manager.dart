@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/models/backup_info.dart';
 import 'package:apexbooks/models/backup_results.dart';
+import 'package:apexbooks/utils/app_directories.dart';
 
 class BackupManager {
   static const String _backupExtension = '.invoicedb';
@@ -80,9 +81,9 @@ class BackupManager {
   // Create database file backup — copies the live DB file while it is open.
   // SQLite WAL mode on desktop keeps the file consistent during a copy.
   Future<String> _createDatabaseBackup(
-      String backupName,
-      String? customPath,
-      ) async {
+    String backupName,
+    String? customPath,
+  ) async {
     final dbPath = DatabaseHelper.path!;
     final backupDir = customPath ?? await _getBackupDirectory();
     final backupPath = join(backupDir, '$backupName$_backupExtension');
@@ -94,9 +95,9 @@ class BackupManager {
 
   // Create JSON export backup (excludes sensitive tables such as 'users')
   Future<String> _createJsonBackup(
-      String backupName,
-      String? customPath,
-      ) async {
+    String backupName,
+    String? customPath,
+  ) async {
     final backupDir = customPath ?? await _getBackupDirectory();
     final backupPath = join(backupDir, '$backupName$_jsonExtension');
 
@@ -112,8 +113,7 @@ class BackupManager {
     final backupData = <String, dynamic>{};
 
     final tables = await database.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-    );
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
 
     for (final table in tables) {
       final tableName = table['name'] as String;
@@ -289,7 +289,8 @@ class BackupManager {
     for (final file in files) {
       if (file is File) {
         final fileName = basename(file.path);
-        if (fileName.endsWith(_backupExtension) || fileName.endsWith(_jsonExtension)) {
+        if (fileName.endsWith(_backupExtension) ||
+            fileName.endsWith(_jsonExtension)) {
           final stat = await file.stat();
           final type = fileName.endsWith(_backupExtension)
               ? BackupType.database
@@ -402,7 +403,8 @@ class BackupManager {
         timestamp: DateTime.now(),
       );
     } catch (e) {
-      return BackupResult(success: false, message: 'Download failed: ${e.toString()}');
+      return BackupResult(
+          success: false, message: 'Download failed: ${e.toString()}');
     }
   }
 
@@ -432,7 +434,7 @@ class BackupManager {
 
   // Get backup directory
   Future<String> _getBackupDirectory() async {
-    final appDir = await getApplicationDocumentsDirectory();
+    final appDir = await appDocumentsDirectorySafe();
     final backupDir = Directory(join(appDir.path, 'backups'));
 
     if (!await backupDir.exists()) {
@@ -454,6 +456,6 @@ class BackupManager {
       if (await dir.exists()) return dir;
     }
 
-    return await getApplicationDocumentsDirectory();
+    return await appDocumentsDirectorySafe();
   }
 }

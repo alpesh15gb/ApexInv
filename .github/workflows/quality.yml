@@ -10,6 +10,18 @@ permissions:
   contents: read
 
 jobs:
+  server-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go test ./...
+
   analyze-and-test:
     runs-on: ubuntu-latest
     steps:

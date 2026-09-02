@@ -153,7 +153,13 @@ class PaymentService {
     int count = 0;
     await db.transaction((txn) async {
       for (final invoice in invoices) {
-        final amountPaid = invoice.outstandingBalance;
+        final paidResult = await txn.rawQuery(
+          "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
+          [invoice.id],
+        );
+        final previouslyPaid = (paidResult.first['total'] as num).toDouble();
+        final amountPaid = InvoiceCalculator.outstanding(
+            total: invoice.total, paid: previouslyPaid);
         if (amountPaid <= InvoiceCalculator.moneyEpsilon) continue;
 
         final suffixResult = await txn.rawQuery(
@@ -177,7 +183,7 @@ class PaymentService {
           receiptNumber: receiptNumber,
           amountPaid: amountPaid,
           taxAmountPaid: taxAmountPaid,
-          previouslyPaid: invoice.amountPaid,
+          previouslyPaid: previouslyPaid,
           balanceAfter: 0.0,
           datePaid: datePaid,
           paymentMethod: paymentMethod,
@@ -235,6 +241,11 @@ class PaymentService {
           [invoice.id],
         );
         final previouslyPaid = (sumResult.first['total'] as num).toDouble();
+        final outstanding = InvoiceCalculator.outstanding(
+            total: invoice.total, paid: previouslyPaid);
+        if (amountPaid > outstanding + InvoiceCalculator.moneyEpsilon) {
+          throw StateError('Payment must be within the outstanding balance');
+        }
 
         final suffixResult = await txn.rawQuery(
           'SELECT receipt_number FROM invoice_payments WHERE invoice_id = ?',

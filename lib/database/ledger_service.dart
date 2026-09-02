@@ -148,11 +148,13 @@ class LedgerService {
     final expenses = await db.rawQuery('''
       SELECT e.date, e.description, e.amount, e.account_id,
              c.name AS category
+             , a.currency_code
       FROM expenses e
       LEFT JOIN expense_categories c ON c.id = e.category_id
-      ${currencyCode == null || currencyCode == 'INR' ? dateFilter('e.date') : ' AND 1 = 0'}
+      LEFT JOIN financial_accounts a ON a.id = e.account_id
+      WHERE 1 = 1 ${dateFilter('e.date')} ${currencyFilter('a.currency_code')}
       ORDER BY e.date
-    ''');
+    ''', [if (currencyCode != null) currencyCode]);
     for (final e in expenses) {
       final category = e['category'] as String? ?? 'General';
       final amount = (e['amount'] as num?)?.toDouble() ?? 0;

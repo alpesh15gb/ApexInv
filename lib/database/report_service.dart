@@ -1245,10 +1245,13 @@ class ReportService {
     }
 
     final expRows = await db.rawQuery('''
-      SELECT date, description, amount FROM expenses
-      WHERE date >= ? AND date <= ? ORDER BY date
-    ''', [from.toIso8601String(), to.toIso8601String()]);
-    if (currencyCode != null && currencyCode != 'INR') expRows.clear();
+      SELECT e.date, e.description, e.amount FROM expenses e
+      LEFT JOIN financial_accounts a ON a.id = e.account_id
+      WHERE e.date >= ? AND e.date <= ?
+      ${currencyCode == null ? '' : 'AND COALESCE(a.currency_code, \'INR\') = ?'}
+      ORDER BY e.date
+    ''', [from.toIso8601String(), to.toIso8601String(),
+      if (currencyCode != null) currencyCode]);
     for (final r in expRows) {
       rows.add(DayBookEntry(
         date: DateTime.tryParse(r['date'] as String? ?? '') ?? from,
@@ -1295,9 +1298,12 @@ class ReportService {
         if (currencyCode != null) currencyCode],
     );
     final expRes = await db.rawQuery(
-      "SELECT COALESCE(SUM(amount), 0) AS v FROM expenses "
-      "WHERE date >= ? AND date <= ?",
-      [from.toIso8601String(), to.toIso8601String()],
+      "SELECT COALESCE(SUM(e.amount), 0) AS v FROM expenses e "
+      "LEFT JOIN financial_accounts a ON a.id = e.account_id "
+      "WHERE e.date >= ? AND e.date <= ? "
+      "${currencyCode == null ? '' : 'AND COALESCE(a.currency_code, \'INR\') = ?'}",
+      [from.toIso8601String(), to.toIso8601String(),
+        if (currencyCode != null) currencyCode],
     );
     final pbRes = await db.rawQuery(
       "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM purchase_bill_payments p "
@@ -1318,9 +1324,7 @@ class ReportService {
         if (currencyCode != null) currencyCode],
     );
     final revenue = (invRes.first['v'] as num?)?.toDouble() ?? 0;
-    final expenses = currencyCode != null && currencyCode != 'INR'
-        ? 0.0
-        : (expRes.first['v'] as num?)?.toDouble() ?? 0;
+    final expenses = (expRes.first['v'] as num?)?.toDouble() ?? 0;
     final purchases = (pbRes.first['v'] as num?)?.toDouble() ?? 0;
     final collected = (collectedRes.first['v'] as num?)?.toDouble() ?? 0;
     return PnlSummary(

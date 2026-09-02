@@ -1644,7 +1644,10 @@ class DatabaseHelper {
     if (oldVersion < 49) {
       await _runMigrationStep(db, 49, 'normalize_tax_mode', () async {
         await db.execute("UPDATE invoices SET tax_mode = 'per_item' WHERE tax_mode = 'item'");
-        await db.execute("UPDATE sale_orders SET tax_mode = 'per_item' WHERE tax_mode = 'item'");
+        final saleOrderColumns = await db.rawQuery('PRAGMA table_info(sale_orders)');
+        if (saleOrderColumns.any((column) => column['name'] == 'tax_mode')) {
+          await db.execute("UPDATE sale_orders SET tax_mode = 'per_item' WHERE tax_mode = 'item'");
+        }
       });
       await _runMigrationStep(db, 49, 'register_extended_sync_tables', () async {
         for (final table in syncTableOrder) {

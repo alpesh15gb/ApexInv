@@ -34,11 +34,9 @@ import 'package:sqflite/sqflite.dart';
 /// its trigger contributes to the parent's outbox coalescing.
 const syncTableOrder = <String>[
   'company_info',
-  'settings',
   'expense_categories',
   'customers',
   'products',
-  'product_metadata',
   'batch_info',
   'custom_fields',
   'expenses',

@@ -1,5 +1,8 @@
 name: Android APK
 
+# Pull requests that change this file can be used to produce a verified
+# installable build from the current mainline code.
+
 on:
   workflow_dispatch:
   pull_request:

@@ -112,6 +112,8 @@ class _PosScreenState extends State<PosScreen> {
   double get _subtotal => _previewInvoice.subtotal;
   double get _tax => _previewInvoice.tax;
   double get _total => _previewInvoice.total;
+  int get _itemCount => _cart.values.fold(0, (count, item) =>
+      count + item.quantity.round());
 
   Future<void> _checkout() async {
     if (_cart.isEmpty || _saving) return;
@@ -227,6 +229,8 @@ class _PosScreenState extends State<PosScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('POS'), actions: [
+      IconButton(tooltip: 'Refresh stock', onPressed: _load,
+          icon: const Icon(Icons.refresh)),
       if (_cart.isNotEmpty) TextButton.icon(onPressed: () => setState(_cart.clear),
         icon: const Icon(Icons.delete_sweep_outlined), label: const Text('Clear cart')),
       const SizedBox(width: 8),
@@ -247,27 +251,37 @@ class _PosScreenState extends State<PosScreen> {
       decoration: const InputDecoration(prefixIcon: Icon(Icons.search),
         labelText: 'Search name or barcode', border: OutlineInputBorder()))),
     Expanded(child: _filtered.isEmpty ? const Center(child: Text('No products found')) :
-      GridView.builder(padding: const EdgeInsets.all(12),
+      RefreshIndicator(onRefresh: _load, child: GridView.builder(padding: const EdgeInsets.all(12),
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: 230, childAspectRatio: 1.6, crossAxisSpacing: 10, mainAxisSpacing: 10),
         itemCount: _filtered.length,
         itemBuilder: (context, index) {
           final product = _filtered[index]; final available = _available(product);
-          return Card(clipBehavior: Clip.antiAlias, child: InkWell(onTap: () => _add(product),
+          final canAdd = product.unlimitedStock || available > 0;
+          return Card(clipBehavior: Clip.antiAlias, child: InkWell(onTap: canAdd ? () => _add(product) : null,
             child: Padding(padding: const EdgeInsets.all(12), child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-                const Spacer(), Text('$_currencySymbol ${product.price.toStringAsFixed(2)}'),
+                Row(children: [Expanded(child: Text(product.name, maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold))),
+                  Icon(canAdd ? Icons.add_circle_outline : Icons.block_outlined,
+                    color: canAdd ? Theme.of(context).colorScheme.primary : Colors.red)]),
+                const Spacer(), Text('$_currencySymbol ${product.price.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
                 Text(product.unlimitedStock ? 'Service / unlimited' :
                   '${available.toStringAsFixed(2)} available',
                   style: TextStyle(fontSize: 12, color: available <= 0 ? Colors.red : null)),
               ]))));
-        })),
+        }))),
   ]);
 
   Widget _cartPane() => Column(children: [
-    Padding(padding: const EdgeInsets.all(12), child: DropdownButtonFormField<String>(
+    Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 8), child: Row(children: [
+      Text('Current sale', style: Theme.of(context).textTheme.titleMedium),
+      const Spacer(),
+      if (_cart.isNotEmpty) Chip(label: Text('$_itemCount item${_itemCount == 1 ? '' : 's'}')),
+    ])),
+    Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: DropdownButtonFormField<String>(
       value: _customer?.id ?? 'walk-in', decoration: const InputDecoration(
         labelText: 'Customer', border: OutlineInputBorder()),
       items: [_walkIn, ..._customers].map((c) => DropdownMenuItem(value: c.id,
@@ -280,12 +294,14 @@ class _PosScreenState extends State<PosScreen> {
         itemBuilder: (context, index) {
           final item = _cart.values.elementAt(index);
           return ListTile(title: Text(item.product.name),
-            subtitle: Text('$_currencySymbol ${item.total.toStringAsFixed(2)}'),
+            subtitle: Text('${item.quantity} × $_currencySymbol ${(item.unitPrice ?? item.product.price).toStringAsFixed(2)}'),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               IconButton(onPressed: () => _changeQty(item.product, -1), icon: const Icon(Icons.remove_circle_outline)),
               Text(item.quantity.toStringAsFixed(item.quantity % 1 == 0 ? 0 : 2),
                 style: const TextStyle(fontWeight: FontWeight.bold)),
               IconButton(onPressed: () => _changeQty(item.product, 1), icon: const Icon(Icons.add_circle_outline)),
+              IconButton(tooltip: 'Remove item', onPressed: () => setState(() => _cart.remove(item.product.id)),
+                icon: const Icon(Icons.close)),
             ]));
         })),
     const Divider(height: 1),

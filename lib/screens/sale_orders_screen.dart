@@ -57,8 +57,12 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
             description: item.description)).toList();
     final ok = await showDialog<bool>(context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDialogState) => AlertDialog(
+        insetPadding: const EdgeInsets.all(16),
         title: Text(existing == null ? 'New Sale Order' : 'Edit Sale Order'),
-        content: SizedBox(width: 780, height: 560, child: Column(children: [
+        content: SizedBox(width: 1080, height: MediaQuery.sizeOf(ctx).height * .78, child: Column(children: [
+          Align(alignment: Alignment.centerLeft, child: Text('Order details',
+            style: Theme.of(ctx).textTheme.titleSmall)),
+          const SizedBox(height: 8),
           Row(children: [
             Expanded(child: DropdownButtonFormField<String>(
               value: customer.id,
@@ -88,6 +92,9 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
               })),
           ]),
           const SizedBox(height: 12),
+          Align(alignment: Alignment.centerLeft, child: Text('Line items',
+            style: Theme.of(ctx).textTheme.titleSmall)),
+          const SizedBox(height: 4),
           Expanded(child: ListView.builder(itemCount: drafts.length,
             itemBuilder: (context, index) {
               final draft = drafts[index];

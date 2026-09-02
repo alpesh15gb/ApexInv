@@ -331,13 +331,20 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          insetPadding: const EdgeInsets.all(16),
           title: Text(existingOrder == null
               ? 'Create Purchase Order'
               : 'Edit Purchase Order'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+          content: SizedBox(
+            width: 1080,
+            height: MediaQuery.sizeOf(context).height * .78,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
               children: [
+                Text('Order details', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
                 TextField(
                   controller: vendorController,
                   decoration: const InputDecoration(
@@ -409,6 +416,7 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                   maxLines: 2,
                 ),
                 const SizedBox(height: 16),
+                const Divider(height: 32),
                 // Items section
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -456,6 +464,7 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                     );
                   }),
               ],
+            ),
             ),
           ),
           actions: [

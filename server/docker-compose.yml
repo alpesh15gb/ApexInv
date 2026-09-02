@@ -1,2 +1,47 @@
-fatal: not a git repository (or any parent up to mount point /workspace/scratch)
-Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: apexbooks
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: apexbooks
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apexbooks"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://apexbooks:${POSTGRES_PASSWORD}@postgres:5432/apexbooks?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      PORT: "8080"
+    ports:
+      - "127.0.0.1:8080:8080"   # host-level nginx proxies to this
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgbackups:/backups
+    command: >-
+      sh -c 'while true; do pg_dump -h postgres -U apexbooks -d apexbooks -Fc
+      > /backups/apexbooks_$$(date -u +%Y%m%dT%H%M%SZ).dump &&
+      find /backups -type f -name "*.dump" -mtime +14 -delete; sleep 86400; done'
+
+volumes:
+  pgdata:
+  pgbackups:

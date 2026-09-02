@@ -39,9 +39,12 @@ class ExpenseService {
   static Future<void> insertExpense(Expense expense) async {
     final db = await dbHelper.database;
     await db.transaction((txn) async {
+      final currency = await _currencyForAccount(txn, expense.accountId);
       final accountId = await AccountingService.resolveAccountId(txn,
           requestedAccountId: expense.accountId,
-          paymentMethod: expense.paymentMethod);
+          paymentMethod: expense.paymentMethod,
+          currencyCode: currency.$1,
+          currencySymbol: currency.$2);
       await txn.insert('expenses', expense.toMap()..['account_id'] = accountId);
       await AccountingService.insertMovement(txn,
           accountId: accountId,
@@ -59,9 +62,12 @@ class ExpenseService {
     final db = await dbHelper.database;
     await db.transaction((txn) async {
       await _reverseInTransaction(txn, expense.id, 'Expense edited');
+      final currency = await _currencyForAccount(txn, expense.accountId);
       final accountId = await AccountingService.resolveAccountId(txn,
           requestedAccountId: expense.accountId,
-          paymentMethod: expense.paymentMethod);
+          paymentMethod: expense.paymentMethod,
+          currencyCode: currency.$1,
+          currencySymbol: currency.$2);
       final updateMap = expense.toMap()
         ..remove('category_name')
         ..['account_id'] = accountId;
@@ -77,6 +83,17 @@ class ExpenseService {
           reference: expense.description,
           notes: expense.notes ?? '');
     });
+  }
+
+  static Future<(String, String)> _currencyForAccount(
+      DatabaseExecutor txn, String? accountId) async {
+    if (accountId == null || accountId.isEmpty) return ('INR', '₹');
+    final rows = await txn.query('financial_accounts',
+        columns: ['currency_code', 'currency_symbol'],
+        where: 'id = ?', whereArgs: [accountId], limit: 1);
+    if (rows.isEmpty) throw StateError('Selected account is unavailable');
+    return (rows.first['currency_code'] as String? ?? 'INR',
+        rows.first['currency_symbol'] as String? ?? '₹');
   }
 
   static Future<Expense?> getExpenseById(String id) async {

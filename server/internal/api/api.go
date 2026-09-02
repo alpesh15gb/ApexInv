@@ -45,6 +45,10 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.Store.Pool().Ping(r.Context()); err != nil {
+			writeErr(w, http.StatusServiceUnavailable, "database unavailable")
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 

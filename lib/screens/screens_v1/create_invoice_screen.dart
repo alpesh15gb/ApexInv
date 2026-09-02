@@ -35,6 +35,9 @@ class CreateInvoiceScreen extends ConsumerStatefulWidget {
   /// Defaults to the source invoice type when null.
   final String? cloneType;
 
+  /// The type for a newly created document opened from a document list.
+  final String initialType;
+
   /// Called when the user taps "New Invoice" while in edit mode.
   /// The parent (DashboardScreen) resets invoiceToEdit to null.
   final VoidCallback? onCreateNewInvoice;
@@ -45,6 +48,7 @@ class CreateInvoiceScreen extends ConsumerStatefulWidget {
     this.invoiceToEdit,
     this.cloneFrom,
     this.cloneType,
+    this.initialType = 'Invoice',
     this.onCreateNewInvoice,
     this.guard,
   });
@@ -155,6 +159,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
   @override
   void initState() {
     super.initState();
+    invoiceType = widget.initialType;
     widget.guard?.canLeave = _confirmLeaveIfDirty;
     taxRateController.text = (taxRate * 100).toStringAsFixed(1);
     _loadCustomersAndProducts(widget.invoiceToEdit != null);

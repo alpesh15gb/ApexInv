@@ -104,6 +104,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Invoice? invoiceToEdit;
   Invoice? _invoiceToClone;
   String _cloneType = 'Invoice';
+  String _newInvoiceType = 'Invoice';
   bool _hasUpdate = false;
   String _createInvoiceLayout = 'v2';
   int? _accessibilityJumpToken;
@@ -185,7 +186,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             user: _currentUser);
       case 1:
         final createInvoiceKey = ValueKey(
-            'create_invoice_${invoiceToEdit?.id ?? 'new'}_${_invoiceToClone?.id ?? ''}');
+            'create_invoice_${invoiceToEdit?.id ?? 'new'}_${_invoiceToClone?.id ?? ''}_$_newInvoiceType');
         void onCreateNewInvoice() {
           if (!mounted) return;
           setState(() {
@@ -199,6 +200,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 invoiceToEdit: invoiceToEdit,
                 cloneFrom: _invoiceToClone,
                 cloneType: _invoiceToClone != null ? _cloneType : null,
+                initialType: _newInvoiceType,
                 guard: _invoiceFormGuardV1,
                 onCreateNewInvoice: onCreateNewInvoice,
               )
@@ -207,6 +209,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 invoiceToEdit: invoiceToEdit,
                 cloneFrom: _invoiceToClone,
                 cloneType: _invoiceToClone != null ? _cloneType : null,
+                initialType: _newInvoiceType,
                 guard: _invoiceFormGuard,
                 onCreateNewInvoice: onCreateNewInvoice,
               );
@@ -215,7 +218,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('invoice_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
-          onCreateInvoice: () => _selectTab(1),
+          onCreateInvoice: () => _openNewDocument('Invoice'),
           user: _currentUser,
           filterType: 'Invoice',
         );
@@ -224,7 +227,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('quotation_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
-          onCreateInvoice: () => _selectTab(1),
+          onCreateInvoice: () => _openNewDocument('Quotation'),
           user: _currentUser,
           filterType: 'Quotation',
         );
@@ -233,7 +236,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('receipt_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
-          onCreateInvoice: () => _selectTab(1),
+          onCreateInvoice: () => _openNewDocument('Receipt'),
           user: _currentUser,
           filterType: 'Receipt',
         );
@@ -265,7 +268,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('credit_note_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
-          onCreateInvoice: () => _selectTab(1),
+          onCreateInvoice: () => _openNewDocument('Credit Note'),
           user: _currentUser,
           filterType: 'Credit Note',
         );
@@ -274,7 +277,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('debit_note_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
-          onCreateInvoice: () => _selectTab(1),
+          onCreateInvoice: () => _openNewDocument('Debit Note'),
           user: _currentUser,
           filterType: 'Debit Note',
         );
@@ -283,7 +286,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('challan_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
-          onCreateInvoice: () => _selectTab(1),
+          onCreateInvoice: () => _openNewDocument('Delivery Challan'),
           user: _currentUser,
           filterType: 'Delivery Challan',
         );
@@ -292,7 +295,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           key: const ValueKey('proforma_list'),
           onEditInvoice: editInvoice,
           onCloneInvoice: cloneInvoice,
-          onCreateInvoice: () => _selectTab(1),
+          onCreateInvoice: () => _openNewDocument('Proforma'),
           user: _currentUser,
           filterType: 'Proforma',
         );
@@ -420,6 +423,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return await _invoiceFormGuard.canLeave?.call() ?? true;
   }
 
+  Future<void> _openNewDocument(String type) async {
+    if (_selectedIndex == 1 && !await _canLeaveInvoiceForm()) return;
+    if (_selectedIndex != 1) await _selectTab(1);
+    if (!mounted) return;
+    setState(() {
+      invoiceToEdit = null;
+      _invoiceToClone = null;
+      _newInvoiceType = type;
+    });
+  }
+
   Future<void> _selectTab(int index) async {
     if (_selectedIndex == index) return;
     if (_selectedIndex == 1 && !await _canLeaveInvoiceForm()) return;
@@ -431,6 +445,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       if (index != 1) {
         invoiceToEdit = null;
         _invoiceToClone = null;
+      } else {
+        _newInvoiceType = 'Invoice';
       }
     });
     // See initState: only hold shortcuts focus for non-create-invoice tabs.

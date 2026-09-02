@@ -39,6 +39,9 @@ class CreateInvoiceScreenV2 extends ConsumerStatefulWidget {
   /// Defaults to the source invoice type when null.
   final String? cloneType;
 
+  /// The type for a newly created document opened from a document list.
+  final String initialType;
+
   /// Called when the user taps "New Invoice" while in edit mode.
   /// The parent (DashboardScreen) resets invoiceToEdit to null.
   final VoidCallback? onCreateNewInvoice;
@@ -49,6 +52,7 @@ class CreateInvoiceScreenV2 extends ConsumerStatefulWidget {
     this.invoiceToEdit,
     this.cloneFrom,
     this.cloneType,
+    this.initialType = 'Invoice',
     this.onCreateNewInvoice,
     this.guard,
   });
@@ -168,6 +172,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   @override
   void initState() {
     super.initState();
+    invoiceType = widget.initialType;
     widget.guard?.canLeave = _confirmLeaveIfDirty;
     // V2: close the inline product dropdown a beat after the field loses
     // focus, so a tap on a dropdown row still registers as a selection

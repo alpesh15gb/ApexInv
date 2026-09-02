@@ -16,15 +16,17 @@ class ReminderService {
       SELECT i.id, i.invoice_number, i.customer_name, i.customer_phone,
              i.total, i.due_date, i.currency_symbol,
              (i.total - COALESCE((SELECT SUM(p.amount_paid)
-                FROM invoice_payments p WHERE p.invoice_id = i.id), 0))
+                FROM invoice_payments p WHERE p.invoice_id = i.id
+                  AND p.cheque_status NOT IN ('bounced', 'cancelled')), 0))
               AS outstanding
       FROM invoices i
       WHERE i.deleted_at IS NULL AND i.type = 'Invoice'
         AND i.due_date IS NOT NULL
+        AND i.due_date < ?
       HAVING outstanding > 0.005
       ORDER BY i.due_date ASC
       LIMIT $limit
-    ''');
+    ''', [DateTime.now().toIso8601String()]);
     return rows.map((r) {
       final due = DateTime.tryParse(r['due_date'] as String? ?? '');
       return OverdueInvoice(

@@ -271,6 +271,13 @@ class SyncController {
     _emit(const SyncStatusState());
   }
 
+  /// Drops the cached database connection after a destructive local wipe.
+  /// Sync must already be unlinked so no engine retains the old connection.
+  void forgetDatabaseConnection() {
+    _db = null;
+    _dbFuture = null;
+  }
+
   /// Manual "Sync now" — returns an error string or null on success.
   Future<String?> syncNow() async {
     final engine = _engine;

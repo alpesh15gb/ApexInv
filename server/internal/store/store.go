@@ -86,6 +86,18 @@ func (s *Store) UserByEmail(ctx context.Context, email string) (*User, error) {
 	return u, err
 }
 
+// UserByID retrieves the authenticated user's current password hash.
+func (s *Store) UserByID(ctx context.Context, id string) (*User, error) {
+	u := &User{ID: id}
+	err := s.pool.QueryRow(ctx,
+		`SELECT email, password_hash FROM users WHERE id = $1`, id).
+		Scan(&u.Email, &u.PasswordHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return u, err
+}
+
 func (s *Store) CreateCompany(ctx context.Context, name, ownerID string) (string, error) {
 	// memberships has no `id` column (PK is (user_id, company_id)), so the
 	// outer RETURNING must name company_id — unqualified `id` resolves
@@ -107,6 +119,40 @@ func (s *Store) MemberOf(ctx context.Context, userID, companyID string) (bool, e
 		`SELECT EXISTS (SELECT 1 FROM memberships WHERE user_id = $1 AND company_id = $2)`,
 		userID, companyID).Scan(&ok)
 	return ok, err
+}
+
+// CompanyOwnerAndName returns the owner and exact confirmation name.
+func (s *Store) CompanyOwnerAndName(ctx context.Context, companyID string) (ownerID, name string, err error) {
+	err = s.pool.QueryRow(ctx,
+		`SELECT owner_id, name FROM companies WHERE id = $1`, companyID).
+		Scan(&ownerID, &name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return ownerID, name, err
+}
+
+// DeleteCompanyData atomically removes every company-scoped server record.
+func (s *Store) DeleteCompanyData(ctx context.Context, companyID string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM records WHERE company_id = $1`, companyID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM tombstones WHERE company_id = $1`, companyID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM memberships WHERE company_id = $1`, companyID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM companies WHERE id = $1`, companyID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // UserCompanies lists (company_id, name) pairs the user belongs to.
@@ -139,22 +185,22 @@ type Company struct {
 
 // Op is one change arriving from (or leaving for) a device.
 type Op struct {
-	Table     string                 `json:"table"`
-	RowPK     string                 `json:"rowPk"`
-	Op        string                 `json:"op"` // "update" (upsert) or "delete"
-	ChangedAt time.Time              `json:"changedAt"`
+	Table     string    `json:"table"`
+	RowPK     string    `json:"rowPk"`
+	Op        string    `json:"op"` // "update" (upsert) or "delete"
+	ChangedAt time.Time `json:"changedAt"`
 	// LwwAt is the client-clock arbitration key (authoring device's
 	// updated_at / deleting device's changed_at). Nil on push — only pull
 	// responses carry it.
-	LwwAt    *time.Time             `json:"lwwAt,omitempty"`
-	Payload  map[string]interface{} `json:"payload,omitempty"`
+	LwwAt   *time.Time             `json:"lwwAt,omitempty"`
+	Payload map[string]interface{} `json:"payload,omitempty"`
 }
 
 // PushResult is the receipt the engine already consumes (SyncPushReceipt).
 type PushResult struct {
-	ServerTime      time.Time          `json:"serverTime"`
-	RejectedPKs     []string           `json:"rejectedPks"`
-	CorrectedFields map[string]string  `json:"correctedFields"`
+	ServerTime      time.Time         `json:"serverTime"`
+	RejectedPKs     []string          `json:"rejectedPks"`
+	CorrectedFields map[string]string `json:"correctedFields"`
 }
 
 const lwwClamp = 60 * time.Second // future timestamps clamped to now+clamp

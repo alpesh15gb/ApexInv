@@ -59,6 +59,7 @@ func (s *Server) Routes() http.Handler {
 	// Authenticated.
 	mux.Handle("POST /companies", s.requireAuth(http.HandlerFunc(s.handleCreateCompany)))
 	mux.Handle("GET /companies", s.requireAuth(http.HandlerFunc(s.handleListCompanies)))
+	mux.Handle("POST /privacy/purge/company/{companyId}", s.requireAuth(http.HandlerFunc(s.handlePurgeCompany)))
 	mux.Handle("GET /sync/has-data/{companyId}", s.requireAuth(http.HandlerFunc(s.handleHasData)))
 	mux.Handle("POST /sync/push/{companyId}", s.requireAuth(http.HandlerFunc(s.handlePush)))
 	mux.Handle("POST /sync/pull/{companyId}", s.requireAuth(http.HandlerFunc(s.handlePull)))
@@ -174,6 +175,56 @@ func (s *Server) handleListCompanies(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, companies)
 }
 
+func (s *Server) handlePurgeCompany(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(ctxUserID).(string)
+	companyID := r.PathValue("companyId")
+	var req struct {
+		CompanyName        *string `json:"companyName"`
+		Password           *string `json:"password"`
+		RetentionConfirmed *bool   `json:"retentionConfirmed"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CompanyName == nil || req.Password == nil || req.RetentionConfirmed == nil || *req.CompanyName == "" || *req.Password == "" || !*req.RetentionConfirmed {
+		writeErr(w, http.StatusBadRequest, "companyName, password, and retention confirmation required")
+		return
+	}
+
+	ownerID, companyName, err := s.Store.CompanyOwnerAndName(r.Context(), companyID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusForbidden, "only the company owner may purge it")
+		return
+	}
+	if err != nil {
+		log.Printf("company lookup failed: %v", err)
+		writeErr(w, http.StatusInternalServerError, "company lookup failed")
+		return
+	}
+	if ownerID != userID {
+		writeErr(w, http.StatusForbidden, "only the company owner may purge it")
+		return
+	}
+	u, err := s.Store.UserByID(r.Context(), userID)
+	if err != nil {
+		log.Printf("user lookup failed: %v", err)
+		writeErr(w, http.StatusInternalServerError, "user lookup failed")
+		return
+	}
+	if !s.Auth.Verify(u.PasswordHash, *req.Password) {
+		writeErr(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	if companyName != *req.CompanyName {
+		writeErr(w, http.StatusBadRequest, "company name confirmation does not match")
+		return
+	}
+
+	if err := s.Store.DeleteCompanyData(r.Context(), companyID); err != nil {
+		log.Printf("company purge failed: %v", err)
+		writeErr(w, http.StatusInternalServerError, "company purge failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+}
+
 // ── Handlers: sync ──────────────────────────────────────────────────────
 
 func (s *Server) handleHasData(w http.ResponseWriter, r *http.Request) {
@@ -190,8 +241,8 @@ func (s *Server) handleHasData(w http.ResponseWriter, r *http.Request) {
 }
 
 type pushRequest struct {
-	DeviceID string       `json:"deviceId"`
-	Ops      []store.Op   `json:"ops"`
+	DeviceID string     `json:"deviceId"`
+	Ops      []store.Op `json:"ops"`
 }
 
 func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {

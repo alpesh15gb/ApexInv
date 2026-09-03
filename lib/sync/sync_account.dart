@@ -179,6 +179,31 @@ class SyncAccountClient {
     }
   }
 
+  /// Permanently removes a linked company after the server verifies the owner.
+  /// Returns a message suitable for display when the request is rejected.
+  Future<String?> purgeCompany({
+    required SyncAccount account,
+    required String companyName,
+    required String password,
+    required bool retentionConfirmed,
+  }) async {
+    try {
+      await _post(
+          '/privacy/purge/company/${account.companyId}', account.token, {
+        'companyName': companyName,
+        'password': password,
+        'retentionConfirmed': retentionConfirmed,
+      });
+      return null;
+    } on SyncAuthHttpException catch (e) {
+      return e.message;
+    } on TimeoutException {
+      return 'Server timed out';
+    } catch (e) {
+      return 'Cannot reach sync server: $e';
+    }
+  }
+
   // ── plumbing ────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> _post(

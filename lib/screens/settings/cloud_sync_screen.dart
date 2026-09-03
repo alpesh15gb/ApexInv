@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:apexbooks/backup/backup_manager.dart';
+import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/sync/sync_controller.dart';
 import 'package:apexbooks/sync/sync_engine.dart';
+import 'package:apexbooks/sync/sync_account.dart';
 
 /// Cloud sync settings (dbplan Phase 2): link/unlink an account on the
 /// self-hosted sync server, show status, and trigger manual cycles.
@@ -133,6 +136,182 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
     if (err != null) _fail(err);
   }
 
+  Future<void> _eraseLocalData() async {
+    try {
+      await DatabaseHelper().wipeDatabase();
+      SyncController.instance.forgetDatabaseConnection();
+      await BackupManager().deleteManagedBackups();
+    } catch (e) {
+      _fail('Could not erase all local data: $e');
+    }
+  }
+
+  Future<void> _purgeCompany() async {
+    final account = SyncController.instance.account;
+    if (account == null || account.companyId.isEmpty) return;
+    final credentials = await _showCompanyPurgeDialog(account.companyName);
+    if (credentials == null) return;
+
+    _setBusy(true);
+    final error = await SyncAccountClient(baseUrl: SyncController.apiBaseUrl)
+        .purgeCompany(
+      account: account,
+      companyName: credentials.companyName,
+      password: credentials.password,
+      retentionConfirmed: credentials.retentionConfirmed,
+    );
+    if (error != null) {
+      _setBusy(false);
+      _fail(error);
+      return;
+    }
+
+    try {
+      await SyncController.instance.unlink();
+    } catch (_) {
+      // The server is already purged; continue so the local database is not
+      // retained merely because clearing the now-deleted sync setting failed.
+    }
+    await _eraseLocalData();
+    _setBusy(false);
+    if (mounted && _error == null) setState(() => _needsCompany = false);
+  }
+
+  Future<void> _wipeLocalOnly() async {
+    final firstConfirmed = await _showLocalWipeWarning();
+    if (firstConfirmed != true || !mounted) return;
+    final finalConfirmed = await _showLocalWipeFinalConfirmation();
+    if (finalConfirmed != true) return;
+    _setBusy(true);
+    if (SyncController.instance.isLinked) {
+      try {
+        await SyncController.instance.unlink();
+      } catch (_) {
+        // The controller has already stopped the engine before persistence.
+      }
+      if (mounted) setState(() => _needsCompany = false);
+    }
+    await _eraseLocalData();
+    _setBusy(false);
+  }
+
+  Future<_PurgeCredentials?> _showCompanyPurgeDialog(String companyName) async {
+    final typedCompany = TextEditingController();
+    final password = TextEditingController();
+    var retentionConfirmed = false;
+    try {
+      return await showDialog<_PurgeCredentials>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final valid = typedCompany.text == companyName &&
+                password.text.isNotEmpty &&
+                retentionConfirmed;
+            return AlertDialog(
+              title: const Text('Permanently delete cloud company?'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'This permanently deletes $companyName from cloud sync, '
+                      'then erases this device and app-managed backups. Files '
+                      'previously exported or shared outside the app cannot be deleted.',
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: typedCompany,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'Type "$companyName" to confirm',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: password,
+                      obscureText: true,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: const InputDecoration(labelText: 'Password'),
+                    ),
+                    CheckboxListTile(
+                      value: retentionConfirmed,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (value) => setDialogState(
+                          () => retentionConfirmed = value ?? false),
+                      title: const Text(
+                          'I confirm that applicable tax, accounting, contractual, and legal-hold retention obligations have been addressed.'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
+                FilledButton(
+                  onPressed: valid
+                      ? () => Navigator.pop(
+                            ctx,
+                            _PurgeCredentials(typedCompany.text, password.text,
+                                retentionConfirmed),
+                          )
+                      : null,
+                  style: FilledButton.styleFrom(
+                      backgroundColor: Theme.of(ctx).colorScheme.error),
+                  child: const Text('Delete permanently'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    } finally {
+      typedCompany.dispose();
+      password.dispose();
+    }
+  }
+
+  Future<bool?> _showLocalWipeWarning() => showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Erase local app data?'),
+          content: const Text(
+            'This deletes this device\'s database and app-managed backups. '
+            'Files previously exported or shared outside the app cannot be deleted.',
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Continue')),
+          ],
+        ),
+      );
+
+  Future<bool?> _showLocalWipeFinalConfirmation() => showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Final confirmation'),
+          content: const Text(
+            'Erase all local app data now? This cannot be undone. Files '
+            'previously exported or shared outside the app cannot be deleted.',
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(ctx).colorScheme.error),
+              child: const Text('Erase local data'),
+            ),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(syncStatusProvider).valueOrNull ??
@@ -158,7 +337,10 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
                 const SizedBox(height: 24),
                 if (linked)
                   _StatusCard(
-                      status: status, onSyncNow: _syncNow, onUnlink: _unlink)
+                    status: status,
+                    onSyncNow: _syncNow,
+                    onUnlink: _unlink,
+                  )
                 else if (_needsCompany)
                   _CompanyStep(
                     company: _company,
@@ -181,6 +363,11 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
                     style: TextStyle(color: theme.colorScheme.error),
                   ),
                 ],
+                const SizedBox(height: 24),
+                _DataRemovalCard(
+                  onWipeLocal: _wipeLocalOnly,
+                  onPurgeCompany: linked ? _purgeCompany : null,
+                ),
               ],
             ),
     );
@@ -206,6 +393,8 @@ class _StatusCard extends StatelessWidget {
     final lastSync = status.lastSyncAt == null
         ? '—'
         : DateFormat('d MMM yyyy, HH:mm').format(status.lastSyncAt!);
+    final healthy =
+        !errored && status.pendingOps == 0 && status.lastSyncAt != null;
 
     return Card(
       child: Padding(
@@ -238,6 +427,25 @@ class _StatusCard extends StatelessWidget {
                 ),
                 TextButton(onPressed: onSyncNow, child: const Text('Sync now')),
               ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: (healthy ? Colors.green : theme.colorScheme.primary)
+                    .withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(children: [
+                Icon(healthy ? Icons.verified_outlined : Icons.info_outline,
+                    size: 18,
+                    color: healthy ? Colors.green : theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(healthy
+                        ? 'System health: all changes are synced.'
+                        : 'System health: review pending changes or sync status.')),
+              ]),
             ),
             const SizedBox(height: 8),
             _row('Account', account?.email ?? '—'),
@@ -274,6 +482,61 @@ class _StatusCard extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _DataRemovalCard extends StatelessWidget {
+  final Future<void> Function() onWipeLocal;
+  final Future<void> Function()? onPurgeCompany;
+
+  const _DataRemovalCard({required this.onWipeLocal, this.onPurgeCompany});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Data removal', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            const Text(
+              'App-managed backups are removed too. Previously exported or '
+              'shared files remain outside the app and cannot be deleted here.',
+            ),
+            const SizedBox(height: 12),
+            if (onPurgeCompany != null) ...[
+              OutlinedButton.icon(
+                onPressed: onPurgeCompany,
+                icon: const Icon(Icons.cloud_off_outlined),
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error),
+                label: const Text('Delete cloud company and local data'),
+              ),
+              const SizedBox(height: 8),
+            ],
+            OutlinedButton.icon(
+              onPressed: onWipeLocal,
+              icon: const Icon(Icons.delete_forever_outlined),
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error),
+              label: const Text('Erase local app data'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PurgeCredentials {
+  final String companyName;
+  final String password;
+  final bool retentionConfirmed;
+
+  const _PurgeCredentials(
+      this.companyName, this.password, this.retentionConfirmed);
 }
 
 // ── Unlinked: sign-in / register card ───────────────────────────────────

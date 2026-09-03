@@ -326,6 +326,22 @@ class BackupManager {
     }
   }
 
+  /// Removes backups kept in this app's private backup directory only.
+  /// Files downloaded, shared, or exported elsewhere are intentionally left
+  /// untouched because the app no longer controls those copies.
+  Future<void> deleteManagedBackups() async {
+    final backupDir = Directory(await _getBackupDirectory());
+    if (!await backupDir.exists()) return;
+
+    await for (final entry in backupDir.list()) {
+      if (entry is File &&
+          (entry.path.endsWith(_backupExtension) ||
+              entry.path.endsWith(_jsonExtension))) {
+        await entry.delete();
+      }
+    }
+  }
+
   // Share backup file
   Future<void> shareBackup(String backupPath) async {
     final file = File(backupPath);

@@ -144,7 +144,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Import customers, products, and invoices from a Vyapar .vyb backup file.',
+                                'Import customers, products, sales, quotations, purchase orders, and purchase bills from a Vyapar .vyb backup file.',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
@@ -305,6 +305,18 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                           'Invoices imported', _result!.invoicesImported),
                       _buildResultRow(
                           'Invoices skipped', _result!.invoicesSkipped),
+                      _buildResultRow(
+                          'Quotations imported', _result!.quotationsImported),
+                      _buildResultRow(
+                          'Quotations skipped', _result!.quotationsSkipped),
+                      _buildResultRow('Purchase orders imported',
+                          _result!.purchaseOrdersImported),
+                      _buildResultRow('Purchase orders skipped',
+                          _result!.purchaseOrdersSkipped),
+                      _buildResultRow('Purchase bills imported',
+                          _result!.purchaseBillsImported),
+                      _buildResultRow('Purchase bills skipped',
+                          _result!.purchaseBillsSkipped),
                       if (_result!.warnings.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         Text(

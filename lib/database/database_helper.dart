@@ -18,7 +18,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 49;
+  final dbVersion = 50;
 
   /// Emits when the sync engine finishes applying pulled remote rows, so the
   /// UI layer can refresh its lists. Write-side signaling needs no stream:
@@ -715,18 +715,17 @@ class DatabaseHelper {
             'invoice_payments',
             {
               'cheque_id': chequeId,
-              'cheque_status':
-                  (row['cheque_cleared'] as int? ?? 0) == 1
-                      ? 'cleared'
-                      : 'pending',
+              'cheque_status': (row['cheque_cleared'] as int? ?? 0) == 1
+                  ? 'cleared'
+                  : 'pending',
             },
             where: 'id = ?',
             whereArgs: [paymentId]);
         // A legacy cleared cheque had already been treated as Bank.
         if ((row['cheque_cleared'] as int? ?? 0) != 1) continue;
       }
-      final accountId = await ensureAccount(
-          method == 'Cash' ? 'cash' : 'bank', code, symbol);
+      final accountId =
+          await ensureAccount(method == 'Cash' ? 'cash' : 'bank', code, symbol);
       if (method == 'Check') {
         await db.update('cheques', {'bank_account_id': accountId},
             where: 'id = ?', whereArgs: ['legacy-cheque-in-$paymentId']);
@@ -759,8 +758,8 @@ class DatabaseHelper {
       final symbol = row['currency_symbol'] as String? ?? '₹';
       final method = row['payment_method'] as String? ?? 'Cash';
       final paymentId = row['id'] as String;
-      final accountId = await ensureAccount(
-          method == 'Cash' ? 'cash' : 'bank', code, symbol);
+      final accountId =
+          await ensureAccount(method == 'Cash' ? 'cash' : 'bank', code, symbol);
       await db.update('purchase_bill_payments', {'account_id': accountId},
           where: 'id = ?', whereArgs: [paymentId]);
       await db.insert(
@@ -1574,7 +1573,8 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 47) {
-      await _runMigrationStep(db, 47, 'create_purchase_bill_payments', () async {
+      await _runMigrationStep(db, 47, 'create_purchase_bill_payments',
+          () async {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS purchase_bill_payments (
             id TEXT PRIMARY KEY,
@@ -1590,7 +1590,8 @@ class DatabaseHelper {
         await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_purchase_bill_payments_bill ON purchase_bill_payments(purchase_bill_id)');
       });
-      await _runMigrationStep(db, 47, 'sync_register_purchase_bill_payments', () async {
+      await _runMigrationStep(db, 47, 'sync_register_purchase_bill_payments',
+          () async {
         await addSyncColumns(db, 'purchase_bill_payments');
         await installSyncCapture(db);
       });
@@ -1643,16 +1644,36 @@ class DatabaseHelper {
     }
     if (oldVersion < 49) {
       await _runMigrationStep(db, 49, 'normalize_tax_mode', () async {
-        await db.execute("UPDATE invoices SET tax_mode = 'per_item' WHERE tax_mode = 'item'");
-        final saleOrderColumns = await db.rawQuery('PRAGMA table_info(sale_orders)');
+        await db.execute(
+            "UPDATE invoices SET tax_mode = 'per_item' WHERE tax_mode = 'item'");
+        final saleOrderColumns =
+            await db.rawQuery('PRAGMA table_info(sale_orders)');
         if (saleOrderColumns.any((column) => column['name'] == 'tax_mode')) {
-          await db.execute("UPDATE sale_orders SET tax_mode = 'per_item' WHERE tax_mode = 'item'");
+          await db.execute(
+              "UPDATE sale_orders SET tax_mode = 'per_item' WHERE tax_mode = 'item'");
         }
       });
-      await _runMigrationStep(db, 49, 'register_extended_sync_tables', () async {
+      await _runMigrationStep(db, 49, 'register_extended_sync_tables',
+          () async {
         for (final table in syncTableOrder) {
           await addSyncColumns(db, table,
               withCloudId: cloudIdTables.contains(table));
+        }
+        await installSyncCapture(db);
+        await backfillSyncColumns(db);
+      });
+    }
+    if (oldVersion < 50) {
+      // Repair: databases upgraded by builds predating a table's sync
+      // registration (notably expense_categories, expenses, batch_info,
+      // custom_fields, purchase_orders, purchase_order_items) missed its
+      // sync columns, while later backfills assumed them present — startup
+      // crash "no such column: updated_at". Idempotent; safe on healthy DBs.
+      await _runMigrationStep(db, 50, 'repair_sync_columns', () async {
+        for (final table in syncTableOrder) {
+          await addSyncColumns(db, table,
+              withCloudId: cloudIdTables.contains(table),
+              withDeletedAt: table == 'customers' || table == 'products');
         }
         await installSyncCapture(db);
         await backfillSyncColumns(db);
@@ -1722,6 +1743,17 @@ class DatabaseHelper {
       await db.close();
       _database = null;
     }
+  }
+
+  /// Permanently removes this app's database file and opens a fresh database.
+  /// This deliberately does not use [clearAllData], which is debug-only and
+  /// does not cover every table or replace the on-disk database.
+  Future<Database> wipeDatabase() async {
+    await database; // Resolve the app-owned path before closing the handle.
+    final dbPath = _path!;
+    await close();
+    await deleteDatabase(dbPath);
+    return reinitialize();
   }
 
   /// Closes the current connection, clears the singleton reference, and

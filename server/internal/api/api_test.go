@@ -222,6 +222,95 @@ func TestAuthorizationRequiresMembership(t *testing.T) {
 	}
 }
 
+func TestPurgeCompanyRequiresOwnerConfirmationAndPassword(t *testing.T) {
+	srv := newTestServer(t)
+	ownerToken := registerAndLogin(t, srv, "purge-owner@x.com")
+	memberToken := registerAndLogin(t, srv, "purge-member@x.com")
+	company := createCompany(t, srv, ownerToken, "Purge Co")
+
+	ctx := context.Background()
+	st, err := store.Open(ctx, testDBURLForTest(os.Getenv("DATABASE_URL")))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(st.Close)
+	member, err := st.UserByEmail(ctx, "purge-member@x.com")
+	if err != nil {
+		t.Fatalf("member lookup: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, `INSERT INTO memberships (user_id, company_id, role) VALUES ($1, $2, 'member')`, member.ID, company); err != nil {
+		t.Fatalf("add membership: %v", err)
+	}
+
+	res, _ := postJSON(t, srv, "/privacy/purge/company/"+company, memberToken, map[string]interface{}{
+		"companyName": "Purge Co", "password": "password-123", "retentionConfirmed": true})
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("member purged company: %d", res.StatusCode)
+	}
+	res, _ = postJSON(t, srv, "/privacy/purge/company/"+company, ownerToken, map[string]interface{}{
+		"companyName": "Purge Co", "password": "password-123", "retentionConfirmed": false})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("missing retention confirmation accepted: %d", res.StatusCode)
+	}
+	res, _ = postJSON(t, srv, "/privacy/purge/company/"+company, ownerToken, map[string]interface{}{
+		"companyName": "Wrong Co", "password": "password-123", "retentionConfirmed": true})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("wrong company name accepted: %d", res.StatusCode)
+	}
+	res, _ = postJSON(t, srv, "/privacy/purge/company/"+company, ownerToken, map[string]interface{}{
+		"companyName": "Purge Co", "password": "wrong-password", "retentionConfirmed": true})
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("wrong password accepted: %d", res.StatusCode)
+	}
+}
+
+func TestPurgeCompanyRemovesDataAndMemberships(t *testing.T) {
+	srv := newTestServer(t)
+	ownerToken := registerAndLogin(t, srv, "purge-data-owner@x.com")
+	memberToken := registerAndLogin(t, srv, "purge-data-member@x.com")
+	company := createCompany(t, srv, ownerToken, "Delete Me")
+	push(t, srv, ownerToken, company, []store.Op{
+		op("customers", "purge-record", "update", time.Now().UTC(), map[string]interface{}{"name": "Delete"}),
+		op("products", "purge-tombstone", "delete", time.Now().UTC(), nil),
+	})
+
+	ctx := context.Background()
+	st, err := store.Open(ctx, testDBURLForTest(os.Getenv("DATABASE_URL")))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(st.Close)
+	member, err := st.UserByEmail(ctx, "purge-data-member@x.com")
+	if err != nil {
+		t.Fatalf("member lookup: %v", err)
+	}
+	if _, err := st.Pool().Exec(ctx, `INSERT INTO memberships (user_id, company_id, role) VALUES ($1, $2, 'member')`, member.ID, company); err != nil {
+		t.Fatalf("add membership: %v", err)
+	}
+
+	res, body := postJSON(t, srv, "/privacy/purge/company/"+company, ownerToken, map[string]interface{}{
+		"companyName": "Delete Me", "password": "password-123", "retentionConfirmed": true})
+	if res.StatusCode != http.StatusOK || body["success"] != true {
+		t.Fatalf("purge failed: %d %v", res.StatusCode, body)
+	}
+	for _, table := range []string{"companies", "memberships", "records", "tombstones"} {
+		var count int
+		column := "company_id"
+		if table == "companies" {
+			column = "id"
+		}
+		if err := st.Pool().QueryRow(ctx, `SELECT COUNT(*) FROM `+table+` WHERE `+column+` = $1`, company).Scan(&count); err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if count != 0 {
+			t.Fatalf("%s rows remain: %d", table, count)
+		}
+	}
+	if got := getList(t, srv, "/companies", memberToken); len(got) != 0 {
+		t.Fatalf("member still has purged company: %v", got)
+	}
+}
+
 // ── Sync contract ───────────────────────────────────────────────────────
 
 func TestPushPullRoundTrip(t *testing.T) {

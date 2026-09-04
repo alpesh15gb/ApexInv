@@ -248,6 +248,12 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
                   ),
                 ),
 
+                Center(
+                    child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: _healthCard(),
+                )),
+
                 const Divider(),
 
                 // Backup list
@@ -350,6 +356,42 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
         ),
       ),
     );
+  }
+
+  Widget _healthCard() {
+    final latest = _backups.isEmpty ? null : _backups.first.createdAt;
+    final age =
+        latest == null ? null : DateTime.now().difference(latest).inDays;
+    final healthy = age != null && age <= 7;
+    final color = healthy ? Colors.green : Colors.orange;
+    return Card(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Icon(
+                healthy
+                    ? Icons.verified_user_outlined
+                    : Icons.warning_amber_rounded,
+                color: color),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(
+                      healthy
+                          ? 'Backup health looks good'
+                          : 'Backup attention needed',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(latest == null
+                      ? 'Create a backup to protect this workspace.'
+                      : 'Last backup ${age == 0 ? 'today' : '$age days ago'} · ${_backups.length} available'),
+                ])),
+            if (_backups.where((b) => b.type == BackupType.database).isNotEmpty)
+              const Chip(label: Text('Database ready')),
+          ]),
+        ));
   }
 
   Future<bool> _showConfirmDialog(String title, String message) async {

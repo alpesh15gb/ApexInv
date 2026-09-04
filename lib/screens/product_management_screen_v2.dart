@@ -97,7 +97,6 @@ class _ProductManagementScreenV2State
   int _activeTabV2 =
       0; // 0 all, 1 products, 2 services, 3 low stock, 4 out of stock
   bool _showAddPanelV2 = false;
-  int _addPanelTabV2 = 0; // 0 Basic Information, 1 Advanced
   bool _addAnotherAfterSavingV2 = false;
   bool _showStatsCardsV2 = true;
 
@@ -377,8 +376,7 @@ class _ProductManagementScreenV2State
         unit: _selectedUnit.trim(),
         unlimitedStock: _unlimitedStock,
         priceIncludesTax: _priceIncludesTax,
-        reorderLevel:
-            double.tryParse(_reorderLevelController.text.trim()) ?? 0,
+        reorderLevel: double.tryParse(_reorderLevelController.text.trim()) ?? 0,
         barcode: _barcodeController.text.trim(),
       );
 
@@ -1926,7 +1924,6 @@ class _ProductManagementScreenV2State
                   onPressed: () {
                     setState(() {
                       _showAddPanelV2 = true;
-                      _addPanelTabV2 = 0;
                     });
                   },
                   icon: const Icon(Icons.add, size: 18),
@@ -2060,7 +2057,6 @@ class _ProductManagementScreenV2State
                 onPressed: () {
                   setState(() {
                     _showAddPanelV2 = true;
-                    _addPanelTabV2 = 0;
                   });
                 },
                 icon: const Icon(Icons.add, size: 18),
@@ -3467,8 +3463,7 @@ class _ProductManagementScreenV2State
                 unit: unit.trim(),
                 unlimitedStock: unlimitedStock,
                 priceIncludesTax: priceIncludesTax,
-                reorderLevel:
-                    double.tryParse(reorderCtrl.text.trim()) ?? 0,
+                reorderLevel: double.tryParse(reorderCtrl.text.trim()) ?? 0,
                 barcode: barcodeCtrl.text.trim(),
               );
               await ref.read(productRepositoryProvider).updateProduct(updated);
@@ -3775,18 +3770,17 @@ class _ProductManagementScreenV2State
                                                     barcodeCtrl.text = code);
                                               }
                                             },
-                                      icon:
-                                          const Icon(Icons.qr_code_scanner, size: 20),
+                                      icon: const Icon(Icons.qr_code_scanner,
+                                          size: 20),
                                       tooltip: 'Scan barcode',
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: field(
-                                          reorderCtrl, 'Reorder level',
+                                      child: field(reorderCtrl, 'Reorder level',
                                           Icons.low_priority,
-                                          keyboardType:
-                                              const TextInputType.numberWithOptions(
-                                                  decimal: true)),
+                                          keyboardType: const TextInputType
+                                              .numberWithOptions(
+                                              decimal: true)),
                                     ),
                                   ],
                                 ),

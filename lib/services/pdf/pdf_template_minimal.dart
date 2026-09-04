@@ -193,9 +193,7 @@ pw.MultiPage buildMinimalTemplate(
       pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly, children: [
         if (showPhone && (company?.phone ?? '').isNotEmpty)
           pw.Text(
-            company?.phone != null && company!.phone!.isNotEmpty
-                ? 'Ph: ${company.phone}'
-                : '',
+            'Ph: ${company?.phone ?? ''}',
             style: pw.TextStyle(fontSize: minimalPdfStyle.bodyFontSize),
           ),
         if (showEmail && (company?.email ?? '').isNotEmpty)

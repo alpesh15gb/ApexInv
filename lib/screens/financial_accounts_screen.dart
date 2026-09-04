@@ -24,9 +24,8 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
   String? _selectedId;
   bool _loading = true;
 
-  String get _title => widget.accountType == 'bank'
-      ? 'Bank Accounts'
-      : 'Cash In Hand';
+  String get _title =>
+      widget.accountType == 'bank' ? 'Bank Accounts' : 'Cash In Hand';
 
   @override
   void initState() {
@@ -238,8 +237,8 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
                   value: from,
                   decoration: const InputDecoration(labelText: 'From'),
                   items: all
-                      .map((a) => DropdownMenuItem(
-                          value: a.id, child: Text(a.name)))
+                      .map((a) =>
+                          DropdownMenuItem(value: a.id, child: Text(a.name)))
                       .toList(),
                   onChanged: (v) => setDialogState(() {
                         from = v!;
@@ -252,8 +251,8 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
                   decoration: const InputDecoration(labelText: 'To'),
                   items: all
                       .where((a) => a.id != from)
-                      .map((a) => DropdownMenuItem(
-                          value: a.id, child: Text(a.name)))
+                      .map((a) =>
+                          DropdownMenuItem(value: a.id, child: Text(a.name)))
                       .toList(),
                   onChanged: (v) => setDialogState(() => to = v!)),
               TextField(
@@ -375,10 +374,13 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
 
   Widget _register(FinancialAccount? account) {
     if (account == null) return const Center(child: Text('Select an account'));
+    final balance = _balances[account.id] ?? 0;
+    final movementTotal =
+        _transactions.fold<double>(0, (sum, tx) => sum + tx.amount);
     return Column(children: [
       ListTile(
-        title: Text(account.name,
-            style: Theme.of(context).textTheme.titleLarge),
+        title:
+            Text(account.name, style: Theme.of(context).textTheme.titleLarge),
         subtitle: Text(
             'Opening ${account.currencySymbol} ${account.openingBalance.toStringAsFixed(2)}'),
         trailing: Wrap(spacing: 4, children: [
@@ -403,6 +405,42 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
                     : Icons.check_circle_outline)),
         ]),
       ),
+      Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context)
+              .colorScheme
+              .primaryContainer
+              .withValues(alpha: .35),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Wrap(
+          spacing: 28,
+          runSpacing: 12,
+          children: [
+            _accountMetric('Current balance',
+                '${account.currencySymbol} ${balance.toStringAsFixed(2)}'),
+            _accountMetric('Opening balance',
+                '${account.currencySymbol} ${account.openingBalance.toStringAsFixed(2)}'),
+            _accountMetric('Movement total',
+                '${movementTotal >= 0 ? '+' : ''}${account.currencySymbol} ${movementTotal.toStringAsFixed(2)}'),
+          ],
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+        child: Row(children: [
+          Icon(Icons.fact_check_outlined,
+              size: 18, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          const Expanded(
+              child: Text('Account timeline',
+                  style: TextStyle(fontWeight: FontWeight.w700))),
+          Text('${_transactions.length} movements',
+              style: Theme.of(context).textTheme.labelMedium),
+        ]),
+      ),
       const Divider(height: 1),
       Expanded(
         child: _transactions.isEmpty
@@ -413,14 +451,14 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
                 itemBuilder: (context, index) {
                   final tx = _transactions[index];
                   return ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
                     leading: CircleAvatar(
                       backgroundColor: tx.amount >= 0
                           ? Colors.green.withValues(alpha: .12)
                           : Colors.red.withValues(alpha: .12),
                       child: Icon(
-                          tx.amount >= 0
-                              ? Icons.south_west
-                              : Icons.north_east,
+                          tx.amount >= 0 ? Icons.south_west : Icons.north_east,
                           color: tx.amount >= 0 ? Colors.green : Colors.red,
                           size: 18),
                     ),
@@ -431,11 +469,19 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
                         '${tx.amount >= 0 ? '+' : ''}${account.currencySymbol} ${tx.amount.toStringAsFixed(2)}',
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color:
-                                tx.amount >= 0 ? Colors.green : Colors.red)),
+                            color: tx.amount >= 0 ? Colors.green : Colors.red)),
                   );
                 }),
       ),
     ]);
   }
+
+  Widget _accountMetric(String label, String value) => SizedBox(
+        width: 175,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 3),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ]),
+      );
 }

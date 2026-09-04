@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/common/supported_currencies.dart';
 import 'package:apexbooks/services/pdf/pdf_font_assets.dart';
 

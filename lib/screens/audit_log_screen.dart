@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import 'package:apexbooks/database/database_helper.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 /// Admin-only audit trail viewer: newest writes first, searchable.
 class AuditLogScreen extends StatefulWidget {
@@ -16,6 +17,13 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
   List<Map<String, dynamic>> _entries = [];
   bool _isLoading = true;
   String _search = '';
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<List<Map<String, dynamic>>> _load() async {
     final db = await DatabaseHelper().database;
@@ -46,20 +54,18 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
     final filtered = q.isEmpty
         ? _entries
         : _entries.where((e) {
-            return (e['username'] as String? ?? '')
-                    .toLowerCase()
-                    .contains(q) ||
+            return (e['username'] as String? ?? '').toLowerCase().contains(q) ||
                 (e['action'] as String? ?? '').toLowerCase().contains(q) ||
                 (e['details'] as String? ?? '').toLowerCase().contains(q);
           }).toList();
 
     return Scaffold(
-      backgroundColor: theme.brightness == Brightness.dark
-          ? null
-          : Colors.grey[50],
+      backgroundColor:
+          theme.brightness == Brightness.dark ? null : Colors.grey[50],
       appBar: AppBar(
         title: const Text('Audit Log'),
-        backgroundColor: theme.appBarTheme.backgroundColor ?? theme.primaryColor,
+        backgroundColor:
+            theme.appBarTheme.backgroundColor ?? theme.primaryColor,
         foregroundColor: Colors.white,
         actions: [
           IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
@@ -69,23 +75,40 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
       body: Column(
         children: [
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Row(children: [
+              _healthStat(Icons.history, '${_entries.length}', 'Loaded events'),
+              const SizedBox(width: 10),
+              _healthStat(
+                  Icons.person_outline,
+                  '${_entries.map((e) => e['username']).toSet().length}',
+                  'Actors'),
+              const SizedBox(width: 10),
+              _healthStat(Icons.schedule_outlined,
+                  _entries.isEmpty ? '—' : 'Live', 'Audit health'),
+            ]),
+          ),
+          Padding(
             padding: const EdgeInsets.all(16),
-            child: TextField(
+            child: AppSearchField(
+              controller: _searchController,
+              hintText: 'Search user / action / details',
               onChanged: (v) => setState(() => _search = v),
-              decoration: InputDecoration(
-                hintText: 'Search user / action / details',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                isDense: true,
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
+              onClear: () => setState(() {
+                _searchController.clear();
+                _search = '';
+              }),
             ),
           ),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState()
                 : filtered.isEmpty
-                    ? const Center(child: Text('No audit entries'))
+                    ? const AppEmptyState(
+                        icon: Icons.history_outlined,
+                        title: 'No audit entries',
+                        subtitle: 'Actions will appear here as they happen',
+                      )
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
                         itemCount: filtered.length,
@@ -95,37 +118,40 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                           final created = DateTime.tryParse(
                                   e['created_at'] as String? ?? '') ??
                               DateTime.now();
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 3),
-                            child: ListTile(
-                              dense: true,
-                              leading: Icon(
-                                _iconFor(e['action'] as String? ?? ''),
-                                size: 20,
-                                color: theme.primaryColor,
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 3),
+                            child: AppCard(
+                              padding: EdgeInsets.zero,
+                              child: ListTile(
+                                dense: true,
+                                leading: Icon(
+                                  _iconFor(e['action'] as String? ?? ''),
+                                  size: 20,
+                                  color: theme.primaryColor,
+                                ),
+                                title: Text(
+                                  '${e['action'] ?? ''} — ${e['details'] ?? ''}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 13.5),
+                                ),
+                                subtitle: Text(
+                                  '${e['username'] ?? 'system'} · ${df.format(created)}',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color:
+                                          theme.colorScheme.onSurfaceVariant),
+                                ),
+                                onLongPress: () {
+                                  Clipboard.setData(ClipboardData(
+                                      text:
+                                          '${e['action']} | ${e['username']} | ${e['details']} | ${df.format(created)}'));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('Copied to clipboard')),
+                                  );
+                                },
                               ),
-                              title: Text(
-                                '${e['action'] ?? ''} — ${e['details'] ?? ''}',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13.5),
-                              ),
-                              subtitle: Text(
-                                '${e['username'] ?? 'system'} · ${df.format(created)}',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color:
-                                        theme.colorScheme.onSurfaceVariant),
-                              ),
-                              onLongPress: () {
-                                Clipboard.setData(ClipboardData(
-                                    text:
-                                        '${e['action']} | ${e['username']} | ${e['details']} | ${df.format(created)}'));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Copied to clipboard')),
-                                );
-                              },
                             ),
                           );
                         },
@@ -144,4 +170,22 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
     if (action.contains('restore')) return Icons.restore_outlined;
     return Icons.history;
   }
+
+  Widget _healthStat(IconData icon, String value, String label) => Expanded(
+        child: AppCard(
+            padding: const EdgeInsets.all(12),
+            child: Row(children: [
+              Icon(icon,
+                  size: 20, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(value,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(label, style: Theme.of(context).textTheme.labelSmall),
+                  ])),
+            ])),
+      );
 }

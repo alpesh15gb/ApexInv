@@ -46,6 +46,8 @@ dependencies:
   supabase_flutter: ^2.5.0
   connectivity_plus: ^6.0.0
   mobile_scanner: ^5.2.3
+  data_table_2: ^3.0.0
+  flutter_slidable: ^4.0.3
 
 dev_dependencies:
   flutter_test:

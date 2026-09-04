@@ -86,4 +86,10 @@ gh_actions_cleanup.py
 # Sync server secrets
 server/.env
 
+# Local Vyapar imports/exports and generated backup reports (never commit)
+*.vyb
+*.vyp
+Vyapar Exports/
+vyapar_backup_report/
+
 # Local tooling cache.freebuff/

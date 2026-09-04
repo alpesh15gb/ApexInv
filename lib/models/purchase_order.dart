@@ -11,6 +11,7 @@ class PurchaseOrder {
   final String status; // 'draft', 'confirmed', 'received', 'cancelled'
   final double totalAmount;
   final double amountPaid;
+  final bool priceIncludesTax; // document-level GST toggle state
   final String? notes;
   final String currencyCode;
   final String currencySymbol;
@@ -28,6 +29,7 @@ class PurchaseOrder {
     this.status = 'draft',
     this.totalAmount = 0.0,
     this.amountPaid = 0.0,
+    this.priceIncludesTax = false,
     this.notes,
     this.currencyCode = 'INR',
     this.currencySymbol = '₹',
@@ -48,6 +50,7 @@ class PurchaseOrder {
       status: map['status'] ?? 'draft',
       totalAmount: (map['total_amount'] as num?)?.toDouble() ?? 0.0,
       amountPaid: (map['amount_paid'] as num?)?.toDouble() ?? 0.0,
+      priceIncludesTax: (map['price_includes_tax'] as num?)?.toInt() == 1,
       notes: map['notes'] as String?,
       currencyCode: map['currency_code'] ?? 'INR',
       currencySymbol: map['currency_symbol'] ?? '₹',
@@ -67,6 +70,7 @@ class PurchaseOrder {
       'status': status,
       'total_amount': totalAmount,
       'amount_paid': amountPaid,
+      'price_includes_tax': priceIncludesTax ? 1 : 0,
       'notes': notes,
       'currency_code': currencyCode,
       'currency_symbol': currencySymbol,
@@ -88,6 +92,7 @@ class PurchaseOrder {
     String? status,
     double? totalAmount,
     double? amountPaid,
+    bool? priceIncludesTax,
     String? notes,
     String? currencyCode,
     String? currencySymbol,
@@ -105,6 +110,7 @@ class PurchaseOrder {
       status: status ?? this.status,
       totalAmount: totalAmount ?? this.totalAmount,
       amountPaid: amountPaid ?? this.amountPaid,
+      priceIncludesTax: priceIncludesTax ?? this.priceIncludesTax,
       notes: notes ?? this.notes,
       currencyCode: currencyCode ?? this.currencyCode,
       currencySymbol: currencySymbol ?? this.currencySymbol,
@@ -135,6 +141,14 @@ class PurchaseOrderItem {
 
   double get totalAmount {
     final sub = quantity * pricePerUnit - discount;
+    return sub + (sub * taxRate / 100);
+  }
+
+  /// Line amount honouring the document-level GST toggle. Inclusive unit
+  /// prices already contain tax, so the typed amount is the total.
+  double totalFor(bool pricesIncludeTax) {
+    final sub = quantity * pricePerUnit - discount;
+    if (pricesIncludeTax) return sub;
     return sub + (sub * taxRate / 100);
   }
 

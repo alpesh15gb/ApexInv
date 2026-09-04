@@ -438,6 +438,17 @@ class SettingsService {
     return await getSetting(SettingKey.defaultTaxMode) ?? 'global';
   }
 
+  /// Whether new-document rates include GST by default. Defaults to false
+  /// (exclusive) to preserve historical behaviour.
+  static Future<bool> getDefaultPriceIncludesTax() async {
+    return await getSetting(SettingKey.defaultPriceIncludesTax) == 'true';
+  }
+
+  static Future<void> setDefaultPriceIncludesTax(bool value) async {
+    await setSetting(
+        SettingKey.defaultPriceIncludesTax, value ? 'true' : 'false');
+  }
+
   /// Returns the signature size key: 'small' | 'medium' | 'large'. Defaults to 'medium'.
   static Future<String> getSignatureSize() async {
     return await getSetting(SettingKey.signatureSize) ?? 'medium';

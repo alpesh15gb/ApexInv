@@ -311,6 +311,15 @@ class VyaparImportService {
           if (_sourceId(transaction['txn_id']) != null)
             _sourceId(transaction['txn_id'])!: transaction,
       };
+      // Vyapar stores line rates net (priceperunit) with the gross in
+      // total_amount; txn_tax_inclusive == 1 means the user typed an
+      // inclusive rate, so imported lines restamp that interpretation.
+      final taxInclusiveByTxn = <String, bool>{
+        for (final transaction in transactions)
+          if (_sourceId(transaction['txn_id']) != null)
+            _sourceId(transaction['txn_id'])!:
+                _integer(transaction['txn_tax_inclusive']) == 1,
+      };
       final paymentTypes = <String, String>{};
       if (tables.contains('kb_paymentTypes')) {
         for (final payment in await vyaparDb.query('kb_paymentTypes')) {
@@ -422,16 +431,15 @@ class VyaparImportService {
               'tax_mode': 'per_item',
               'is_interstate': 0,
             });
+            final invoiceInclusive = taxInclusiveByTxn[sourceId] ?? false;
             for (var index = 0; index < lines.length; index++) {
               final line = lines[index];
               final sourceProductId = _sourceId(line['item_id'])!;
               final product = productBySourceId[sourceProductId]!;
               final quantity = _number(line['quantity'])!;
-              final unitPrice = _number(line['priceperunit'])!;
-              final taxAmount = _number(line['lineitem_tax_amount']) ?? 0;
-              final taxRate = quantity * unitPrice == 0
-                  ? 0
-                  : (taxAmount / (quantity * unitPrice) * 100);
+              final pricing = _linePricing(line, invoiceInclusive);
+              final unitPrice = pricing.unitPrice;
+              final taxRate = pricing.taxRate;
               await target.insert('invoice_items', {
                 'id': 'vy-line-${_stableId('$sourceId-$index')}',
                 'invoice_id': invoiceId,
@@ -452,6 +460,7 @@ class VyaparImportService {
                 'product_purchase_price':
                     _number(product['item_purchase_unit_price']) ?? 0,
                 'product_unit': _text(product['item_unit']),
+                'product_price_includes_tax': invoiceInclusive ? 1 : 0,
                 'description': _text(line['lineitem_description']),
               });
             }
@@ -531,8 +540,14 @@ class VyaparImportService {
               'tax_mode': 'per_item',
               'is_interstate': 0,
             });
-            await _insertInvoiceLines(target, quotationId, sourceId, lines,
-                productBySourceId, productIdBySourceId);
+            await _insertInvoiceLines(
+                target,
+                quotationId,
+                sourceId,
+                lines,
+                productBySourceId,
+                productIdBySourceId,
+                taxInclusiveByTxn[sourceId] ?? false);
           });
           quotationsImported++;
         } catch (e) {
@@ -581,12 +596,20 @@ class VyaparImportService {
               'status': 'draft',
               'total_amount': _lineTotal(lines),
               'amount_paid': _number(txn['txn_cash_amount']) ?? 0,
+              'price_includes_tax':
+                  (taxInclusiveByTxn[sourceId] ?? false) ? 1 : 0,
               'notes': 'Imported from Vyapar',
               'currency_code': 'INR',
               'currency_symbol': '₹',
             });
-            await _insertPurchaseOrderLines(target, orderId, sourceId, lines,
-                productBySourceId, productIdBySourceId);
+            await _insertPurchaseOrderLines(
+                target,
+                orderId,
+                sourceId,
+                lines,
+                productBySourceId,
+                productIdBySourceId,
+                taxInclusiveByTxn[sourceId] ?? false);
           });
           purchaseOrdersImported++;
         } catch (e) {
@@ -648,12 +671,20 @@ class VyaparImportService {
               'amount_paid': _number(txn['txn_cash_amount']) ?? 0,
               'itc_eligible': _integer(txn['txn_itc_applicable']) == 0 ? 0 : 1,
               'reverse_charge': _integer(txn['txn_reverse_charge']) ?? 0,
+              'price_includes_tax':
+                  (taxInclusiveByTxn[sourceId] ?? false) ? 1 : 0,
               'notes': _text(txn['txn_description']),
               'currency_code': 'INR',
               'currency_symbol': '₹',
             });
-            await _insertPurchaseBillLines(target, billId, sourceId, lines,
-                productBySourceId, productIdBySourceId);
+            await _insertPurchaseBillLines(
+                target,
+                billId,
+                sourceId,
+                lines,
+                productBySourceId,
+                productIdBySourceId,
+                taxInclusiveByTxn[sourceId] ?? false);
             if (paymentIsValid && paid > 0) {
               await target.insert('purchase_bill_payments', {
                 'id': 'vy-purchase-payment-${_stableId(sourceId)}',
@@ -819,23 +850,45 @@ class VyaparImportService {
     return lines;
   }
 
+  /// Splits a Vyapar line into the stored unit price and nominal tax rate.
+  /// Vyapar stores `priceperunit` net with the gross in `total_amount`; when
+  /// [taxInclusive] the user typed an inclusive rate, so the stored unit
+  /// price is the gross (total ÷ quantity) while the rate is still derived
+  /// against the net base — mirroring the entry-time interpretation exactly.
+  static ({double unitPrice, double taxRate}) _linePricing(
+      Map<String, Object?> line, bool taxInclusive) {
+    final quantity = _number(line['quantity']) ?? 0;
+    final netUnit = _number(line['priceperunit']) ?? 0;
+    final taxAmount = _number(line['lineitem_tax_amount']) ?? 0;
+    var unitPrice = netUnit;
+    if (taxInclusive && quantity > 0) {
+      final grossTotal = _number(line['total_amount']);
+      if (grossTotal != null && grossTotal >= 0) {
+        unitPrice = grossTotal / quantity;
+      }
+    }
+    final taxRate = quantity * netUnit == 0
+        ? 0.0
+        : (taxAmount / (quantity * netUnit) * 100);
+    return (unitPrice: unitPrice, taxRate: taxRate);
+  }
+
   static Future<void> _insertInvoiceLines(
       DatabaseExecutor target,
       String invoiceId,
       String sourceId,
       List<Map<String, Object?>> lines,
       Map<String, Map<String, Object?>> productBySourceId,
-      Map<String, String> productIdBySourceId) async {
+      Map<String, String> productIdBySourceId,
+      bool taxInclusive) async {
     for (var index = 0; index < lines.length; index++) {
       final line = lines[index];
       final sourceProductId = _sourceId(line['item_id'])!;
       final product = productBySourceId[sourceProductId]!;
       final quantity = _number(line['quantity'])!;
-      final unitPrice = _number(line['priceperunit'])!;
-      final taxAmount = _number(line['lineitem_tax_amount']) ?? 0;
-      final taxRate = quantity * unitPrice == 0
-          ? 0
-          : taxAmount / (quantity * unitPrice) * 100;
+      final pricing = _linePricing(line, taxInclusive);
+      final unitPrice = pricing.unitPrice;
+      final taxRate = pricing.taxRate;
       await target.insert('invoice_items', {
         'id': 'vy-quotation-line-${_stableId('$sourceId-$index')}',
         'invoice_id': invoiceId,
@@ -856,6 +909,7 @@ class VyaparImportService {
         'product_purchase_price':
             _number(product['item_purchase_unit_price']) ?? 0,
         'product_unit': _text(product['item_unit']),
+        'product_price_includes_tax': taxInclusive ? 1 : 0,
         'description': _text(line['lineitem_description']),
       });
     }
@@ -867,14 +921,16 @@ class VyaparImportService {
       String sourceId,
       List<Map<String, Object?>> lines,
       Map<String, Map<String, Object?>> productBySourceId,
-      Map<String, String> productIdBySourceId) async {
+      Map<String, String> productIdBySourceId,
+      bool taxInclusive) async {
     for (var index = 0; index < lines.length; index++) {
       final line = lines[index];
       final productId = _sourceId(line['item_id'])!;
       final product = productBySourceId[productId]!;
       final quantity = _number(line['quantity'])!;
-      final rate = _number(line['priceperunit'])!;
-      final tax = _number(line['lineitem_tax_amount']) ?? 0;
+      final pricing = _linePricing(line, taxInclusive);
+      final rate = pricing.unitPrice;
+      final taxRate = pricing.taxRate;
       await target.insert('purchase_order_items', {
         'id': 'vy-purchase-order-line-${_stableId('$sourceId-$index')}',
         'purchase_order_id': orderId,
@@ -882,7 +938,7 @@ class VyaparImportService {
         'product_name': _text(product['item_name']),
         'quantity': quantity,
         'price_per_unit': rate,
-        'tax_rate': quantity * rate == 0 ? 0 : tax / (quantity * rate) * 100,
+        'tax_rate': taxRate,
         'discount': _number(line['lineitem_discount_amount']) ?? 0,
         'description': _text(line['lineitem_description']),
       });
@@ -895,18 +951,22 @@ class VyaparImportService {
       String sourceId,
       List<Map<String, Object?>> lines,
       Map<String, Map<String, Object?>> productBySourceId,
-      Map<String, String> productIdBySourceId) async {
+      Map<String, String> productIdBySourceId,
+      bool taxInclusive) async {
     for (var index = 0; index < lines.length; index++) {
       final line = lines[index];
       final sourceProductId = _sourceId(line['item_id'])!;
       final product = productBySourceId[sourceProductId]!;
       final quantity = _number(line['quantity'])!;
-      final rate = _number(line['priceperunit'])!;
+      final pricing = _linePricing(line, taxInclusive);
+      final rate = pricing.unitPrice;
+      final taxRate = pricing.taxRate;
       final discount = _number(line['lineitem_discount_amount']) ?? 0;
-      final taxable =
-          (quantity * rate - discount).clamp(0, double.infinity).toDouble();
-      final tax = _number(line['lineitem_tax_amount']) ?? 0;
-      final taxRate = taxable == 0 ? 0 : tax / taxable * 100;
+      final divisor = (taxInclusive && taxRate > 0) ? (1 + taxRate / 100) : 1.0;
+      final taxable = ((quantity * rate - discount) / divisor)
+          .clamp(0, double.infinity)
+          .toDouble();
+      final tax = taxable * taxRate / 100;
       await target.insert('purchase_bill_items', {
         'id': 'vy-purchase-bill-line-${_stableId('$sourceId-$index')}',
         'purchase_bill_id': billId,
@@ -918,6 +978,7 @@ class VyaparImportService {
         'rate': rate,
         'tax_rate': taxRate,
         'discount': discount,
+        'price_includes_tax': taxInclusive ? 1 : 0,
         'taxable_value': taxable,
         'igst': 0,
         'cgst': tax / 2,

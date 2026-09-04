@@ -59,6 +59,7 @@ class _InvoiceSettingsScreenV2State
   bool _showCgstSgst = false;
   bool _showRoundOff = false;
   String _defaultTaxMode = 'global';
+  bool _defaultPriceIncludesTax = false;
   String? _signatureBase64;
   String _signaturePosition = 'left';
   String _selectedSignatureSize = 'medium';
@@ -125,6 +126,7 @@ class _InvoiceSettingsScreenV2State
       settingsRepo.getShowCustomerGstin(),
       settingsRepo.getShowTimeInPdf(),
       settingsRepo.getPdfTimeFormat(),
+      settingsRepo.getSetting(SettingKey.defaultPriceIncludesTax),
     ]);
 
     if (!mounted) return;
@@ -171,6 +173,7 @@ class _InvoiceSettingsScreenV2State
       _showCustomerGstin = results[37] as bool;
       _showTimeInPdf = results[38] as bool;
       _pdfTimeFormat = results[39] as String;
+      _defaultPriceIncludesTax = (results[40] as String?) == 'true';
       _isLoading = false;
     });
   }
@@ -227,6 +230,8 @@ class _InvoiceSettingsScreenV2State
         settingsRepo.setSetting(
             SettingKey.showCgstSgst, _showCgstSgst.toString()),
         settingsRepo.setSetting(SettingKey.defaultTaxMode, _defaultTaxMode),
+        settingsRepo.setSetting(SettingKey.defaultPriceIncludesTax,
+            _defaultPriceIncludesTax.toString()),
         settingsRepo.setSetting(
             SettingKey.showRoundOff, _showRoundOff.toString()),
         settingsRepo.setSetting(SettingKey.hideInvoiceNumberByDefault,
@@ -378,7 +383,6 @@ class _InvoiceSettingsScreenV2State
     String? hint,
     String? helperText,
     Widget? prefixIcon,
-    int? counter,
   }) {
     final outlineVariant = Theme.of(context).colorScheme.outlineVariant;
     return InputDecoration(
@@ -762,6 +766,41 @@ class _InvoiceSettingsScreenV2State
                   if (!mounted) return;
                   setState(() =>
                       _defaultTaxMode = selection.first ? 'perItem' : 'global');
+                },
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+            border:
+                Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Rate includes GST by default'),
+              const Text('Applies to new invoices, bills and orders only',
+                  style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 8),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment<bool>(
+                      value: false,
+                      icon: Icon(Icons.add, size: 16),
+                      label: Text('Exclusive')),
+                  ButtonSegment<bool>(
+                      value: true,
+                      icon: Icon(Icons.done_all, size: 16),
+                      label: Text('Inclusive')),
+                ],
+                selected: {_defaultPriceIncludesTax},
+                onSelectionChanged: (selection) {
+                  if (!mounted) return;
+                  setState(() => _defaultPriceIncludesTax = selection.first);
                 },
               ),
             ],

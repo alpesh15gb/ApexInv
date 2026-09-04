@@ -118,6 +118,10 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
 
   bool _isTaxEnabled = true;
   bool _isPerItem = false;
+  // Document-level GST interpretation: true → typed rates include GST and
+  // tax is backed out; false → tax is added on top. Applies to every line,
+  // existing and subsequently added (per-line dialog remains as override).
+  bool _pricesIncludeTax = false;
   bool _isInterState =
       false; // India: interstate supply → IGST instead of CGST/SGST
   bool isEditing = false;
@@ -156,6 +160,20 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     return _isPerItem ? TaxMode.perItem : TaxMode.global;
   }
 
+  /// Document-level GST toggle: restamps every line (existing and future
+  /// additions via [addInvoiceProduct]) without touching the typed rates.
+  void _setPricesIncludeTax(bool value) {
+    if (!mounted || _pricesIncludeTax == value) return;
+    setState(() {
+      _pricesIncludeTax = value;
+      for (final item in invoiceItems) {
+        if (item.product.priceIncludesTax != value) {
+          item.product = item.product.withPriceIncludesTax(value);
+        }
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -182,6 +200,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       taxRateController.text = (taxRate * 100).toStringAsFixed(1);
       _isTaxEnabled = _invoice!.taxMode != TaxMode.none;
       _isPerItem = _invoice!.taxMode == TaxMode.perItem;
+      _pricesIncludeTax = invoiceItems.isNotEmpty &&
+          invoiceItems.every((i) => i.product.priceIncludesTax);
       _isInterState = _invoice!.isInterState;
       invoiceType = _invoice!.type;
       invoiceTitle = _invoice!.invoiceTitle;
@@ -236,6 +256,8 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       taxRateController.text = (taxRate * 100).toStringAsFixed(1);
       _isTaxEnabled = src.taxMode != TaxMode.none;
       _isPerItem = src.taxMode == TaxMode.perItem;
+      _pricesIncludeTax = invoiceItems.isNotEmpty &&
+          invoiceItems.every((i) => i.product.priceIncludesTax);
       _isInterState = src.isInterState;
       invoiceType = widget.cloneType ?? src.type;
       invoiceTitle = invoiceType == src.type ? src.invoiceTitle : null;
@@ -391,6 +413,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       'invoiceType': invoiceType,
       'taxEnabled': _isTaxEnabled,
       'perItemTax': _isPerItem,
+      'pricesIncludeTax': _pricesIncludeTax,
       'interState': _isInterState,
       'taxRate': taxRate,
       'taxRateText': taxRateController.text.trim(),
@@ -480,6 +503,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
         settingsRepo.getAllowDuplicateInvoiceItems(), // 16
         settingsRepo.getDefaultTaxMode(), // 17
         settingsRepo.getHideInvoiceNumberByDefault(), // 18
+        settingsRepo.getSetting(SettingKey.defaultPriceIncludesTax), // 19
       ]);
 
       final c = results[0] as List<Customer>;
@@ -524,6 +548,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       final allowDuplicateInvoiceItems = results[16] as bool;
       final defaultTaxMode = results[17] as String;
       final hideInvoiceNumberByDefault = results[18] as bool;
+      final defaultPriceIncludesTax = (results[19] as String?) == 'true';
 
       // Determine which UPI to pre-select.
       String? existingUpiId;
@@ -591,6 +616,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           _isTaxEnabled = showTaxButtonInInvoicePage;
           _isPerItem = defaultTaxMode == 'perItem';
           _hideInvoiceNumber = hideInvoiceNumberByDefault;
+          _pricesIncludeTax = defaultPriceIncludesTax;
         }
         _businessType = businessType;
         _adHocItemType =
@@ -1118,6 +1144,11 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
         ),
       );
     } else {
+      // Subsequently added lines follow the document-level GST toggle.
+      if (invoiceItem.product.priceIncludesTax != _pricesIncludeTax) {
+        invoiceItem.product =
+            invoiceItem.product.withPriceIncludesTax(_pricesIncludeTax);
+      }
       final isAppend = insertAt == null || insertAt >= invoiceItems.length + 1;
       if (!mounted) return;
       setState(() {
@@ -1804,7 +1835,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     final descriptionController = TextEditingController();
 
     bool discountPerUnit = true;
-    bool dialogPriceIncludesTax = false;
+    bool dialogPriceIncludesTax = _pricesIncludeTax;
     String dialogItemType = _adHocItemType;
     int insertAt = invoiceItems.length + 1;
     String selectedUnit = '';
@@ -4884,6 +4915,28 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                                 setState(() {
                                   _isPerItem = selection.first;
                                 });
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            SegmentedButton<bool>(
+                              segments: const [
+                                ButtonSegment<bool>(
+                                  value: false,
+                                  icon: Icon(Icons.add, size: 16),
+                                  tooltip:
+                                      'Rates exclude GST; tax is added on top',
+                                ),
+                                ButtonSegment<bool>(
+                                  value: true,
+                                  icon: Icon(Icons.done_all, size: 16),
+                                  tooltip:
+                                      'Rates include GST; tax is backed out',
+                                ),
+                              ],
+                              selected: {_pricesIncludeTax},
+                              onSelectionChanged: (selection) {
+                                if (!mounted) return;
+                                _setPricesIncludeTax(selection.first);
                               },
                             ),
                             const SizedBox(height: 8),

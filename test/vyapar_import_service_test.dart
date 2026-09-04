@@ -31,7 +31,7 @@ void main() {
 
       expect(first.customersImported, 2);
       expect(first.productsImported, 2);
-      expect(first.invoicesImported, 2);
+      expect(first.invoicesImported, 3);
       expect(first.quotationsImported, 1);
       expect(first.purchaseOrdersImported, 1);
       expect(first.purchaseBillsImported, 1);
@@ -52,7 +52,7 @@ void main() {
           products.firstWhere((row) => row['hsncode'] == '1002')['stock'], 2.5);
 
       final invoices = await target.query('invoices', orderBy: 'id');
-      expect(invoices, hasLength(3));
+      expect(invoices, hasLength(4));
       final invoice =
           invoices.firstWhere((row) => row['invoice_number'] == 'INV-1');
       expect(invoice['customer_name'], 'Same Name');
@@ -74,7 +74,7 @@ void main() {
       expect(lines.first['product_unit'], 'kg');
 
       final payments = await target.query('invoice_payments');
-      expect(payments, hasLength(2));
+      expect(payments, hasLength(3));
       final directPayment =
           payments.firstWhere((row) => row['receipt_number'] == 'VYP-30');
       final linkedPayment =
@@ -85,6 +85,19 @@ void main() {
       expect(linkedPayment['previously_paid'], 100.0);
       expect(linkedPayment['balance_after'], 0.0);
       expect(linkedPayment['payment_method'], 'DCB BANK');
+
+      // Tax-inclusive import restamps the typed gross rate and backs tax out.
+      final inclInvoice =
+          invoices.firstWhere((row) => row['invoice_number'] == 'INV-INCL');
+      final inclLines = await target.query('invoice_items',
+          where: 'invoice_id = ?', whereArgs: [inclInvoice['id']]);
+      expect(inclLines, hasLength(1));
+      expect(inclLines.single['unit_price'], 118.0);
+      expect(inclLines.single['product_tax_rate'], 18.0);
+      expect(inclLines.single['product_price_includes_tax'], 1);
+      final inclPayment =
+          payments.firstWhere((row) => row['receipt_number'] == 'VYP-37');
+      expect(inclPayment['amount_paid'], 118.0);
 
       final quotation = await target
           .query('invoices', where: 'invoice_number = ?', whereArgs: ['Q-1']);
@@ -115,9 +128,9 @@ void main() {
       expect(second.purchaseBillsImported, 0);
       expect(await _count(target, 'customers'), 2);
       expect(await _count(target, 'products'), 2);
-      expect(await _count(target, 'invoices'), 3);
-      expect(await _count(target, 'invoice_items'), 4);
-      expect(await _count(target, 'invoice_payments'), 2);
+      expect(await _count(target, 'invoices'), 4);
+      expect(await _count(target, 'invoice_items'), 5);
+      expect(await _count(target, 'invoice_payments'), 3);
       expect(await _count(target, 'purchase_orders'), 1);
       expect(await _count(target, 'purchase_order_items'), 1);
       expect(await _count(target, 'purchase_bills'), 1);
@@ -151,11 +164,12 @@ Future<void> _createFixture(Database db) async {
      txn_name_id INTEGER, txn_date TEXT, txn_cash_amount REAL,
      txn_balance_amount REAL, txn_ref_number_char TEXT
      , txn_sub_type INTEGER, txn_due_date TEXT, txn_description TEXT,
-     txn_itc_applicable INTEGER, txn_reverse_charge INTEGER
+     txn_itc_applicable INTEGER, txn_reverse_charge INTEGER,
+     txn_tax_inclusive INTEGER
   )''');
   await db.execute('''CREATE TABLE kb_lineitems (
     lineitem_txn_id INTEGER, item_id INTEGER, quantity REAL, priceperunit REAL,
-    lineitem_discount_amount REAL, lineitem_tax_amount REAL,
+    total_amount REAL, lineitem_discount_amount REAL, lineitem_tax_amount REAL,
     lineitem_description TEXT
   )''');
   await db.execute('''CREATE TABLE kb_paymentTypes (
@@ -293,6 +307,20 @@ Future<void> _createFixture(Database db) async {
     'txn_description': 'Supplier bill',
     'txn_itc_applicable': 1,
   });
+  // Tax-inclusive sale: the user typed 118.0; Vyapar stores the net 100.0
+  // in priceperunit with the gross in total_amount.
+  await db.insert('kb_transactions', {
+    'txn_id': 37,
+    'txn_type': 1,
+    'txn_status': 1,
+    'txn_name_id': 10,
+    'txn_date': '2026-01-24T10:00:00',
+    'txn_cash_amount': 118.0,
+    'txn_balance_amount': 0.0,
+    'txn_ref_number_char': 'INV-INCL',
+    'txn_sub_type': 1,
+    'txn_tax_inclusive': 1,
+  });
   await db.insert('kb_paymentTypes', {
     'paymentType_id': 3,
     'paymentType_name': 'DCB BANK',
@@ -355,5 +383,13 @@ Future<void> _createFixture(Database db) async {
     'item_id': 20,
     'quantity': 0.0,
     'priceperunit': 10.0,
+  });
+  await db.insert('kb_lineitems', {
+    'lineitem_txn_id': 37,
+    'item_id': 20,
+    'quantity': 1.0,
+    'priceperunit': 100.0,
+    'total_amount': 118.0,
+    'lineitem_tax_amount': 18.0,
   });
 }

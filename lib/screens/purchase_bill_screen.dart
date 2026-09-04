@@ -9,6 +9,7 @@ import 'package:apexbooks/database/settings_service.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/purchase_bill.dart';
 import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/utils/gstin_validator.dart';
 
 /// Inward supplies (purchase bills) — feeds ITC reporting and GSTR-2.
 class PurchaseBillScreen extends ConsumerStatefulWidget {
@@ -74,24 +75,80 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Pay ${bill.supplierName}'),
-        content: StatefulBuilder(builder: (ctx, setDialogState) => SizedBox(
-              width: 520,
-              child: SingleChildScrollView(child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (payments.isNotEmpty) ...[
-                    const Align(alignment: Alignment.centerLeft, child: Text('Payment history', style: TextStyle(fontWeight: FontWeight.bold))),
-                    for (final p in payments) ListTile(dense: true, contentPadding: EdgeInsets.zero, title: Text('${p.datePaid.toLocal().toString().split(' ').first}  ${p.paymentMethod ?? 'Other'}'), trailing: Text('${bill.currencySymbol} ${p.amountPaid.toStringAsFixed(2)}')),
-                    const Divider(),
-                  ],
-                  TextField(controller: controller, autofocus: true, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: l10n.fieldTotalLabel, prefixText: '${bill.currencySymbol} ', hintText: bill.outstanding.toStringAsFixed(2))),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(value: method, decoration: const InputDecoration(labelText: 'Payment method'), items: const [DropdownMenuItem(value: 'Cash', child: Text('Cash')), DropdownMenuItem(value: 'Bank Transfer', child: Text('Bank Transfer')), DropdownMenuItem(value: 'Online', child: Text('Online')), DropdownMenuItem(value: 'Other', child: Text('Other'))], onChanged: (v) => setDialogState(() => method = v)),
-                  TextField(controller: notesController, decoration: const InputDecoration(labelText: 'Notes (optional)')),
-                  ListTile(contentPadding: EdgeInsets.zero, title: const Text('Payment date'), trailing: TextButton(child: Text(paymentDate.toLocal().toString().split(' ').first), onPressed: () async { final picked = await showDatePicker(context: ctx, initialDate: paymentDate, firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 365))); if (picked != null) setDialogState(() => paymentDate = picked); })),
-                ],
-              )),
-            )),
+        content: StatefulBuilder(
+            builder: (ctx, setDialogState) => SizedBox(
+                  width: 520,
+                  child: SingleChildScrollView(
+                      child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (payments.isNotEmpty) ...[
+                        const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text('Payment history',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        for (final p in payments)
+                          ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                  '${p.datePaid.toLocal().toString().split(' ').first}  ${p.paymentMethod ?? 'Other'}'),
+                              trailing: Text(
+                                  '${bill.currencySymbol} ${p.amountPaid.toStringAsFixed(2)}')),
+                        const Divider(),
+                      ],
+                      TextField(
+                          controller: controller,
+                          autofocus: true,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration: InputDecoration(
+                              labelText: l10n.fieldTotalLabel,
+                              prefixText: '${bill.currencySymbol} ',
+                              hintText: bill.outstanding.toStringAsFixed(2))),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                          value: method,
+                          decoration: const InputDecoration(
+                              labelText: 'Payment method'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'Cash', child: Text('Cash')),
+                            DropdownMenuItem(
+                                value: 'Bank Transfer',
+                                child: Text('Bank Transfer')),
+                            DropdownMenuItem(
+                                value: 'Online', child: Text('Online')),
+                            DropdownMenuItem(
+                                value: 'Other', child: Text('Other'))
+                          ],
+                          onChanged: (v) => setDialogState(() => method = v)),
+                      TextField(
+                          controller: notesController,
+                          decoration: const InputDecoration(
+                              labelText: 'Notes (optional)')),
+                      ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Payment date'),
+                          trailing: TextButton(
+                              child: Text(paymentDate
+                                  .toLocal()
+                                  .toString()
+                                  .split(' ')
+                                  .first),
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                    context: ctx,
+                                    initialDate: paymentDate,
+                                    firstDate: DateTime(2000),
+                                    lastDate: DateTime.now()
+                                        .add(const Duration(days: 365)));
+                                if (picked != null)
+                                  setDialogState(() => paymentDate = picked);
+                              })),
+                    ],
+                  )),
+                )),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -105,7 +162,12 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
     if (ok != true) return;
     final amount = double.tryParse(controller.text.trim());
     if (amount == null || amount <= 0) return;
-    await PurchaseBillService.recordPayment(bill.id, amount, datePaid: paymentDate, paymentMethod: method, notes: notesController.text.trim().isEmpty ? null : notesController.text.trim());
+    await PurchaseBillService.recordPayment(bill.id, amount,
+        datePaid: paymentDate,
+        paymentMethod: method,
+        notes: notesController.text.trim().isEmpty
+            ? null
+            : notesController.text.trim());
     controller.dispose();
     notesController.dispose();
     await AuditLogService.log(
@@ -368,8 +430,9 @@ class _PurchaseBillFormScreenState
   bool _itcEligible = true;
   bool _reverseCharge = false;
   bool _interState = false;
-  bool _supplierExpanded = true;
-  bool _billExpanded = true;
+  // Document-level GST toggle: true → typed rates include GST.
+  // Applies to every line, existing and subsequently added.
+  bool _pricesIncludeTax = false;
   bool _isSaving = false;
   String _currencySymbol = '₹';
   String _currencyCode = 'INR';
@@ -408,17 +471,23 @@ class _PurchaseBillFormScreenState
       _itcEligible = e.itcEligible;
       _reverseCharge = e.reverseCharge;
       _interState = e.igstTotal > 0;
+      _pricesIncludeTax = e.priceIncludesTax;
     } else {
       _loadConfiguredCurrency();
     }
   }
 
   Future<void> _loadConfiguredCurrency() async {
-    final currency = await SettingsService.getCurrency();
+    final results = await Future.wait([
+      SettingsService.getCurrency(),
+      SettingsService.getDefaultPriceIncludesTax(),
+    ]);
     if (!mounted) return;
     setState(() {
-      _currencyCode = currency.code;
-      _currencySymbol = currency.symbol;
+      final currency = results[0] as dynamic;
+      _currencyCode = currency.code as String;
+      _currencySymbol = currency.symbol as String;
+      _pricesIncludeTax = results[1] as bool;
     });
   }
 
@@ -451,6 +520,7 @@ class _PurchaseBillFormScreenState
               taxRate: double.tryParse(d.tax.text) ?? 0,
               discount: double.tryParse(d.discount.text) ?? 0,
               interState: _interState || _reverseCharge,
+              priceIncludesTax: _pricesIncludeTax,
             ))
         .toList();
   }
@@ -469,6 +539,13 @@ class _PurchaseBillFormScreenState
           content: Text('Supplier name and at least one item are required')));
       return;
     }
+    // Warn-only GSTIN check: never block saving real bills.
+    final supplierGstinRaw = _gstinCtrl.text.trim();
+    if (supplierGstinRaw.isNotEmpty && !isValidGstin(supplierGstinRaw)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('GSTIN looks invalid')),
+      );
+    }
     setState(() => _isSaving = true);
     final id = widget.existing?.id ?? const Uuid().v4();
     final bill = PurchaseBill(
@@ -486,9 +563,10 @@ class _PurchaseBillFormScreenState
       amountPaid: widget.existing?.amountPaid ?? 0,
       itcEligible: _itcEligible,
       reverseCharge: _reverseCharge,
+      priceIncludesTax: _pricesIncludeTax,
       notes: _notesCtrl.text.trim(),
-       currencyCode: _currencyCode,
-       currencySymbol: _currencySymbol,
+      currencyCode: _currencyCode,
+      currencySymbol: _currencySymbol,
       items: _computedItems,
     );
     if (_isEdit) {
@@ -659,8 +737,7 @@ class _PurchaseBillFormScreenState
                               const SizedBox(height: 12),
                               TextField(
                                   controller: _billNoCtrl,
-                                  decoration:
-                                      _fieldDec('Supplier Invoice No')),
+                                  decoration: _fieldDec('Supplier Invoice No')),
                             ],
                           ),
                         ),
@@ -757,8 +834,8 @@ class _PurchaseBillFormScreenState
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: theme.primaryColor
-                                      .withValues(alpha: 0.1),
+                                  color:
+                                      theme.primaryColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text('${_items.length}',
@@ -776,8 +853,7 @@ class _PurchaseBillFormScreenState
                             .entries
                             .map((e) => _itemEditor(e.key, e.value)),
                         Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                           child: OutlinedButton.icon(
                             onPressed: () =>
                                 setState(() => _items.add(_ItemDraft())),
@@ -803,6 +879,20 @@ class _PurchaseBillFormScreenState
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.6)),
+                        const SizedBox(height: 12),
+                        SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment<bool>(
+                                value: false, label: Text('Excl GST')),
+                            ButtonSegment<bool>(
+                                value: true, label: Text('Incl GST')),
+                          ],
+                          selected: {_pricesIncludeTax},
+                          onSelectionChanged: (selection) {
+                            if (!mounted) return;
+                            setState(() => _pricesIncludeTax = selection.first);
+                          },
+                        ),
                         const SizedBox(height: 12),
                         _totalRow('Taxable', _totalTaxable),
                         _totalRow('Tax', _totalTax),
@@ -866,8 +956,7 @@ class _PurchaseBillFormScreenState
                     const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
                 decoration: BoxDecoration(
                   border: Border(
-                      top: BorderSide(
-                          color: theme.colorScheme.outlineVariant)),
+                      top: BorderSide(color: theme.colorScheme.outlineVariant)),
                   color: theme.colorScheme.surface,
                 ),
                 child: Row(
@@ -988,12 +1077,6 @@ class _PurchaseBillFormScreenState
       ]),
     );
   }
-
-  Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6, top: 4),
-        child: Text(text,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-      );
 
   InputDecoration _dec(String hint) => InputDecoration(
         hintText: hint,

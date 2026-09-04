@@ -52,6 +52,7 @@ enum SettingKey {
   allowDuplicateInvoiceItems, // whether the same product can be added twice to one invoice (default false)
   showCgstSgst, // whether to split tax into CGST/SGST (India, 50/50)
   defaultTaxMode, // 'global' | 'perItem' — default tax mode for new invoices
+  defaultPriceIncludesTax, // whether rates include GST by default on new documents (default false = exclusive)
   showRoundOff, // whether to show round-off row + amount-in-words on PDFs (default false)
   showCompanyName, // whether to show company name on PDF (default true)
   showPan, // whether to show company PAN on PDF (default true)
@@ -82,6 +83,8 @@ enum SettingKey {
   cloudSyncAccount, // JSON SyncAccount (email/token/company) for the self-hosted sync server; empty = not linked
   currentUserId, // id of the last logged-in local user; enables auto-login on app start. Cleared on logout.
   cloudSyncChoice, // onboarding cloud decision: '' = not asked, 'enabled' = wants cloud sign-in, 'declined' = user opted out of cloud services
+  analyticsConsent, // anonymous usage telemetry: '' = not asked, 'granted' = opted in, 'denied' = opted out. Unset/denied = never ping.
+  analyticsLastSent, // UTC yyyy-MM-dd of the last successful heartbeat; enforces max one ping per day
 }
 
 extension SettingKeyExtension on SettingKey {
@@ -193,6 +196,8 @@ extension SettingKeyExtension on SettingKey {
         return 'show_cgst_sgst';
       case SettingKey.defaultTaxMode:
         return 'default_tax_mode';
+      case SettingKey.defaultPriceIncludesTax:
+        return 'default_price_includes_tax';
       case SettingKey.showRoundOff:
         return 'show_round_off';
       case SettingKey.showCompanyName:
@@ -253,6 +258,10 @@ extension SettingKeyExtension on SettingKey {
         return 'current_user_id';
       case SettingKey.cloudSyncChoice:
         return 'cloud_sync_choice';
+      case SettingKey.analyticsConsent:
+        return 'analytics_consent';
+      case SettingKey.analyticsLastSent:
+        return 'analytics_last_sent';
     }
   }
 }

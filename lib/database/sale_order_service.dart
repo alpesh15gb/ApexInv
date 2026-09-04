@@ -93,8 +93,7 @@ class SaleOrderService {
     ''');
     return {
       for (final row in rows)
-        row['product_id'] as String:
-            (row['reserved'] as num?)?.toDouble() ?? 0
+        row['product_id'] as String: (row['reserved'] as num?)?.toDouble() ?? 0
     };
   }
 
@@ -126,9 +125,8 @@ class SaleOrderService {
           WHERE i.product_id = ? AND i.sale_order_id <> ?
             AND o.status IN ('confirmed', 'partial')
         ''', [productId, id]);
-        final available =
-            (products.first['stock'] as num? ?? 0).toDouble() -
-                (reserved.first['qty'] as num? ?? 0).toDouble();
+        final available = (products.first['stock'] as num? ?? 0).toDouble() -
+            (reserved.first['qty'] as num? ?? 0).toDouble();
         final requested = (item['quantity'] as num).toDouble();
         if (requested > available + 0.000001) {
           throw StateError(
@@ -183,7 +181,8 @@ class SaleOrderService {
     for (final item in order.items) {
       final qty = quantitiesByItemId?[item.id] ?? item.remainingQuantity;
       if (qty < -0.000001 || qty > item.remainingQuantity + 0.000001) {
-        throw StateError('Invalid fulfillment quantity for ${item.productName}');
+        throw StateError(
+            'Invalid fulfillment quantity for ${item.productName}');
       }
       if (qty > 0.000001) selected[item] = qty;
     }
@@ -265,8 +264,9 @@ class SaleOrderService {
           'product_alias_name': product['alias_name'] as String?,
           'product_unit': product['unit'] as String? ?? '',
           'unit': product['unit'] as String? ?? '',
-          'product_price_includes_tax':
-              product['price_includes_tax'] as int? ?? 0,
+          'product_price_includes_tax': order.priceIncludesTax
+              ? 1
+              : product['price_includes_tax'] as int? ?? 0,
           'description': item.description,
         });
         await txn.update(

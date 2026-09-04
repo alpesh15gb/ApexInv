@@ -12,6 +12,7 @@ class SaleOrder {
   final String status; // draft | confirmed | partial | fulfilled | cancelled
   final String currencyCode;
   final String currencySymbol;
+  final bool priceIncludesTax; // document-level GST toggle state
   final String notes;
   final List<SaleOrderItem> items;
 
@@ -29,11 +30,18 @@ class SaleOrder {
     this.status = 'draft',
     this.currencyCode = 'INR',
     this.currencySymbol = '₹',
+    this.priceIncludesTax = false,
     this.notes = '',
     this.items = const [],
   });
 
   double get total => items.fold(0.0, (sum, item) => sum + item.total);
+
+  /// Order total honouring the document-level GST toggle: inclusive lines
+  /// contribute their typed amount, exclusive lines add tax on top.
+  double get displayTotal =>
+      items.fold(0.0, (sum, item) => sum + item.totalFor(priceIncludesTax));
+
   double get remainingTotal =>
       items.fold(0.0, (sum, item) => sum + item.remainingTotal);
 
@@ -49,11 +57,11 @@ class SaleOrder {
         customerAddress: map['customer_address'] as String? ?? '',
         customerGstin: map['customer_gstin'] as String? ?? '',
         date: DateTime.parse(map['date'] as String),
-        expectedDate:
-            DateTime.tryParse(map['expected_date'] as String? ?? ''),
+        expectedDate: DateTime.tryParse(map['expected_date'] as String? ?? ''),
         status: map['status'] as String? ?? 'draft',
         currencyCode: map['currency_code'] as String? ?? 'INR',
         currencySymbol: map['currency_symbol'] as String? ?? '₹',
+        priceIncludesTax: (map['price_includes_tax'] as num?)?.toInt() == 1,
         notes: map['notes'] as String? ?? '',
         items: items,
       );
@@ -72,6 +80,7 @@ class SaleOrder {
         'status': status,
         'currency_code': currencyCode,
         'currency_symbol': currencySymbol,
+        'price_includes_tax': priceIncludesTax ? 1 : 0,
         'notes': notes,
       };
 }
@@ -104,11 +113,20 @@ class SaleOrderItem {
   double get remainingQuantity =>
       (quantity - fulfilledQuantity).clamp(0, double.infinity).toDouble();
   double get total {
-    final taxable = (quantity * unitPrice - discount)
-        .clamp(0, double.infinity)
-        .toDouble();
+    final taxable =
+        (quantity * unitPrice - discount).clamp(0, double.infinity).toDouble();
     return taxable + taxable * taxRate / 100;
   }
+
+  /// Line amount honouring the document-level GST toggle. Inclusive unit
+  /// prices already contain tax, so the typed amount is the total.
+  double totalFor(bool pricesIncludeTax) {
+    final gross =
+        (quantity * unitPrice - discount).clamp(0, double.infinity).toDouble();
+    if (pricesIncludeTax) return gross;
+    return gross + gross * taxRate / 100;
+  }
+
   double get remainingTotal {
     if (quantity <= 0) return 0;
     return total * remainingQuantity / quantity;
@@ -121,8 +139,7 @@ class SaleOrderItem {
         productName: map['product_name'] as String? ?? '',
         description: map['description'] as String? ?? '',
         quantity: (map['quantity'] as num?)?.toDouble() ?? 0,
-        fulfilledQuantity:
-            (map['fulfilled_quantity'] as num?)?.toDouble() ?? 0,
+        fulfilledQuantity: (map['fulfilled_quantity'] as num?)?.toDouble() ?? 0,
         unitPrice: (map['unit_price'] as num?)?.toDouble() ?? 0,
         taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0,
         discount: (map['discount'] as num?)?.toDouble() ?? 0,

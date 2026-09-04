@@ -121,12 +121,17 @@ class Invoice {
   double get total => _totals.total;
 
   double get amountPaid => payments
-      .where((p) =>
-          p.chequeStatus != 'bounced' && p.chequeStatus != 'cancelled')
+      .where(
+          (p) => p.chequeStatus != 'bounced' && p.chequeStatus != 'cancelled')
       .fold(0.0, (sum, p) => sum + p.amountPaid);
 
   double get outstandingBalance =>
       InvoiceCalculator.outstanding(total: total, paid: amountPaid);
+
+  /// True when every line's rate already contains tax. Outputs use this to
+  /// label rates/tax as inclusive; editors restamp it via the GST toggle.
+  bool get allPricesIncludeTax =>
+      items.isNotEmpty && items.every((i) => i.product.priceIncludesTax);
 
   PaymentStatus get paymentStatus =>
       InvoiceCalculator.paymentStatus(total: total, paid: amountPaid);

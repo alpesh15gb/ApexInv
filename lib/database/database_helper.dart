@@ -18,7 +18,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 50;
+  final dbVersion = 51;
 
   /// Emits when the sync engine finishes applying pulled remote rows, so the
   /// UI layer can refresh its lists. Write-side signaling needs no stream:
@@ -290,17 +290,9 @@ class DatabaseHelper {
       'gstin': ''
     });
 
-    // Insert default admin user with salted hash
-    final salt = PasswordUtils.generateSalt();
-    final hashedPw = PasswordUtils.hashWithSalt('admin', salt);
-    await db.insert('users', {
-      'id': 'user-001',
-      'username': 'admin',
-      'password': hashedPw,
-      'user_type': 'admin',
-      'salt': salt,
-      'password_changed': 0,
-    });
+    // No seeded credentials: the first launch creates the owner account
+    // through the login setup flow. Existing databases keep their users;
+    // legacy default accounts are still forced through a password change.
 
     // Insert default template
     await db
@@ -383,6 +375,7 @@ class DatabaseHelper {
         status TEXT DEFAULT 'draft',
         total_amount REAL DEFAULT 0,
         amount_paid REAL DEFAULT 0,
+        price_includes_tax INTEGER DEFAULT 0,
         notes TEXT,
         currency_code TEXT DEFAULT 'INR',
         currency_symbol TEXT DEFAULT '₹'
@@ -452,6 +445,7 @@ class DatabaseHelper {
         amount_paid REAL DEFAULT 0,
         itc_eligible INTEGER DEFAULT 1,
         reverse_charge INTEGER DEFAULT 0,
+        price_includes_tax INTEGER DEFAULT 0,
         notes TEXT,
         currency_code TEXT DEFAULT 'INR',
         currency_symbol TEXT DEFAULT '?'
@@ -469,6 +463,7 @@ class DatabaseHelper {
         rate REAL DEFAULT 0,
         tax_rate REAL DEFAULT 0,
         discount REAL DEFAULT 0,
+        price_includes_tax INTEGER DEFAULT 0,
         taxable_value REAL DEFAULT 0,
         igst REAL DEFAULT 0,
         cgst REAL DEFAULT 0,
@@ -485,9 +480,17 @@ class DatabaseHelper {
         balance_after REAL NOT NULL DEFAULT 0,
         date_paid TEXT NOT NULL,
         payment_method TEXT,
-        notes TEXT
+        notes TEXT,
+        account_id TEXT,
+        cheque_id TEXT,
+        cheque_status TEXT DEFAULT 'none',
+        payment_group_id TEXT
       )
     ''');
+    // NOTE: the columns above mirror the v48 `link_operational_payments`
+    // migration (and price_includes_tax on purchase_orders mirrors v51), so a
+    // fresh install matches an upgraded database. Fresh-create only — no
+    // version bump, existing databases are untouched.
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_purchase_bill_payments_bill ON purchase_bill_payments(purchase_bill_id)');
 
@@ -559,6 +562,7 @@ class DatabaseHelper {
         status TEXT NOT NULL DEFAULT 'draft',
         currency_code TEXT NOT NULL DEFAULT 'INR',
         currency_symbol TEXT NOT NULL DEFAULT '₹',
+        price_includes_tax INTEGER DEFAULT 0,
         notes TEXT DEFAULT ''
       )
     ''');
@@ -1054,7 +1058,7 @@ class DatabaseHelper {
       });
     }
 
-    if (oldVersion < 24) {
+    if (oldVersion < 22) {
       await _runMigrationStep(db, 22, 'add_pan_number_to_company_info',
           () async {
         await db.execute(
@@ -1063,7 +1067,7 @@ class DatabaseHelper {
       });
     }
 
-    if (oldVersion < 25) {
+    if (oldVersion < 23) {
       await _runMigrationStep(db, 23, 'add_invoice_number_to_invoices',
           () async {
         await db.execute(
@@ -1072,7 +1076,7 @@ class DatabaseHelper {
       });
     }
 
-    if (oldVersion < 26) {
+    if (oldVersion < 25) {
       await _runMigrationStep(db, 24, 'add_purchase_price_to_products',
           () async {
         await db.execute(
@@ -1390,23 +1394,24 @@ class DatabaseHelper {
       await _runMigrationStep(db, 44, 'create_purchase_orders_tables',
           () async {
         await db.execute('''
-          CREATE TABLE IF NOT EXISTS purchase_orders (
-            id TEXT PRIMARY KEY,
-            order_number TEXT,
-            vendor_name TEXT NOT NULL,
-            vendor_phone TEXT,
-            vendor_email TEXT,
-            vendor_address TEXT,
-            date TEXT NOT NULL,
-            expected_date TEXT,
-            status TEXT DEFAULT 'draft',
-            total_amount REAL DEFAULT 0,
-            amount_paid REAL DEFAULT 0,
-            notes TEXT,
-            currency_code TEXT DEFAULT 'INR',
-            currency_symbol TEXT DEFAULT '₹'
-          )
-        ''');
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id TEXT PRIMARY KEY,
+        order_number TEXT,
+        vendor_name TEXT NOT NULL,
+        vendor_phone TEXT,
+        vendor_email TEXT,
+        vendor_address TEXT,
+        date TEXT NOT NULL,
+        expected_date TEXT,
+        status TEXT DEFAULT 'draft',
+        total_amount REAL DEFAULT 0,
+        amount_paid REAL DEFAULT 0,
+        price_includes_tax INTEGER DEFAULT 0,
+        notes TEXT,
+        currency_code TEXT DEFAULT 'INR',
+        currency_symbol TEXT DEFAULT '₹'
+      )
+    ''');
         await db.execute('''
           CREATE TABLE IF NOT EXISTS purchase_order_items (
             id TEXT PRIMARY KEY,
@@ -1520,6 +1525,7 @@ class DatabaseHelper {
             rate REAL DEFAULT 0,
             tax_rate REAL DEFAULT 0,
             discount REAL DEFAULT 0,
+            price_includes_tax INTEGER DEFAULT 0,
             taxable_value REAL DEFAULT 0,
             igst REAL DEFAULT 0,
             cgst REAL DEFAULT 0,
@@ -1677,6 +1683,30 @@ class DatabaseHelper {
         }
         await installSyncCapture(db);
         await backfillSyncColumns(db);
+      });
+    }
+    if (oldVersion < 51) {
+      // Document-level GST toggle state plus the purchase-bill per-line flag.
+      // Existing rows keep exclusive semantics (0), matching previous paths.
+      await _runMigrationStep(db, 51, 'add_price_includes_tax_columns',
+          () async {
+        for (final table in [
+          'purchase_bill_items',
+          'purchase_bills',
+          'sale_orders',
+          'purchase_orders',
+        ]) {
+          final exists = Sqflite.firstIntValue(await db.rawQuery(
+                  "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+                  [table])) ==
+              1;
+          if (!exists) continue;
+          final cols = await db.rawQuery('PRAGMA table_info($table)');
+          if (cols.any((c) => c['name'] == 'price_includes_tax')) continue;
+          await db.execute(
+            'ALTER TABLE $table ADD COLUMN price_includes_tax INTEGER DEFAULT 0',
+          );
+        }
       });
     }
   }

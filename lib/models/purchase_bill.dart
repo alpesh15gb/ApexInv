@@ -9,6 +9,7 @@ class PurchaseBillItem {
   final double rate;
   final double taxRate; // percent, e.g. 18
   final double discount; // flat amount per line
+  final bool priceIncludesTax; // whether [rate] already contains tax
   final double taxableValue;
   final double igst;
   final double cgst;
@@ -26,6 +27,7 @@ class PurchaseBillItem {
     required this.rate,
     this.taxRate = 0,
     this.discount = 0,
+    this.priceIncludesTax = false,
     this.taxableValue = 0,
     this.igst = 0,
     this.cgst = 0,
@@ -34,7 +36,9 @@ class PurchaseBillItem {
   });
 
   /// Computes the line's taxable value and tax split. `interState` chooses
-  /// IGST vs CGST+SGST (50/50).
+  /// IGST vs CGST+SGST (50/50). When [priceIncludesTax] is true, [rate] is
+  /// treated as tax-inclusive and the taxable value is backed out, mirroring
+  /// the sales-side [InvoiceTotalsCalculator] so both stay consistent.
   static PurchaseBillItem compute({
     required String id,
     required String purchaseBillId,
@@ -47,9 +51,12 @@ class PurchaseBillItem {
     required double taxRate,
     required double discount,
     required bool interState,
+    bool priceIncludesTax = false,
   }) {
     final gross = quantity * rate;
-    final taxable = (gross - discount).clamp(0.0, double.infinity);
+    final divisor =
+        (priceIncludesTax && taxRate > 0) ? (1 + taxRate / 100) : 1.0;
+    final taxable = ((gross - discount) / divisor).clamp(0.0, double.infinity);
     final tax = taxable * taxRate / 100;
     return PurchaseBillItem(
       id: id,
@@ -62,6 +69,7 @@ class PurchaseBillItem {
       rate: rate,
       taxRate: taxRate,
       discount: discount,
+      priceIncludesTax: priceIncludesTax,
       taxableValue: taxable,
       igst: interState ? tax : 0,
       cgst: interState ? 0 : tax / 2,
@@ -81,6 +89,7 @@ class PurchaseBillItem {
         'rate': rate,
         'tax_rate': taxRate,
         'discount': discount,
+        'price_includes_tax': priceIncludesTax ? 1 : 0,
         'taxable_value': taxableValue,
         'igst': igst,
         'cgst': cgst,
@@ -100,6 +109,7 @@ class PurchaseBillItem {
         rate: (map['rate'] as num?)?.toDouble() ?? 0,
         taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0,
         discount: (map['discount'] as num?)?.toDouble() ?? 0,
+        priceIncludesTax: (map['price_includes_tax'] as num?)?.toInt() == 1,
         taxableValue: (map['taxable_value'] as num?)?.toDouble() ?? 0,
         igst: (map['igst'] as num?)?.toDouble() ?? 0,
         cgst: (map['cgst'] as num?)?.toDouble() ?? 0,
@@ -184,6 +194,7 @@ class PurchaseBill {
   final double amountPaid;
   final bool itcEligible;
   final bool reverseCharge;
+  final bool priceIncludesTax; // document-level GST toggle state
   final String notes;
   final String currencyCode;
   final String currencySymbol;
@@ -204,6 +215,7 @@ class PurchaseBill {
     this.amountPaid = 0,
     this.itcEligible = true,
     this.reverseCharge = false,
+    this.priceIncludesTax = false,
     this.notes = '',
     this.currencyCode = 'INR',
     this.currencySymbol = '₹',

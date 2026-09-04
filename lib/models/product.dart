@@ -46,7 +46,7 @@ class Product {
       price: (map['price'] is int)
           ? (map['price'] as int).toDouble()
           : (map['price'] ?? 0.0).toDouble(),
-       stock: (map['stock'] as num?) ?? 0,
+      stock: (map['stock'] as num?) ?? 0,
       hsncode: map['hsncode'] ?? '',
       tax_rate: map['tax_rate'] ?? 0,
       type: map['type'] as String? ?? 'product',
@@ -69,7 +69,7 @@ class Product {
       price: (map['product_price'] is int)
           ? (map['product_price'] as int).toDouble()
           : (map['product_price'] ?? 0.0).toDouble(),
-       stock: (map['product_stock'] as num?) ?? 0,
+      stock: (map['product_stock'] as num?) ?? 0,
       hsncode: map['product_hsn_code'] ?? '',
       tax_rate: map['product_tax_rate'] ?? 0,
       type: map['product_type'] as String? ?? 'product',
@@ -105,6 +105,28 @@ class Product {
   /// Name to print on PDFs — [aliasName] when [useAlias] is on and set, else [name].
   String displayName(bool useAlias) =>
       (useAlias && (aliasName?.trim().isNotEmpty ?? false)) ? aliasName! : name;
+
+  /// Copy with a different inclusive/exclusive flag. Used by document-level
+  /// GST toggles to restamp a line's snapshot without mutating the shared
+  /// catalog instance.
+  Product withPriceIncludesTax(bool value) => Product(
+        id: id,
+        name: name,
+        description: description,
+        price: price,
+        stock: stock,
+        hsncode: hsncode,
+        tax_rate: tax_rate,
+        type: type,
+        defaultDiscount: defaultDiscount,
+        purchasePrice: purchasePrice,
+        aliasName: aliasName,
+        unit: unit,
+        unlimitedStock: unlimitedStock,
+        priceIncludesTax: value,
+        reorderLevel: reorderLevel,
+        barcode: barcode,
+      );
 }
 
 class ProductMetadata {

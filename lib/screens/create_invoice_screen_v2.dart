@@ -23,6 +23,7 @@ import 'package:apexbooks/services/pdf_service.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/widgets/barcode_scanner_sheet.dart';
+import 'package:apexbooks/widgets/document_editor_shell.dart';
 
 class InvoiceFormGuard {
   Future<bool> Function()? canLeave;
@@ -124,6 +125,10 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
 
   bool _isTaxEnabled = true;
   bool _isPerItem = false;
+  // Document-level GST interpretation: true → typed rates include GST and
+  // tax is backed out; false → tax is added on top. Applies to every line,
+  // existing and subsequently added (per-line dialog remains as override).
+  bool _pricesIncludeTax = false;
   bool _isInterState =
       false; // India: interstate supply → IGST instead of CGST/SGST
   bool isEditing = false;
@@ -169,6 +174,20 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     return _isPerItem ? TaxMode.perItem : TaxMode.global;
   }
 
+  /// Document-level GST toggle: restamps every line (existing and future
+  /// additions via [addInvoiceProduct]) without touching the typed rates.
+  void _setPricesIncludeTax(bool value) {
+    if (!mounted || _pricesIncludeTax == value) return;
+    setState(() {
+      _pricesIncludeTax = value;
+      for (final item in invoiceItems) {
+        if (item.product.priceIncludesTax != value) {
+          item.product = item.product.withPriceIncludesTax(value);
+        }
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -210,6 +229,8 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       taxRateController.text = (taxRate * 100).toStringAsFixed(1);
       _isTaxEnabled = _invoice!.taxMode != TaxMode.none;
       _isPerItem = _invoice!.taxMode == TaxMode.perItem;
+      _pricesIncludeTax = invoiceItems.isNotEmpty &&
+          invoiceItems.every((i) => i.product.priceIncludesTax);
       _isInterState = _invoice!.isInterState;
       invoiceType = _invoice!.type;
       invoiceTitle = _invoice!.invoiceTitle;
@@ -264,6 +285,8 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       taxRateController.text = (taxRate * 100).toStringAsFixed(1);
       _isTaxEnabled = src.taxMode != TaxMode.none;
       _isPerItem = src.taxMode == TaxMode.perItem;
+      _pricesIncludeTax = invoiceItems.isNotEmpty &&
+          invoiceItems.every((i) => i.product.priceIncludesTax);
       _isInterState = src.isInterState;
       invoiceType = widget.cloneType ?? src.type;
       invoiceTitle = invoiceType == src.type ? src.invoiceTitle : null;
@@ -421,6 +444,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       'invoiceType': invoiceType,
       'taxEnabled': _isTaxEnabled,
       'perItemTax': _isPerItem,
+      'pricesIncludeTax': _pricesIncludeTax,
       'interState': _isInterState,
       'taxRate': taxRate,
       'taxRateText': taxRateController.text.trim(),
@@ -512,6 +536,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         settingsRepo.getAllowDuplicateInvoiceItems(), // 16
         settingsRepo.getDefaultTaxMode(), // 17
         settingsRepo.getHideInvoiceNumberByDefault(), // 18
+        settingsRepo.getSetting(SettingKey.defaultPriceIncludesTax), // 19
       ]);
 
       final c = results[0] as List<Customer>;
@@ -556,6 +581,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       final allowDuplicateInvoiceItems = results[16] as bool;
       final defaultTaxMode = results[17] as String;
       final hideInvoiceNumberByDefault = results[18] as bool;
+      final defaultPriceIncludesTax = (results[19] as String?) == 'true';
 
       // Determine which UPI to pre-select.
       String? existingUpiId;
@@ -623,6 +649,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
           _isTaxEnabled = showTaxButtonInInvoicePage;
           _isPerItem = defaultTaxMode == 'perItem';
           _hideInvoiceNumber = hideInvoiceNumberByDefault;
+          _pricesIncludeTax = defaultPriceIncludesTax;
         }
         _businessType = businessType;
         _adHocItemType =
@@ -720,7 +747,8 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                 .createInvoiceInsufficientStockTitle),
             content: Text(
               AppLocalizations.of(context)!
-                   .createInvoiceInsufficientStockMessage(product.stock.toInt(), qty),
+                  .createInvoiceInsufficientStockMessage(
+                      product.stock.toInt(), qty),
             ),
             actions: [
               TextButton(
@@ -899,7 +927,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                           Text(
                               AppLocalizations.of(context)!
                                   .createInvoiceAvailableStockLabel(
-                                       product.stock.toInt()),
+                                      product.stock.toInt()),
                               style: const TextStyle(color: Colors.green)),
                         ],
                       ),
@@ -1177,6 +1205,11 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         ),
       );
     } else {
+      // Subsequently added lines follow the document-level GST toggle.
+      if (invoiceItem.product.priceIncludesTax != _pricesIncludeTax) {
+        invoiceItem.product =
+            invoiceItem.product.withPriceIncludesTax(_pricesIncludeTax);
+      }
       final isAppend = insertAt == null || insertAt >= invoiceItems.length + 1;
       if (!mounted) return;
       setState(() {
@@ -1237,6 +1270,39 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     );
   }
 
+  /// Discount guard: returns the first line name whose total discount
+  /// exceeds its line gross (price × qty), or null when all lines are ok.
+  String? _excessiveDiscountLineName() {
+    for (final item in invoiceItems) {
+      final gross = item.effectivePrice * item.quantity;
+      final totalDiscount =
+          item.discountPerUnit ? item.discount * item.quantity : item.discount;
+      if (totalDiscount > gross + 1e-9) return item.product.name;
+    }
+    return null;
+  }
+
+  void _showDiscountExceededSnack(String lineName) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text('Discount exceeds line total for "$lineName"'),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        showCloseIcon: true,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+      ),
+    );
+  }
+
   Future<bool> _createInvoice() async {
     if (nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1277,6 +1343,12 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
               borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
         ),
       );
+      return false;
+    }
+
+    final badDiscountLine = _excessiveDiscountLineName();
+    if (badDiscountLine != null) {
+      _showDiscountExceededSnack(badDiscountLine);
       return false;
     }
 
@@ -1693,7 +1765,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     final descriptionController = TextEditingController();
 
     bool discountPerUnit = true;
-    bool dialogPriceIncludesTax = false;
+    bool dialogPriceIncludesTax = _pricesIncludeTax;
     String dialogItemType = _adHocItemType;
     int insertAt = invoiceItems.length + 1;
     String selectedUnit = '';
@@ -3147,6 +3219,11 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       );
       return false;
     }
+    final badUpdateDiscountLine = _excessiveDiscountLineName();
+    if (badUpdateDiscountLine != null) {
+      _showDiscountExceededSnack(badUpdateDiscountLine);
+      return false;
+    }
     if (!mounted) return false;
     setState(() => isLoading = true);
 
@@ -3573,6 +3650,10 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     final total = totals.total;
 
     final bool showingSuccessScreen = !isEditing && _invoice != null;
+    final validationErrors = <String>[
+      if (selectedCustomer == null) 'Customer is required',
+      if (invoiceItems.isEmpty) 'Add at least one item',
+    ];
 
     return CallbackShortcuts(
       bindings: {
@@ -3848,26 +3929,33 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                         child: Column(
                           children: [
                             Expanded(
-                              child: isWide
-                                  ? _buildDesktopLayoutV2(
-                                      tax,
-                                      subtotal,
-                                      total,
-                                      grossSubtotal,
-                                      totalDiscount,
-                                      invoiceDiscountAmount)
-                                  : SingleChildScrollView(
-                                      child: _buildStackedLayoutV2(
-                                          tax,
-                                          subtotal,
-                                          total,
-                                          grossSubtotal,
-                                          totalDiscount,
-                                          invoiceDiscountAmount),
-                                    ),
+                              child: DocumentEditorShell(
+                                stateLabel: isEditing
+                                    ? 'Review changes'
+                                    : 'Ready to create',
+                                isDirty: invoiceItems.isNotEmpty ||
+                                    selectedCustomer != null,
+                                validationErrors: validationErrors,
+                                editor: isWide
+                                    ? _buildDesktopLayoutV2(
+                                        tax,
+                                        subtotal,
+                                        total,
+                                        grossSubtotal,
+                                        totalDiscount,
+                                        invoiceDiscountAmount)
+                                    : SingleChildScrollView(
+                                        child: _buildStackedLayoutV2(
+                                            tax,
+                                            subtotal,
+                                            total,
+                                            grossSubtotal,
+                                            totalDiscount,
+                                            invoiceDiscountAmount),
+                                      ),
+                                actions: _actionButtonsV2(grandTotal: total),
+                              ),
                             ),
-                            AppSpacing.hSmall,
-                            _actionButtonsV2(grandTotal: total),
                           ],
                         ),
                       );
@@ -5441,6 +5529,24 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             onSelectionChanged: (selection) {
               if (!mounted) return;
               setState(() => _isPerItem = selection.first);
+            },
+          ),
+          const SizedBox(height: 10),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment<bool>(
+                  value: false,
+                  icon: Icon(Icons.add, size: 15),
+                  tooltip: 'Rates exclude GST; tax is added on top'),
+              ButtonSegment<bool>(
+                  value: true,
+                  icon: Icon(Icons.done_all, size: 15),
+                  tooltip: 'Rates include GST; tax is backed out'),
+            ],
+            selected: {_pricesIncludeTax},
+            onSelectionChanged: (selection) {
+              if (!mounted) return;
+              _setPricesIncludeTax(selection.first);
             },
           ),
           const SizedBox(height: 10),

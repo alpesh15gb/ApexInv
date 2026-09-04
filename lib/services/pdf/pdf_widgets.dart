@@ -570,14 +570,17 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
 
 /// Tax line label for invoice totals (e.g. "Tax (18%)", "Tax (per item)").
 /// Not to be confused with [taxLabel] from common.dart (company GSTIN label).
+/// Fully inclusive documents get an "(incl. GST)" marker so the reader knows
+/// rates already contain tax.
 String invoiceTaxLabel(Invoice invoice) {
+  final suffix = invoice.allPricesIncludeTax ? ' (incl. GST)' : '';
   switch (invoice.taxMode) {
     case TaxMode.global:
-      return "Tax (${(invoice.taxRate * 100).toStringAsFixed(0)}%)";
+      return "Tax (${(invoice.taxRate * 100).toStringAsFixed(0)}%)$suffix";
     case TaxMode.perItem:
-      return "Tax";
+      return "Tax$suffix";
     case TaxMode.none:
-      return "Tax";
+      return "Tax$suffix";
   }
 }
 
@@ -635,7 +638,8 @@ pw.Widget buildInvoiceTable(
   final watermarkImage =
       watermarkBytes != null ? pw.MemoryImage(watermarkBytes) : null;
   final watermarkCursor = _WatermarkCursor();
-  final String priceHeader = showQuantity ? 'Price' : 'Rate';
+  final String priceHeader = (showQuantity ? 'Price' : 'Rate') +
+      (invoice.allPricesIncludeTax ? ' (incl GST)' : '');
 
   int col = 0;
   final Map<int, pw.TableColumnWidth> colWidths = {

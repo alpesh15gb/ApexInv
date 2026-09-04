@@ -33,6 +33,34 @@ void main() {
       expect(perUnit.lineTotal, 175);
     });
 
+    test('backs tax out of inclusive prices without changing totals', () {
+      final inclusive = InvoiceTotalsCalculator.line(
+        price: 118,
+        quantity: 1,
+        discount: 0,
+        discountPerUnit: false,
+        taxRatePercent: 18,
+        priceIncludesTax: true,
+      );
+      final exclusive = InvoiceTotalsCalculator.line(
+        price: 100,
+        quantity: 1,
+        discount: 0,
+        discountPerUnit: false,
+        taxRatePercent: 18,
+      );
+
+      expect(inclusive.displayTotal, 118);
+      expect(inclusive.lineTotal, closeTo(100, 0.001));
+      expect(inclusive.itemTax, closeTo(18, 0.001));
+      expect(inclusive.lineTotal, closeTo(exclusive.lineTotal, 0.001));
+      expect(inclusive.itemTax, closeTo(exclusive.itemTax, 0.001));
+      expect(
+          InvoiceTotalsCalculator.netPrice(
+              price: 118, taxRatePercent: 18, priceIncludesTax: true),
+          closeTo(100, 0.001));
+    });
+
     test('keeps fraction and percent global tax rates explicit', () {
       final line = InvoiceTotalsCalculator.line(
         price: 100,

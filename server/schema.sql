@@ -64,3 +64,18 @@ CREATE INDEX IF NOT EXISTS idx_tombstones_server_updated
 CREATE INDEX IF NOT EXISTS idx_records_invoice_number
   ON records (company_id, table_name, (data->>'type'), (data->>'invoice_number'))
   WHERE table_name = 'invoices' AND data->>'invoice_number' IS NOT NULL;
+
+-- ── Anonymous usage telemetry (opt-in heartbeat) ───────────────────────
+-- One row per install per UTC day. The raw installation ID is never stored,
+-- only its SHA-256 hex digest. Raw rows are retained 90 days (pruned on API
+-- startup); longer-term reporting must use pre-aggregated DAU/WAU counts.
+CREATE TABLE IF NOT EXISTS heartbeat_daily (
+  installation_hash TEXT NOT NULL,
+  platform          TEXT NOT NULL DEFAULT '',
+  app_version       TEXT NOT NULL DEFAULT '',
+  day               DATE NOT NULL,
+  seen_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (installation_hash, day)
+);
+CREATE INDEX IF NOT EXISTS idx_heartbeat_day
+  ON heartbeat_daily (day);

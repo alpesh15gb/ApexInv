@@ -520,3 +520,51 @@ func TestCursorPagination(t *testing.T) {
 		t.Fatalf("expected 14 ops after mid cursor, got %d", got)
 	}
 }
+
+func TestHeartbeatRecordsDigestNotRawID(t *testing.T) {
+	srv := newTestServer(t)
+
+	// No auth required — must work for unlinked installs.
+	res, body := postJSON(t, srv, "/api/heartbeat", "", map[string]string{
+		"installationId": "test-install-123", "platform": "windows", "appVersion": "4.3.9"})
+	if res.StatusCode != http.StatusOK || body["ok"] != true {
+		t.Fatalf("heartbeat failed: %d %v", res.StatusCode, body)
+	}
+	// Repeat same-day ping is idempotent (one row per install per day).
+	res, _ = postJSON(t, srv, "/api/heartbeat", "", map[string]string{
+		"installationId": "test-install-123", "platform": "windows", "appVersion": "4.3.9"})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("repeat heartbeat failed: %d", res.StatusCode)
+	}
+
+	ctx := context.Background()
+	st, err := store.Open(ctx, testDBURLForTest(os.Getenv("DATABASE_URL")))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(st.Close)
+	var count int
+	if err := st.Pool().QueryRow(ctx, "SELECT COUNT(*) FROM heartbeat_daily").Scan(&count); err != nil {
+		t.Fatalf("count heartbeats: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 heartbeat row, got %d", count)
+	}
+	var hash, platform string
+	if err := st.Pool().QueryRow(ctx, "SELECT installation_hash, platform FROM heartbeat_daily").Scan(&hash, &platform); err != nil {
+		t.Fatalf("read heartbeat: %v", err)
+	}
+	if hash == "test-install-123" {
+		t.Fatal("raw installation ID stored; must store digest only")
+	}
+	if len(hash) != 64 || platform != "windows" {
+		t.Fatalf("unexpected heartbeat row")
+	}
+
+	// Empty installation ID is rejected.
+	res, _ = postJSON(t, srv, "/api/heartbeat", "", map[string]string{
+		"installationId": "", "platform": "windows", "appVersion": "4.3.9"})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("empty installation ID accepted: %d", res.StatusCode)
+	}
+}

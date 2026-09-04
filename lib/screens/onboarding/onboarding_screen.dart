@@ -65,6 +65,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   // cloud sync right after onboarding, 'declined' = opt out of cloud.
   String _cloudChoice = '';
 
+  // Step 5 (Done) — anonymous usage telemetry. Defaults to off; only an
+  // explicit check-in persists 'granted'.
+  bool _analyticsConsented = false;
+
   @override
   void initState() {
     super.initState();
@@ -242,9 +246,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _finish() async {
     if (_isBusy) return;
     setState(() => _isBusy = true);
-    await ref
-        .read(settingsRepositoryProvider)
-        .setSetting(SettingKey.onboardingCompleted, 'true');
+    await Future.wait([
+      ref
+          .read(settingsRepositoryProvider)
+          .setSetting(SettingKey.onboardingCompleted, 'true'),
+      // Explicit opt-in only: an unchecked box records 'denied'.
+      ref.read(settingsRepositoryProvider).setSetting(
+          SettingKey.analyticsConsent,
+          _analyticsConsented ? 'granted' : 'denied'),
+    ]);
     if (!mounted) return;
     final wantsCloudNow = _cloudChoice == 'enabled';
     Navigator.pushReplacement(
@@ -428,7 +438,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             choice: _cloudChoice,
                             onChanged: (c) => setState(() => _cloudChoice = c),
                           ),
-                          const OnboardingStepDone(),
+                          OnboardingStepDone(
+                            analyticsConsented: _analyticsConsented,
+                            onAnalyticsChanged: (v) =>
+                                setState(() => _analyticsConsented = v),
+                          ),
                         ],
                       ),
                     ),

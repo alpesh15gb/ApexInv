@@ -53,4 +53,15 @@ CREATE INDEX IF NOT EXISTS idx_tombstones_server_updated
 CREATE INDEX IF NOT EXISTS idx_records_invoice_number
   ON records (company_id, table_name, (data->>'type'), (data->>'invoice_number'))
   WHERE table_name = 'invoices' AND data->>'invoice_number' IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS heartbeat_daily (
+  installation_hash TEXT NOT NULL,
+  platform          TEXT NOT NULL DEFAULT '',
+  app_version       TEXT NOT NULL DEFAULT '',
+  day               DATE NOT NULL,
+  seen_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (installation_hash, day)
+);
+CREATE INDEX IF NOT EXISTS idx_heartbeat_day
+  ON heartbeat_daily (day);
 `

@@ -5,7 +5,9 @@ import 'package:apexbooks/common/app_config.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/common/setting_key.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
+import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/services/update_service.dart';
 
 class AppInfoScreen extends ConsumerStatefulWidget {
@@ -27,6 +29,30 @@ class AppInfoScreen extends ConsumerStatefulWidget {
 }
 
 class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
+  // Anonymous usage telemetry. Null while loading; false (off) is the
+  // default — the app only pings when this is explicitly granted.
+  bool? _analyticsGranted;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAnalyticsConsent();
+  }
+
+  Future<void> _loadAnalyticsConsent() async {
+    final value = await ref
+        .read(settingsRepositoryProvider)
+        .getSetting(SettingKey.analyticsConsent);
+    if (!mounted) return;
+    setState(() => _analyticsGranted = value == 'granted');
+  }
+
+  Future<void> _setAnalyticsConsent(bool granted) async {
+    setState(() => _analyticsGranted = granted);
+    await ref.read(settingsRepositoryProvider).setSetting(
+        SettingKey.analyticsConsent, granted ? 'granted' : 'denied');
+  }
+
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
@@ -245,6 +271,31 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
 
                 // ── Update card ──────────────────────────────────────────
                 if (cfg.enableUpdateCheck) _buildUpdateCard(),
+
+                const SizedBox(height: 20),
+
+                // ── Privacy card ─────────────────────────────────────────
+                _infoCard('Privacy', [
+                  SwitchListTile(
+                    value: _analyticsGranted ?? false,
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: _analyticsGranted == null
+                        ? null
+                        : (v) => _setAnalyticsConsent(v),
+                    title: const Text(
+                      'Share anonymous usage counts',
+                      style: TextStyle(
+                          fontSize: AppFontSize.medium,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: const Text(
+                      'One ping per day: app version and platform only. '
+                      'No names, no business data. Turning this off stops '
+                      'all telemetry immediately.',
+                      style: TextStyle(fontSize: AppFontSize.small),
+                    ),
+                  ),
+                ]),
 
                 const SizedBox(height: 32),
 

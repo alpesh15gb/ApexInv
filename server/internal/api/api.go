@@ -3,6 +3,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log"
@@ -55,6 +57,10 @@ func (s *Server) Routes() http.Handler {
 	// Auth — open.
 	mux.HandleFunc("POST /auth/register", s.handleRegister)
 	mux.HandleFunc("POST /auth/login", s.handleLogin)
+
+	// Anonymous usage telemetry — open by design (must work for unlinked
+	// installs). Payload is installation UUID + platform + version only.
+	mux.HandleFunc("POST /api/heartbeat", s.handleHeartbeat)
 
 	// Authenticated.
 	mux.Handle("POST /companies", s.requireAuth(http.HandlerFunc(s.handleCreateCompany)))
@@ -140,6 +146,36 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, authResponse{
 		Token: token, User: userResponse{ID: u.ID, Email: u.Email}})
+}
+
+// ── Handlers: telemetry ─────────────────────────────────────────────────
+
+func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		InstallationID string `json:"installationId"`
+		Platform       string `json:"platform"`
+		AppVersion     string `json:"appVersion"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	id := strings.TrimSpace(body.InstallationID)
+	if id == "" || len(id) > 128 || len(body.Platform) > 64 || len(body.AppVersion) > 64 {
+		writeErr(w, http.StatusBadRequest, "invalid heartbeat")
+		return
+	}
+	// Store only the digest, never the raw installation ID.
+	sum := sha256.Sum256([]byte(id))
+	hash := hex.EncodeToString(sum[:])
+	day := time.Now().UTC().Format("2006-01-02")
+	if err := s.Store.RecordHeartbeat(r.Context(), hash,
+		strings.TrimSpace(body.Platform), strings.TrimSpace(body.AppVersion), day); err != nil {
+		log.Printf("heartbeat record failed: %v", err)
+		writeErr(w, http.StatusInternalServerError, "heartbeat failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // ── Handlers: companies ─────────────────────────────────────────────────

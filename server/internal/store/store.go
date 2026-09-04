@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -48,7 +49,13 @@ func Open(ctx context.Context, url string) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
-	return &Store{pool: pool}, nil
+	s := &Store{pool: pool}
+	// Best-effort retention enforcement for anonymous telemetry (90 days).
+	// Startup must never fail because of retention cleanup.
+	if _, err := s.PruneHeartbeats(ctx, 90); err != nil {
+		log.Printf("heartbeat retention prune failed: %v", err)
+	}
+	return s, nil
 }
 
 func (s *Store) Close() { s.pool.Close() }
@@ -153,6 +160,32 @@ func (s *Store) DeleteCompanyData(ctx context.Context, companyID string) error {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// ── Anonymous usage telemetry ───────────────────────────────────────────
+
+// RecordHeartbeat upserts one row per install per UTC day. The caller must
+// pass the SHA-256 hex digest of the installation ID, never the raw ID.
+func (s *Store) RecordHeartbeat(ctx context.Context, installationHash, platform, appVersion, day string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO heartbeat_daily (installation_hash, platform, app_version, day, seen_at)
+		VALUES ($1, $2, $3, $4::date, now())
+		ON CONFLICT (installation_hash, day)
+		DO UPDATE SET seen_at = now(), platform = $2, app_version = $3`,
+		installationHash, platform, appVersion, day)
+	return err
+}
+
+// PruneHeartbeats deletes raw telemetry rows older than olderThanDays days
+// and returns the number removed. Enforces the 90-day retention policy.
+func (s *Store) PruneHeartbeats(ctx context.Context, olderThanDays int) (int64, error) {
+	res, err := s.pool.Exec(ctx,
+		`DELETE FROM heartbeat_daily WHERE day < CURRENT_DATE - ($1 || ' days')::interval`,
+		olderThanDays)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected(), nil
 }
 
 // UserCompanies lists (company_id, name) pairs the user belongs to.

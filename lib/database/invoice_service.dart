@@ -3,7 +3,6 @@ import 'package:apexbooks/database/invoice_item_service.dart';
 import 'package:apexbooks/database/settings_service.dart';
 import 'package:apexbooks/domain/invoice_calculator.dart';
 import 'package:apexbooks/domain/invoice_totals_calculator.dart';
-import 'package:apexbooks/database/product_service.dart';
 import 'package:apexbooks/models/additional_cost.dart';
 import 'package:apexbooks/models/invoice.dart';
 import 'package:apexbooks/models/product.dart';
@@ -12,6 +11,7 @@ import 'package:apexbooks/models/invoice_item.dart';
 import 'package:apexbooks/models/invoice_payment.dart';
 import 'package:apexbooks/utils/app_date.dart';
 import 'package:apexbooks/utils/app_logger.dart';
+import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 import 'payment_service.dart';
 import 'accounting_service.dart';
@@ -95,18 +95,18 @@ class InvoiceService {
               where: 'id = ?',
               whereArgs: [item.product.id],
               limit: 1);
-          if (rows.isEmpty ||
-              (rows.first['unlimited_stock'] as int? ?? 0) == 1) continue;
+          if (rows.isEmpty || (rows.first['unlimited_stock'] as int? ?? 0) == 1)
+            continue;
           final stock = (rows.first['stock'] as num? ?? 0).toDouble();
           final reservedRows = await txn.rawQuery('''
             SELECT COALESCE(SUM(i.quantity - i.fulfilled_quantity), 0) AS qty
             FROM sale_order_items i JOIN sale_orders o ON o.id = i.sale_order_id
             WHERE i.product_id = ? AND o.status IN ('confirmed', 'partial')
           ''', [item.product.id]);
-          final reserved =
-              (reservedRows.first['qty'] as num? ?? 0).toDouble();
+          final reserved = (reservedRows.first['qty'] as num? ?? 0).toDouble();
           if (item.quantity > stock - reserved + 0.000001) {
-            throw StateError('Insufficient unreserved stock for ${item.product.name}');
+            throw StateError(
+                'Insufficient unreserved stock for ${item.product.name}');
           }
           await txn.update('products', {'stock': stock - item.quantity},
               where: 'id = ?', whereArgs: [item.product.id]);
@@ -124,11 +124,23 @@ class InvoiceService {
       where: 'invoice_id = ?',
       whereArgs: [invoice.id],
     );
-    final oldHeader = await db.query('invoices', columns: ['type'],
-        where: 'id = ?', whereArgs: [invoice.id], limit: 1);
-    final oldType = oldHeader.isEmpty ? invoice.type : oldHeader.first['type'] as String;
+    final oldHeader = await db.query('invoices',
+        columns: ['type'], where: 'id = ?', whereArgs: [invoice.id], limit: 1);
+    final oldType =
+        oldHeader.isEmpty ? invoice.type : oldHeader.first['type'] as String;
 
     await db.transaction((txn) async {
+      // Overpayment guard: refuse to shrink the total below what the
+      // customer already paid (computed from the NEW lines).
+      final paidRows = await txn.rawQuery(
+        "SELECT COALESCE(SUM(amount_paid), 0.0) AS paid FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
+        [invoice.id],
+      );
+      final paid = (paidRows.first['paid'] as num?)?.toDouble() ?? 0.0;
+      if (paid > invoice.total + 0.005) {
+        throw StateError('Invoice total below amount already paid');
+      }
+
       // 1. Update the main invoice row
       await txn.update(
         'invoices',
@@ -218,10 +230,13 @@ class InvoiceService {
         if (entry.value.abs() <= 0.000001) continue;
         final rows = await txn.query('products',
             columns: ['name', 'stock', 'unlimited_stock'],
-            where: 'id = ?', whereArgs: [entry.key], limit: 1);
-        if (rows.isEmpty ||
-            (rows.first['unlimited_stock'] as int? ?? 0) == 1) continue;
-        final next = (rows.first['stock'] as num? ?? 0).toDouble() + entry.value;
+            where: 'id = ?',
+            whereArgs: [entry.key],
+            limit: 1);
+        if (rows.isEmpty || (rows.first['unlimited_stock'] as int? ?? 0) == 1)
+          continue;
+        final next =
+            (rows.first['stock'] as num? ?? 0).toDouble() + entry.value;
         var reserved = 0.0;
         if (entry.value < 0) {
           final reservedRows = await txn.rawQuery('''
@@ -642,14 +657,16 @@ class InvoiceService {
   // edit; soft delete restores, restore re-deducts, permanent delete
   // restores (only if still deducted, i.e. the invoice was active).
   // [sign] is +1 to restore stock, -1 to deduct again.
-  static Future<void> _adjustStockForInvoice(String invoiceId, int sign) async {
-    final db = await dbHelper.database;
-    final headers = await db.query('invoices', columns: ['type'],
-        where: 'id = ?', whereArgs: [invoiceId], limit: 1);
+  // All reads/writes go through [txn] so every caller stays atomic — never
+  // via ProductService (which opens its own connection outside the txn).
+  static Future<void> _adjustStockInTxn(
+      DatabaseExecutor txn, String invoiceId, int sign) async {
+    final headers = await txn.query('invoices',
+        columns: ['type'], where: 'id = ?', whereArgs: [invoiceId], limit: 1);
     if (headers.isEmpty || !_affectsStock(headers.first['type'] as String)) {
       return;
     }
-    final items = await db.query(
+    final items = await txn.query(
       'invoice_items',
       where: 'invoice_id = ?',
       whereArgs: [invoiceId],
@@ -657,13 +674,21 @@ class InvoiceService {
     for (final item in items) {
       final productId = item['product_id'] as String?;
       if (productId == null || productId.isEmpty) continue;
-      final product = await ProductService.getProductById(productId);
-      if (product == null || product.unlimitedStock) continue;
+      final products = await txn.query('products',
+          columns: ['stock', 'unlimited_stock'],
+          where: 'id = ?',
+          whereArgs: [productId],
+          limit: 1);
+      if (products.isEmpty ||
+          (products.first['unlimited_stock'] as int? ?? 0) == 1) {
+        continue;
+      }
       final rawQty = item['quantity'];
       final qty = (rawQty as num?)?.toDouble() ?? 0;
       if (qty == 0) continue;
-      await ProductService.updateProductStock(
-          product.id, product.stock + sign * qty);
+      final stock = (products.first['stock'] as num?)?.toDouble() ?? 0;
+      await txn.update('products', {'stock': stock + sign * qty},
+          where: 'id = ?', whereArgs: [productId]);
     }
   }
 
@@ -671,53 +696,67 @@ class InvoiceService {
   // Soft Delete
   static Future<void> softDeleteInvoice(String id) async {
     final db = await dbHelper.database;
-    final rows =
-        await db.query('invoices', where: 'id = ?', whereArgs: [id], limit: 1);
-    if (rows.isEmpty || rows.first['deleted_at'] != null) return;
-    await db.update(
-      'invoices',
-      {'deleted_at': DateTime.now().toIso8601String()},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    // Invoice left the books — give the reserved stock back.
-    await _adjustStockForInvoice(id, 1);
+    await db.transaction((txn) async {
+      final rows = await txn.query('invoices',
+          where: 'id = ?', whereArgs: [id], limit: 1);
+      if (rows.isEmpty || rows.first['deleted_at'] != null) return;
+      await txn.update(
+        'invoices',
+        {'deleted_at': DateTime.now().toIso8601String()},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      // Invoice left the books — give the reserved stock back, atomically.
+      await _adjustStockInTxn(txn, id, 1);
+    });
   }
 
   static Future<void> restoreInvoice(String id) async {
     final db = await dbHelper.database;
-    final rows =
-        await db.query('invoices', where: 'id = ?', whereArgs: [id], limit: 1);
-    if (rows.isEmpty || rows.first['deleted_at'] == null) return;
-    await db.update(
-      'invoices',
-      {'deleted_at': null},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    // Invoice is active again — reserve the stock once more.
-    await _adjustStockForInvoice(id, -1);
+    await db.transaction((txn) async {
+      final rows = await txn.query('invoices',
+          where: 'id = ?', whereArgs: [id], limit: 1);
+      if (rows.isEmpty || rows.first['deleted_at'] == null) return;
+      await txn.update(
+        'invoices',
+        {'deleted_at': null},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      // Invoice is active again — reserve the stock once more, atomically.
+      await _adjustStockInTxn(txn, id, -1);
+    });
   }
 
   static Future<void> permanentDeleteInvoice(String id) async {
     final db = await dbHelper.database;
-    // Stock is only still reserved if the invoice was never soft-deleted
-    // (soft delete already restored it; restoring again would double-count).
-    final rows =
-        await db.query('invoices', where: 'id = ?', whereArgs: [id], limit: 1);
-    final wasSoftDeleted = rows.isNotEmpty && rows.first['deleted_at'] != null;
-    if (!wasSoftDeleted) {
-      await _adjustStockForInvoice(id, 1);
-    }
-    final paymentRows = await db.query('invoice_payments',
-        columns: ['id'], where: 'invoice_id = ?', whereArgs: [id]);
-    for (final payment in paymentRows) {
-      await AccountingService.reverseSource(
-          sourceType: 'invoice_payment',
-          sourceId: payment['id'] as String,
-          reason: 'Invoice permanently deleted');
-    }
     await db.transaction((txn) async {
+      // Stock is only still reserved if the invoice was never soft-deleted
+      // (soft delete already restored it; restoring again would double-count).
+      final rows = await txn.query('invoices',
+          where: 'id = ?', whereArgs: [id], limit: 1);
+      final wasSoftDeleted =
+          rows.isNotEmpty && rows.first['deleted_at'] != null;
+      if (!wasSoftDeleted) {
+        await _adjustStockInTxn(txn, id, 1);
+      }
+      // Reversals commit in the SAME transaction as the deletes below: a
+      // crash between them can no longer orphan payments or cash movements.
+      final paymentRows = await txn.query('invoice_payments',
+          columns: ['id', 'cheque_id'],
+          where: 'invoice_id = ?',
+          whereArgs: [id]);
+      for (final payment in paymentRows) {
+        final chequeId = payment['cheque_id'] as String?;
+        if (chequeId != null && chequeId.isNotEmpty) {
+          await AccountingService.cancelChequeInTransaction(txn, chequeId,
+              reason: 'Invoice permanently deleted');
+        }
+        await AccountingService.reverseSourceInTransaction(txn,
+            sourceType: 'invoice_payment',
+            sourceId: payment['id'] as String,
+            reason: 'Invoice permanently deleted');
+      }
       await txn
           .delete('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
       await txn

@@ -14,6 +14,7 @@ import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/services/update_service.dart';
+import 'package:apexbooks/services/analytics/cloudflare_analytics_service.dart';
 import 'package:apexbooks/widgets/update_dialog.dart';
 import 'package:apexbooks/domain/invoice_calculator.dart';
 import 'package:apexbooks/domain/customer_identity.dart';
@@ -43,7 +44,6 @@ import 'package:apexbooks/screens/auth/login_screen.dart';
 import 'package:apexbooks/screens/reports_screen.dart';
 import 'package:apexbooks/screens/expense_management_screen.dart';
 import 'package:apexbooks/screens/purchase_order_screen.dart';
-import 'package:apexbooks/screens/import_screen.dart';
 import 'package:apexbooks/screens/more_menu_screen.dart';
 import 'package:apexbooks/screens/purchase_bill_screen.dart';
 import 'package:apexbooks/screens/reminders_screen.dart';
@@ -118,8 +118,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _currentUser = widget.loggedInUser;
     SessionManager.initialize(_logoutAndResetSession);
     _loadCreateInvoiceLayout();
+    // Anonymous usage heartbeat: at most one ping per day, only with
+    // explicit consent. Fire-and-forget; offline or opted-out = silence.
+    _sendAnalyticsHeartbeat();
     // Offline-first recurring billing: generate due instances on start.
-    RecurringInvoiceEngine.generateDue().catchError((_) {});
+    RecurringInvoiceEngine.generateDue().catchError((_) => 0);
     if (ref.read(appEditionConfigProvider).enableUpdateCheck) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
     }
@@ -129,6 +132,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (_selectedIndex != 1) {
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _shortcutsFocusNode.requestFocus());
+    }
+  }
+
+  Future<void> _sendAnalyticsHeartbeat() async {
+    try {
+      final settingsRepo = ref.read(settingsRepositoryProvider);
+      final consent =
+          await settingsRepo.getSetting(SettingKey.analyticsConsent);
+      if (consent != 'granted') return;
+      final lastSent =
+          await settingsRepo.getSetting(SettingKey.analyticsLastSent);
+      final sentDay = await CloudflareAnalyticsService.maybeSendHeartbeat(
+        consented: true,
+        lastSentDay: lastSent,
+      );
+      if (sentDay != null && sentDay != lastSent) {
+        await settingsRepo.setSetting(SettingKey.analyticsLastSent, sentDay);
+      }
+    } catch (_) {
+      // Telemetry must never disturb the app.
     }
   }
 
@@ -263,6 +286,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return const PurchaseOrderScreen();
       case 11:
         return PurchaseBillScreen(user: _currentUser);
+      case 12:
+        // No dedicated screen ever owned index 12 (Trial Balance lives in
+        // Reports) — land on Reports instead of the 'Unknown tab' fallback
+        // so stale deep-links/bookmarks keep working.
+        return const ReportsScreen();
       case 13:
         return InvoiceManagementScreenV2(
           key: const ValueKey('credit_note_list'),
@@ -475,40 +503,40 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Focus(
           focusNode: _shortcutsFocusNode,
           child: Scaffold(
-          body: LayoutBuilder(
-            builder: (context, constraints) {
-              final screen = Stack(
-                children: [
-                  buildScreen(),
-                  // Floating v1/v2 layout toggle: desktop only. On compact it
-                  // overlaps the Create Invoice bottom action bar (the same
-                  // toggle lives in Settings → Accessibility).
-                  if (_selectedIndex == 1 &&
-                      constraints.maxWidth >= Breakpoints.expandedMin)
-                    Positioned(
-                        bottom: 16,
-                        right: 16,
-                        child: _buildCreateInvoiceLayoutToggle()),
-                ],
-              );
-              if (constraints.maxWidth >= Breakpoints.expandedMin) {
-                return Row(
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                final screen = Stack(
                   children: [
-                    _buildSidebar(),
-                    Expanded(child: screen),
+                    buildScreen(),
+                    // Floating v1/v2 layout toggle: desktop only. On compact it
+                    // overlaps the Create Invoice bottom action bar (the same
+                    // toggle lives in Settings → Accessibility).
+                    if (_selectedIndex == 1 &&
+                        constraints.maxWidth >= Breakpoints.expandedMin)
+                      Positioned(
+                          bottom: 16,
+                          right: 16,
+                          child: _buildCreateInvoiceLayoutToggle()),
                   ],
                 );
-              }
-              return Column(
-                children: [
-                  Expanded(
-                    child: SafeArea(top: true, bottom: false, child: screen),
-                  ),
-                  _buildBottomNavigationBar(),
-                ],
-              );
-            },
-          ),
+                if (constraints.maxWidth >= Breakpoints.expandedMin) {
+                  return Row(
+                    children: [
+                      _buildSidebar(),
+                      Expanded(child: screen),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [
+                    Expanded(
+                      child: SafeArea(top: true, bottom: false, child: screen),
+                    ),
+                    _buildBottomNavigationBar(),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -691,9 +719,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     _buildNavItem(0, Icons.dashboard_outlined, Icons.dashboard,
                         AppLocalizations.of(context)!.navDashboard),
                     const SizedBox(height: 4),
-                    _buildNavItem(5, Icons.people_outline, Icons.people, 'Parties'),
                     _buildNavItem(
-                        6, Icons.inventory_2_outlined, Icons.inventory_2, 'Items'),
+                        5, Icons.people_outline, Icons.people, 'Parties'),
+                    _buildNavItem(6, Icons.inventory_2_outlined,
+                        Icons.inventory_2, 'Items'),
                     if (expanded) const Divider(height: 16),
                     if (expanded) _buildSectionHeader('Sales (Master)'),
                     _buildNavItem(2, Icons.receipt_long_outlined,
@@ -710,8 +739,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         Icons.local_shipping, 'Delivery Challan'),
                     _buildNavItem(13, Icons.note_alt_outlined, Icons.note_alt,
                         'Credit Note'),
-                    _buildNavItem(
-                        20, Icons.point_of_sale_outlined, Icons.point_of_sale, 'POS'),
+                    _buildNavItem(20, Icons.point_of_sale_outlined,
+                        Icons.point_of_sale, 'POS'),
                     if (expanded) const Divider(height: 16),
                     if (expanded) _buildSectionHeader('Purchase (Master)'),
                     _buildNavItem(11, Icons.inventory_outlined, Icons.inventory,
@@ -3015,7 +3044,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
                         ),
                         child: Text(
                           AppLocalizations.of(context)!
-                               .dashboardStockLabel(product.stock.toInt()),
+                              .dashboardStockLabel(product.stock.toInt()),
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,

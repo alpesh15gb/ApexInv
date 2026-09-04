@@ -10,11 +10,43 @@ class UserService {
   static final dbHelper = DatabaseHelper();
 
   // ─────────────────────────────────────────────
+  // Login throttling (in-memory per username)
+  static final Map<String, List<DateTime>> _failedAttempts = {};
+  static const int _maxFailedAttempts = 5;
+  static const Duration _attemptWindow = Duration(minutes: 15);
+
+  static void _pruneAttempts(String username, DateTime now) {
+    final attempts = _failedAttempts[username];
+    if (attempts == null) return;
+    attempts.removeWhere((t) => now.difference(t) > _attemptWindow);
+    if (attempts.isEmpty) _failedAttempts.remove(username);
+  }
+
+  static void _recordFailure(String username, DateTime now) {
+    final attempts = _failedAttempts.putIfAbsent(username, () => []);
+    attempts.add(now);
+  }
+
+  static void _clearFailures(String username) {
+    _failedAttempts.remove(username);
+  }
+
+  // ─────────────────────────────────────────────
   // CRUD for User
 
   /// Looks up a user by username and verifies the password.
-  /// Supports both legacy SHA-256 (salt == null) and HMAC-SHA256.
+  /// Supports legacy SHA-256 (salt == null), legacy HMAC-SHA256, and
+  /// new PBKDF2-HMAC-SHA256 (`$pbkdf2$...`). On success with a legacy
+  /// hash, transparently upgrades to the new KDF (keeping
+  /// password_changed). Throws [StateError] after 5 failures in 15 min.
   static Future<User?> getUser(String username, String password) async {
+    final now = DateTime.now();
+    _pruneAttempts(username, now);
+    final recent = _failedAttempts[username];
+    if (recent != null && recent.length >= _maxFailedAttempts) {
+      throw StateError('Too many attempts, try later');
+    }
+
     final db = await dbHelper.database;
     final result = await db.query(
       'users',
@@ -22,12 +54,40 @@ class UserService {
       whereArgs: [username],
     );
 
-    if (result.isEmpty) return null;
+    if (result.isEmpty) {
+      _recordFailure(username, now);
+      return null;
+    }
 
     final user = User.fromMap(result.first);
     if (PasswordUtils.verify(password, user.password, user.salt)) {
+      _clearFailures(username);
+      // Transparent upgrade: legacy hashes → new PBKDF2 KDF.
+      if (PasswordUtils.needsUpgrade(user.password)) {
+        try {
+          final newSalt = PasswordUtils.generateSalt();
+          final newHash = PasswordUtils.hashWithSalt(password, newSalt);
+          await db.update(
+            'users',
+            {'password': newHash, 'salt': newSalt},
+            where: 'id = ?',
+            whereArgs: [user.id],
+          );
+          return User(
+            id: user.id,
+            username: user.username,
+            password: newHash,
+            userType: user.userType,
+            salt: newSalt,
+            passwordChanged: user.passwordChanged,
+          );
+        } catch (_) {
+          return user;
+        }
+      }
       return user;
     }
+    _recordFailure(username, DateTime.now());
     return null;
   }
 

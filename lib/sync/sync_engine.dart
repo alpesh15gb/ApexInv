@@ -473,8 +473,9 @@ class SyncEngine {
   }
 
   /// Post-restore hook (dbplan §3.7): after the DB file is replaced, cursors
-  /// and outbox inside the restored file describe the *old* device's state.
-  /// Force a full LWW merge on next sync.
+  /// inside the restored file describe the *old* device's state, so they are
+  /// cleared to force a full LWW merge on next sync. The outbox is
+  /// intentionally kept — it is durable local truth and must still push.
   Future<void> onDatabaseReplaced() async {
     final db = dbAccessor();
     if (!await isEnabled()) return;
@@ -485,7 +486,12 @@ class SyncEngine {
         await txn.delete('_sync_state',
             where: 'key = ?', whereArgs: [row['key'] as String]);
       }
-      await txn.insert('_sync_state', {'key': _keyBaselineDone, 'value': '0'},
+      // The restored DB already holds a full dataset, so the baseline is
+      // done: the next cycle must PULL deltas (with cleared cursors this is
+      // a full re-pull, applied idempotently via LWW). This must be '1' —
+      // _runCycle skips pulls entirely while baselineDone != '1' and nothing
+      // else flips it back, so '0' here would silently disable pulls forever.
+      await txn.insert('_sync_state', {'key': _keyBaselineDone, 'value': '1'},
           conflictAlgorithm: ConflictAlgorithm.replace);
     });
     await syncNow();

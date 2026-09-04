@@ -79,13 +79,17 @@ class AccountingService {
     ''', [accountId, if (through != null) through.toIso8601String()]);
     var legacyOpening = 0.0;
     if (accountId == 'cash-default') {
-      final settings = await db.query('settings', columns: ['value'],
-          where: 'key = ?', whereArgs: ['opening_capital'], limit: 1);
+      final settings = await db.query('settings',
+          columns: ['value'],
+          where: 'key = ?',
+          whereArgs: ['opening_capital'],
+          limit: 1);
       legacyOpening = settings.isEmpty
           ? 0
           : double.tryParse(settings.first['value'] as String? ?? '') ?? 0;
     }
-    return opening + legacyOpening +
+    return opening +
+        legacyOpening +
         ((rows.first['movement'] as num?)?.toDouble() ?? 0);
   }
 
@@ -98,11 +102,16 @@ class AccountingService {
     return result;
   }
 
+  /// Register history for one account. Voided rows are included by default so
+  /// the history view shows both legs of a reversal pair; pass
+  /// [includeVoided] false for a live-only view.
   static Future<List<FinancialTransaction>> getTransactions(String accountId,
-      {int limit = 500}) async {
+      {int limit = 500, bool includeVoided = true}) async {
     final db = await _dbHelper.database;
     final rows = await db.query('financial_transactions',
-        where: 'account_id = ?',
+        where: includeVoided
+            ? 'account_id = ?'
+            : 'account_id = ? AND voided_at IS NULL',
         whereArgs: [accountId],
         orderBy: 'date DESC, rowid DESC',
         limit: limit);
@@ -278,29 +287,74 @@ class AccountingService {
   }) async {
     final db = await _dbHelper.database;
     await db.transaction((txn) async {
-      final originals = await txn.query('financial_transactions',
-          where:
-              'source_type = ? AND source_id = ? AND reversal_of IS NULL AND voided_at IS NULL',
-          whereArgs: [sourceType, sourceId]);
-      for (final row in originals) {
-        final existing = await txn.query('financial_transactions',
-            columns: ['id'],
-            where: 'reversal_of = ?',
-            whereArgs: [row['id']],
-            limit: 1);
-        if (existing.isNotEmpty) continue;
-        await insertMovement(txn,
-            accountId: row['account_id'] as String,
-            transferAccountId: row['transfer_account_id'] as String?,
-            kind: 'reversal',
-            amount: -((row['amount'] as num).toDouble()),
-            date: DateTime.now(),
-            sourceType: sourceType,
-            sourceId: sourceId,
-            notes: reason,
-            reversalOf: row['id'] as String);
-      }
+      await reverseSourceInTransaction(txn,
+          sourceType: sourceType, sourceId: sourceId, reason: reason);
     });
+  }
+
+  /// Executor-aware reversal for use inside a caller's transaction (sqflite
+  /// transactions cannot nest, so [reverseSource] must never be called from
+  /// inside another transaction — the outer write would commit while the
+  /// reversal rolls back, or vice versa).
+  static Future<void> reverseSourceInTransaction(
+    DatabaseExecutor executor, {
+    required String sourceType,
+    required String sourceId,
+    String reason = 'Reversal',
+  }) async {
+    // NOTE: original legs intentionally stay live (voided_at NULL). Each
+    // pair nets to zero in getBalance, which is the as-if-never-happened
+    // state every caller (payment/expense/bill/cheque delete) requires.
+    // Voiding the original would leave only the -X leg counted and corrupt
+    // the balance (verified by test: a voided 100 receipt reads back as
+    // -100 instead of 0).
+    final originals = await executor.query('financial_transactions',
+        where:
+            'source_type = ? AND source_id = ? AND reversal_of IS NULL AND voided_at IS NULL',
+        whereArgs: [sourceType, sourceId]);
+    for (final row in originals) {
+      final existing = await executor.query('financial_transactions',
+          columns: ['id'],
+          where: 'reversal_of = ?',
+          whereArgs: [row['id']],
+          limit: 1);
+      if (existing.isNotEmpty) continue;
+      await insertMovement(executor,
+          accountId: row['account_id'] as String,
+          transferAccountId: row['transfer_account_id'] as String?,
+          kind: 'reversal',
+          amount: -((row['amount'] as num).toDouble()),
+          date: DateTime.now(),
+          sourceType: sourceType,
+          sourceId: sourceId,
+          notes: reason,
+          reversalOf: row['id'] as String);
+    }
+  }
+
+  /// Executor-aware cheque cancellation for delete paths that already hold
+  /// [executor]. Mirrors [transitionCheque] without opening a nested
+  /// transaction: reverses a cleared cheque's bank movement, then parks the
+  /// cheque as cancelled (pending/deposited) or bounced (was cleared).
+  static Future<void> cancelChequeInTransaction(
+    DatabaseExecutor executor,
+    String chequeId, {
+    String reason = 'Removed by administrator',
+  }) async {
+    final rows = await executor.query('cheques',
+        where: 'id = ?', whereArgs: [chequeId], limit: 1);
+    if (rows.isEmpty) return;
+    final status = rows.first['status'] as String? ?? 'pending';
+    if (status == 'bounced' || status == 'cancelled') return;
+    if (status == 'cleared') {
+      await reverseSourceInTransaction(executor,
+          sourceType: 'cheque', sourceId: chequeId, reason: reason);
+      await executor.update('cheques', {'status': 'bounced', 'notes': reason},
+          where: 'id = ?', whereArgs: [chequeId]);
+    } else {
+      await executor.update('cheques', {'status': 'cancelled', 'notes': reason},
+          where: 'id = ?', whereArgs: [chequeId]);
+    }
   }
 
   static Future<String> createCheque(
@@ -412,9 +466,8 @@ class AccountingService {
             kind: cheque.direction == 'received'
                 ? 'cheque_receipt'
                 : 'cheque_payment',
-            amount: cheque.direction == 'received'
-                ? cheque.amount
-                : -cheque.amount,
+            amount:
+                cheque.direction == 'received' ? cheque.amount : -cheque.amount,
             date: DateTime.now(),
             sourceType: 'cheque',
             sourceId: cheque.id,
@@ -422,8 +475,7 @@ class AccountingService {
             notes: notes);
       } else if (status == 'bounced' && cheque.status == 'cleared') {
         final clearRows = await txn.query('financial_transactions',
-            where:
-                'source_type = ? AND source_id = ? AND reversal_of IS NULL',
+            where: 'source_type = ? AND source_id = ? AND reversal_of IS NULL',
             whereArgs: ['cheque', cheque.id]);
         for (final movement in clearRows) {
           await insertMovement(txn,
@@ -492,7 +544,8 @@ class AccountingService {
   static Future<List<LoanAccount>> getLoans() async {
     final db = await _dbHelper.database;
     final rows = await db.query('loan_accounts',
-        orderBy: "CASE status WHEN 'active' THEN 0 ELSE 1 END, start_date DESC");
+        orderBy:
+            "CASE status WHEN 'active' THEN 0 ELSE 1 END, start_date DESC");
     return rows.map(LoanAccount.fromMap).toList();
   }
 

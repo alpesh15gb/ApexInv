@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/models/additional_cost.dart';
 import 'package:apexbooks/services/backend_services.dart';
 
 /// GSTR CSV exports shaped for the GST Offline Tool (GSTN's desktop utility).
@@ -71,6 +72,244 @@ class GstrExportService {
 
   static String _n2(num v) => v.toStringAsFixed(2);
 
+  /// B2CL threshold: interstate B2C invoices with value above this go to
+  /// B2CL, the rest to B2CS.
+  static const double _b2clThreshold = 250000;
+
+  static TaxMode _taxModeOf(Map<String, dynamic> inv) =>
+      TaxModeExtension.fromKey(inv['tax_mode'] as String?);
+
+  static double _globalRateFractionOf(Map<String, dynamic> inv) =>
+      (inv['tax_rate'] as num?)?.toDouble() ?? 0.0;
+
+  static double _additionalCostsOf(Map<String, dynamic> inv) =>
+      AdditionalCost.listFromJson(inv['additional_costs'] as String?)
+          .fold(0.0, (s, c) => s + c.amount);
+
+  static InvoiceDiscountType _discountTypeOf(Map<String, dynamic> inv) =>
+      InvoiceDiscountTypeExtension.fromKey(
+          inv['invoice_discount_type'] as String?);
+
+  static double _discountValueOf(Map<String, dynamic> inv) =>
+      (inv['invoice_discount_value'] as num?)?.toDouble() ?? 0.0;
+
+  static DateTime _dateOf(Map<String, dynamic> inv) {
+    final v = inv['date'];
+    if (v is DateTime) return v;
+    if (v is String) {
+      final parsed = DateTime.tryParse(v);
+      if (parsed != null) return parsed;
+    }
+    return DateTime.now();
+  }
+
+  static InvoiceTotals _totalsOf(Map<String, dynamic> inv) {
+    final rawItems = inv['items'] as List? ?? const [];
+    final lines = <InvoiceLineAmount>[];
+    for (final e in rawItems) {
+      if (e is Map<String, dynamic> && e['amount'] is InvoiceLineAmount) {
+        lines.add(e['amount'] as InvoiceLineAmount);
+      } else if (e is Map && e['amount'] is InvoiceLineAmount) {
+        lines.add(e['amount'] as InvoiceLineAmount);
+      }
+    }
+    return InvoiceTotalsCalculator.totals(
+      lines: lines,
+      taxMode: _taxModeOf(inv),
+      globalTaxRate: _globalRateFractionOf(inv),
+      globalTaxRateFormat: TaxRateFormat.fraction,
+      additionalCostsTotal: _additionalCostsOf(inv),
+      invoiceDiscountType: _discountTypeOf(inv),
+      invoiceDiscountValue: _discountValueOf(inv),
+    );
+  }
+
+  static double _invoiceValueOf(Map<String, dynamic> inv) =>
+      _totalsOf(inv).total;
+
+  /// Rate-wise GSTR figures for one invoice, consistent with the ledger
+  /// (taxable + exempt = net, net + tax = total).
+  ///
+  /// - global mode: every line taxed at the invoice global rate; the single
+  ///   bucket holds [net] as taxable and [tax] as tax.
+  /// - per-item mode: lines grouped by their own product rate.
+  /// - none / zero rate: everything is exempt.
+  /// Invoice-level discount and additional costs are folded into [net] via
+  /// [_totalsOf] and spread across lines proportionally to their base
+  /// taxable share (line net proportion of subtotal); per-line tax amounts
+  /// are NOT rescaled by the discount (tax is computed pre-discount, matching
+  /// [InvoiceTotalsCalculator]).
+  static _GstrFigures _figuresForInvoice(Map<String, dynamic> inv,
+      [InvoiceTotals? cachedTotals]) {
+    final taxMode = _taxModeOf(inv);
+    final globalFraction = _globalRateFractionOf(inv);
+    final globalPercent = globalFraction * 100;
+    final rawItems = inv['items'] as List? ?? const [];
+    final entries = <Map<String, dynamic>>[];
+    final amounts = <InvoiceLineAmount>[];
+    for (final e in rawItems) {
+      if (e is Map<String, dynamic> && e['amount'] is InvoiceLineAmount) {
+        entries.add(e);
+        amounts.add(e['amount'] as InvoiceLineAmount);
+      } else if (e is Map && e['amount'] is InvoiceLineAmount) {
+        final m = Map<String, dynamic>.from(e);
+        entries.add(m);
+        amounts.add(m['amount'] as InvoiceLineAmount);
+      }
+    }
+    final totals = cachedTotals ?? _totalsOf(inv);
+    final total = totals.total;
+    final tax = totals.tax;
+    double net = total - tax;
+    if (net < 0) net = 0;
+    if (!(net.isFinite)) net = 0;
+    final subtotalAll = amounts.fold(0.0, (s, a) => s + a.lineTotal);
+    const eps = 1e-9;
+    final taxableByRate = <int, double>{};
+    final taxByRate = <int, double>{};
+    double exempt = 0;
+    final hsnLines = <_LineTax>[];
+    final interstate = (inv['is_interstate'] as int? ?? 0) == 1;
+
+    String hsnOf(Map<String, dynamic> row) =>
+        ((row['product_hsn_code'] as String? ??
+                row['hsncode'] as String? ??
+                ''))
+            .trim();
+    String unitOf(Map<String, dynamic> row) =>
+        (row['unit'] as String? ?? row['product_unit'] as String? ?? '');
+    String descOf(Map<String, dynamic> row) =>
+        row['product_name'] as String? ?? '';
+    double qtyOf(Map<String, dynamic> row) =>
+        (row['quantity'] as num?)?.toDouble() ?? 0;
+
+    if (subtotalAll <= eps) {
+      // Degenerate (no taxable base): keep ledger identity by reporting net
+      // as a single bucket when a positive global rate applies, else exempt.
+      if (net > eps) {
+        if (taxMode == TaxMode.global && globalPercent > 0) {
+          final bucket = globalPercent.round();
+          taxableByRate[bucket] = net;
+          taxByRate[bucket] = 0;
+          if (entries.isEmpty) {
+            // No lines at all: nothing for HSN.
+          } else {
+            final perLine = net / entries.length;
+            for (final entry in entries) {
+              final row = (entry['row'] as Map<String, dynamic>? ??
+                  <String, dynamic>{});
+              hsnLines.add(_LineTax(
+                hsn: hsnOf(row),
+                description: descOf(row),
+                unit: unitOf(row),
+                qty: qtyOf(row),
+                rate: globalPercent,
+                taxable: perLine,
+                tax: 0,
+                interstate: interstate,
+              ));
+            }
+          }
+        } else {
+          exempt = net;
+          for (final entry in entries) {
+            final row =
+                (entry['row'] as Map<String, dynamic>? ?? <String, dynamic>{});
+            final perLine = net / entries.length;
+            hsnLines.add(_LineTax(
+              hsn: hsnOf(row),
+              description: descOf(row),
+              unit: unitOf(row),
+              qty: qtyOf(row),
+              rate: 0,
+              taxable: perLine,
+              tax: 0,
+              interstate: interstate,
+            ));
+          }
+        }
+      } else {
+        for (final entry in entries) {
+          final row =
+              (entry['row'] as Map<String, dynamic>? ?? <String, dynamic>{});
+          hsnLines.add(_LineTax(
+            hsn: hsnOf(row),
+            description: descOf(row),
+            unit: unitOf(row),
+            qty: qtyOf(row),
+            rate: taxMode == TaxMode.global
+                ? globalPercent
+                : (taxMode == TaxMode.perItem
+                    ? (entry['amount'] as InvoiceLineAmount).taxRatePercent
+                    : 0),
+            taxable: 0,
+            tax: 0,
+            interstate: interstate,
+          ));
+        }
+      }
+      return _GstrFigures(
+        total: total,
+        tax: tax,
+        net: net,
+        taxableByRate: taxableByRate,
+        taxByRate: taxByRate,
+        exempt: exempt,
+        hsnLines: hsnLines,
+      );
+    }
+
+    final factor = net / subtotalAll;
+    for (final entry in entries) {
+      final row =
+          (entry['row'] as Map<String, dynamic>? ?? <String, dynamic>{});
+      final amount = entry['amount'] as InvoiceLineAmount;
+      final base = amount.lineTotal;
+      final adjusted = base * factor;
+      double effectiveRate;
+      double lineTax;
+      int bucket;
+      if (taxMode == TaxMode.global) {
+        effectiveRate = globalPercent;
+        bucket = globalPercent.round();
+        lineTax = base * globalFraction;
+      } else if (taxMode == TaxMode.perItem) {
+        effectiveRate = amount.taxRatePercent;
+        bucket = amount.taxRatePercent.toInt();
+        lineTax = amount.itemTax;
+      } else {
+        effectiveRate = 0;
+        bucket = 0;
+        lineTax = 0;
+      }
+      hsnLines.add(_LineTax(
+        hsn: hsnOf(row),
+        description: descOf(row),
+        unit: unitOf(row),
+        qty: qtyOf(row),
+        rate: effectiveRate,
+        taxable: adjusted,
+        tax: lineTax,
+        interstate: interstate,
+      ));
+      if (effectiveRate <= 0) {
+        exempt += adjusted;
+      } else {
+        taxableByRate[bucket] = (taxableByRate[bucket] ?? 0) + adjusted;
+        taxByRate[bucket] = (taxByRate[bucket] ?? 0) + lineTax;
+      }
+    }
+    return _GstrFigures(
+      total: total,
+      tax: tax,
+      net: net,
+      taxableByRate: taxableByRate,
+      taxByRate: taxByRate,
+      exempt: exempt,
+      hsnLines: hsnLines,
+    );
+  }
+
   /// Builds every GSTR-1 section CSV for the period.
   static Future<List<GstrFile>> buildGstr1({
     required DateTime from,
@@ -122,30 +361,15 @@ class GstrExportService {
       final interstate = (inv['is_interstate'] as int? ?? 0) == 1;
       final custGstin =
           (inv['customer_gstin'] as String? ?? '').trim().toUpperCase();
-      final invoiceValue = (inv['total'] as num?)?.toDouble() ?? 0.0;
+      final totals = _totalsOf(inv);
+      final figures = _figuresForInvoice(inv, totals);
+      final invoiceValue = figures.total;
 
-      // Rate-wise taxable for this invoice.
-      final rates = <int, double>{}; // rate% -> taxable
-      final lineTaxes = <_LineTax>[];
-      for (final item in inv['items']) {
-        final amount = item['amount'] as InvoiceLineAmount;
-        final rate = amount.taxRatePercent;
-        if (rate <= 0) {
-          continue; // zero-rated: reported via exempt summary, not sections
-        } else {
-          rates[rate.toInt()] = (rates[rate.toInt()] ?? 0) + amount.lineTotal;
-        }
-        lineTaxes.add(_LineTax(
-          hsn: ((item['row']['hsncode'] as String? ?? '')).trim(),
-          description: item['row']['product_name'] as String? ?? '',
-          unit: item['row']['unit'] as String? ?? '',
-          qty: (item['row']['quantity'] as num?)?.toDouble() ?? 0,
-          rate: rate,
-          taxable: amount.lineTotal,
-          tax: amount.itemTax,
-          interstate: interstate,
-        ));
-      }
+      // Rate-wise taxable for this invoice: global mode uses the invoice
+      // global rate with proportional taxable shares; discount/additional
+      // already folded into [figures] so taxable sums to ledger net.
+      final rates = figures.taxableByRate;
+      final lineTaxes = figures.hsnLines;
 
       for (final entry in rates.entries) {
         final rate = entry.key;
@@ -156,7 +380,7 @@ class GstrExportService {
             custGstin,
             inv['customer_name'] ?? '',
             inv['invoice_number'] ?? '',
-            _fmtDate(inv['date']),
+            _fmtDate(_dateOf(inv)),
             _n2(invoiceValue),
             recipientState,
             'N', // reverse charge
@@ -165,12 +389,12 @@ class GstrExportService {
             _n2(taxable),
             '0', // cess
           ]);
-        } else if (interstate && invoiceValue > 250000) {
+        } else if (interstate && invoiceValue > _b2clThreshold) {
           b2clRows.add([
             '', // B2CL recipients are unregistered
             inv['customer_name'] ?? '',
             inv['invoice_number'] ?? '',
-            _fmtDate(inv['date']),
+            _fmtDate(_dateOf(inv)),
             _n2(invoiceValue),
             pos,
             rate,
@@ -290,20 +514,15 @@ class GstrExportService {
     double taxable = 0, igst = 0, cgst = 0, sgst = 0, exempt = 0;
     for (final inv in data.invoices) {
       final interstate = (inv['is_interstate'] as int? ?? 0) == 1;
-      for (final item in inv['items']) {
-        final amount = item['amount'] as InvoiceLineAmount;
-        if (amount.taxRatePercent <= 0) {
-          exempt += amount.lineTotal;
-          continue;
-        }
-        taxable += amount.lineTotal;
-        final tax = amount.itemTax;
-        if (interstate) {
-          igst += tax;
-        } else {
-          cgst += tax / 2;
-          sgst += tax / 2;
-        }
+      final figures = _figuresForInvoice(inv);
+      taxable += figures.taxableTotal;
+      exempt += figures.exempt;
+      final tax = figures.tax;
+      if (interstate) {
+        igst += tax;
+      } else {
+        cgst += tax / 2;
+        sgst += tax / 2;
       }
     }
 
@@ -566,53 +785,59 @@ class GstrExportService {
 
     void addItemTaxLines(
         Map<String, dynamic> inv, bool interstate, bool interStateOverride) {
-      var lineNum = 1;
+      final taxMode = _taxModeOf(inv);
+      final figures = _figuresForInvoice(inv);
+      final invoiceValue = figures.total;
       final custGstin =
           (inv['customer_gstin'] as String? ?? '').trim().toUpperCase();
-      for (final item in inv['items']) {
-        final amount = item['amount'] as InvoiceLineAmount;
-        final rate = amount.taxRatePercent;
-        final tax = amount.itemTax;
+      final useIgstBase = interstate || interStateOverride;
+      var lineNum = 1;
+      for (final t in figures.hsnLines) {
+        final rate = t.rate;
+        final tax = t.tax;
+        final taxable = t.taxable;
         final lineItms = <String, dynamic>{
           'num': lineNum++,
           'rt': rate,
-          'txval': _r2(amount.lineTotal),
+          'txval': _r2(taxable),
           'csamt': 0,
         };
-        final useIgst = interstate || interStateOverride;
+        final useIgst = useIgstBase;
         if (useIgst) {
           lineItms['iamt'] = _r2(tax);
         } else {
           lineItms['camt'] = _r2(tax / 2);
           lineItms['samt'] = _r2(tax / 2);
         }
-        final hsnCode = ((item['row']['hsncode'] as String? ?? '')).trim();
+        final hsnCode = t.hsn.trim();
         hsn.add({
           'num': hsnCode.length,
           'hsn': hsnCode.isEmpty ? '999999' : hsnCode,
-          'desc': item['row']['product_name'] ?? '',
-          'uqc': _uqc(item['row']['unit'] as String? ?? ''),
-          'qty': _r2((item['row']['quantity'] as num?)?.toDouble() ?? 0),
-          'val': _r2(amount.lineTotal + tax),
-          'txval': _r2(amount.lineTotal),
+          'desc': t.description,
+          'uqc': _uqc(t.unit),
+          'qty': _r2(t.qty),
+          'val': _r2(taxable + tax),
+          'txval': _r2(taxable),
           'iamt': useIgst ? _r2(tax) : 0,
           'camt': !useIgst ? _r2(tax / 2) : 0,
           'samt': !useIgst ? _r2(tax / 2) : 0,
           'csamt': 0,
         });
         if (rate <= 0) {
-          exemptVal += amount.lineTotal;
+          exemptVal += taxable;
           continue;
         }
         if (custGstin.isNotEmpty) {
           _appendLine(b2b, custGstin, inv, lineItms, pos);
         } else if ((inv['is_interstate'] as int? ?? 0) == 1 &&
-            ((inv['total'] as num?)?.toDouble() ?? 0) > 250000) {
+            invoiceValue > _b2clThreshold) {
           _appendLine(b2cl, '', inv, lineItms, pos);
         } else {
-          final key = '$pos|${rate.toInt()}';
+          final bucket =
+              taxMode == TaxMode.global ? rate.round() : rate.toInt();
+          final key = '$pos|$bucket';
           final agg = b2csAgg.putIfAbsent(key, () => [0, 0, 0]);
-          agg[0] += amount.lineTotal;
+          agg[0] += taxable;
           agg[1] = useIgst ? agg[1] + tax : agg[1];
           agg[2] = !useIgst ? agg[2] + tax / 2 : agg[2];
         }
@@ -622,44 +847,54 @@ class GstrExportService {
     for (final inv in data.invoices) {
       final type = inv['type'] as String? ?? 'Invoice';
       if (type == 'Credit Note' || type == 'Debit Note') {
-        final custGstin =
-            (inv['customer_gstin'] as String? ?? '').trim().toUpperCase();
-        if (custGstin.isNotEmpty) {
-          final ntItems = <Map<String, dynamic>>[];
-          var ntNum = 1;
-          for (final item in inv['items']) {
-            final amount = item['amount'] as InvoiceLineAmount;
-            final tax = amount.itemTax;
-            final itms = <String, dynamic>{
-              'num': ntNum++,
-              'rt': amount.taxRatePercent,
-              'txval': _r2(amount.lineTotal),
-              'csamt': 0,
-            };
-            if ((inv['is_interstate'] as int? ?? 0) == 1) {
-              itms['iamt'] = _r2(tax);
-            } else {
-              itms['camt'] = _r2(tax / 2);
-              itms['samt'] = _r2(tax / 2);
-            }
-            ntItems.add(itms);
-          }
-          cdnr.add({
-            'ctin': custGstin,
-            'gstin': data.supplierStateCode,
-            'nt': [
-              {
-                'nt_num': inv['invoice_number'] ?? '',
-                'nt_dt': _fmtDate(inv['date']),
-                'val': _r2((inv['total'] as num?)?.toDouble() ?? 0),
-                'ntty': type == 'Credit Note' ? 'C' : 'D',
-                'pos': _stateFromGstin(custGstin) ?? pos,
-                'rchrg': 'N',
-                'inv_typ': 'B2B',
-                'itms': ntItems,
+        try {
+          final custGstin =
+              (inv['customer_gstin'] as String? ?? '').trim().toUpperCase();
+          if (custGstin.isNotEmpty) {
+            final ntItems = <Map<String, dynamic>>[];
+            var ntNum = 1;
+            final rawItems = inv['items'] as List? ?? const [];
+            for (final item in rawItems) {
+              if (item is! Map) continue;
+              final amount = item['amount'];
+              if (amount is! InvoiceLineAmount) continue;
+              final tax = amount.itemTax;
+              final itms = <String, dynamic>{
+                'num': ntNum++,
+                'rt': amount.taxRatePercent,
+                'txval': _r2(amount.lineTotal),
+                'csamt': 0,
+              };
+              if ((inv['is_interstate'] as int? ?? 0) == 1) {
+                itms['iamt'] = _r2(tax);
+              } else {
+                itms['camt'] = _r2(tax / 2);
+                itms['samt'] = _r2(tax / 2);
               }
-            ],
-          });
+              ntItems.add(itms);
+            }
+            cdnr.add({
+              'ctin': custGstin,
+              'gstin': data.supplierStateCode,
+              'nt': [
+                {
+                  'nt_num': inv['invoice_number']?.toString() ??
+                      inv['id']?.toString() ??
+                      '',
+                  'nt_dt': _fmtDate(_dateOf(inv)),
+                  'val': _r2(_invoiceValueOf(inv)),
+                  'ntty': type == 'Credit Note' ? 'C' : 'D',
+                  'pos': _stateFromGstin(custGstin) ?? pos,
+                  'rchrg': 'N',
+                  'inv_typ': 'B2B',
+                  'itms': ntItems,
+                }
+              ],
+            });
+          }
+        } catch (_) {
+          // Never let a malformed note break the whole GSTR-1 JSON export;
+          // ledger postings for notes are owned elsewhere.
         }
         continue; // CDNR handled; not in B2B/B2C
       }
@@ -718,17 +953,14 @@ class GstrExportService {
     for (final inv in data.invoices) {
       if ((inv['type'] as String? ?? 'Invoice') != 'Invoice') continue;
       final interstate = (inv['is_interstate'] as int? ?? 0) == 1;
-      for (final item in inv['items']) {
-        final amount = item['amount'] as InvoiceLineAmount;
-        if (amount.taxRatePercent <= 0) continue;
-        taxable += amount.lineTotal;
-        final tax = amount.itemTax;
-        if (interstate) {
-          igst += tax;
-        } else {
-          cgst += tax / 2;
-          sgst += tax / 2;
-        }
+      final figures = _figuresForInvoice(inv);
+      taxable += figures.taxableTotal;
+      final tax = figures.tax;
+      if (interstate) {
+        igst += tax;
+      } else {
+        cgst += tax / 2;
+        sgst += tax / 2;
       }
     }
     final itc = await _loadItc(from, to);
@@ -797,8 +1029,8 @@ class GstrExportService {
     invEntry ??= () {
       final e = <String, dynamic>{
         'inum': inum,
-        'idt': _fmtDate(inv['date']),
-        'val': _r2((inv['total'] as num?)?.toDouble() ?? 0),
+        'idt': _fmtDate(_dateOf(inv)),
+        'val': _r2(_invoiceValueOf(inv)),
         'pos': ctin.isNotEmpty ? (_stateFromGstin(ctin) ?? pos) : pos,
         'rchrg': 'N',
         'inv_typ': 'B2B',
@@ -923,4 +1155,27 @@ class _LineTax {
     required this.tax,
     required this.interstate,
   });
+}
+
+/// Rate-wise GSTR figures for a single invoice, already adjusted for
+/// invoice-level discount and additional costs.
+class _GstrFigures {
+  final double total;
+  final double tax;
+  final double net;
+  final Map<int, double> taxableByRate;
+  final Map<int, double> taxByRate;
+  final double exempt;
+  final List<_LineTax> hsnLines;
+  const _GstrFigures({
+    required this.total,
+    required this.tax,
+    required this.net,
+    required this.taxableByRate,
+    required this.taxByRate,
+    required this.exempt,
+    required this.hsnLines,
+  });
+
+  double get taxableTotal => taxableByRate.values.fold(0.0, (s, v) => s + v);
 }

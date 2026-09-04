@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/utils/formatters.dart';
+import 'package:apexbooks/utils/gstin_validator.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/common/supported_currencies.dart';
 import 'package:flutter/material.dart';
@@ -223,6 +224,13 @@ class _CustomerManagementScreenV2State
   Future<void> _handleAddOrUpdateCustomer([Customer? customer]) async {
     if (!_formKey.currentState!.validate() || !mounted) return;
     final l10n = AppLocalizations.of(context)!;
+    // Warn-only GSTIN check: never block saving real customers.
+    final pendingGstin = _gstinController.text.trim();
+    final gstinLooksInvalid =
+        pendingGstin.isNotEmpty && !isValidGstin(pendingGstin);
+    if (gstinLooksInvalid) {
+      _showSnackBar('GSTIN looks invalid', isError: true);
+    }
 
     setState(() => _isLoading = true);
     try {
@@ -391,6 +399,10 @@ class _CustomerManagementScreenV2State
                       : () async {
                           if (!dialogFormKey.currentState!.validate()) return;
                           final l10n = AppLocalizations.of(context)!;
+                          // Warn-only GSTIN check: never block saving.
+                          final dialogGstin = gstinCtrl.text.trim();
+                          final dialogGstinInvalid = dialogGstin.isNotEmpty &&
+                              !isValidGstin(dialogGstin);
                           setDialogState(() => isSaving = true);
                           try {
                             final updatedCustomer = Customer(
@@ -408,7 +420,12 @@ class _CustomerManagementScreenV2State
                                 .updateCustomer(updatedCustomer);
                             await _loadCustomers();
                             if (context.mounted) Navigator.pop(context);
-                            _showSnackBar(l10n.customerMgmtUpdatedMessage);
+                            if (dialogGstinInvalid) {
+                              _showSnackBar('GSTIN looks invalid',
+                                  isError: true);
+                            } else {
+                              _showSnackBar(l10n.customerMgmtUpdatedMessage);
+                            }
                           } finally {
                             setDialogState(() => isSaving = false);
                           }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import 'package:apexbooks/common/app_config.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/models/user.dart';
@@ -22,33 +23,108 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _showDefaultCredsHint = false;
+  // True when no local user exists yet: first launch creates the owner.
+  // Cloud edition always authenticates remotely — never setup mode.
+  bool _needsSetup = false;
 
   @override
   void initState() {
     super.initState();
-    _checkFirstTimeUser();
+    _checkNeedsSetup();
   }
 
-  // Show the hint only while admin/admin actually still works as a login.
-  // Cloud edition has no seeded default account — skip the check entirely.
-  Future<void> _checkFirstTimeUser() async {
+  Future<void> _checkNeedsSetup() async {
     if (ref.read(appEditionConfigProvider).isCloud) return;
-    final user =
-        await ref.read(authRepositoryProvider).getUser('admin', 'admin');
-    if (!mounted || user == null) return;
-    _usernameController.text = 'admin';
-    _passwordController.text = 'admin';
-    setState(() => _showDefaultCredsHint = true);
+    final users = await ref.read(authRepositoryProvider).getAllUsers();
+    if (!mounted) return;
+    setState(() => _needsSetup = users.isEmpty);
   }
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _createOwner(AppEditionConfig cfg) async {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+    final confirm = _confirmPasswordController.text;
+    if (username.isEmpty || password.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a username and password')),
+      );
+      return;
+    }
+    if (password.length < 8) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 8 characters')),
+      );
+      return;
+    }
+    if (password.toLowerCase() == username.toLowerCase()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must differ from username')),
+      );
+      return;
+    }
+    if (password != confirm) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final existing =
+          await ref.read(authRepositoryProvider).getUserByUsername(username);
+      if (existing != null) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('That username is already taken')),
+        );
+        return;
+      }
+      final user = User(
+        id: const Uuid().v4(),
+        username: username,
+        password: password,
+        userType: 'admin',
+        passwordChanged: true,
+      );
+      await ref.read(authRepositoryProvider).insertUser(user);
+      final created =
+          await ref.read(authRepositoryProvider).getUserByUsername(username);
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _needsSetup = false;
+      });
+      if (created == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Setup failed — please try again')),
+        );
+        return;
+      }
+      await _afterLoginNavigate(cfg, created);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Setup failed: $e')),
+      );
+    }
   }
 
   void _login(AppEditionConfig cfg) async {
@@ -204,7 +280,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           fit: BoxFit.contain,
                         ),
                         AppSpacing.hSmall,
-                        if (!cfg.isCloud && _showDefaultCredsHint) ...[
+                        if (!cfg.isCloud && _needsSetup) ...[
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.all(12),
@@ -220,35 +296,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.info_outline,
+                                Icon(Icons.admin_panel_settings_outlined,
                                     size: 18,
                                     color: Theme.of(context)
                                         .colorScheme
                                         .onSurfaceVariant),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: Text.rich(
-                                    TextSpan(
-                                      children: [
-                                        const TextSpan(
-                                            text:
-                                                'First time here? Log in with username '),
-                                        TextSpan(
-                                            text: 'admin',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.orange.shade700)),
-                                        const TextSpan(text: ' and password '),
-                                        TextSpan(
-                                            text: 'admin',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.orange.shade700)),
-                                        const TextSpan(
-                                            text:
-                                                ', then set your own password when prompted.'),
-                                      ],
-                                    ),
+                                  child: Text(
+                                    'Welcome! Create the administrator account for this device. There are no default credentials.',
                                     style: TextStyle(
                                         fontSize: 13,
                                         color: Theme.of(context)
@@ -290,11 +346,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ),
                         ),
+                        if (!cfg.isCloud && _needsSetup) ...[
+                          TextField(
+                            controller: _confirmPasswordController,
+                            obscureText: _obscurePassword,
+                            onSubmitted: (_) => _createOwner(cfg),
+                            decoration: const InputDecoration(
+                              labelText: 'Confirm password',
+                              prefixIcon: Icon(Icons.lock_outline),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          AppSpacing.hMedium,
+                        ],
                         AppSpacing.hXlarge,
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : () => _login(cfg),
+                            onPressed: _isLoading
+                                ? null
+                                : () => _needsSetup && !cfg.isCloud
+                                    ? _createOwner(cfg)
+                                    : _login(cfg),
                             style: ElevatedButton.styleFrom(
                               minimumSize: const Size(double.infinity, 50),
                               backgroundColor: Theme.of(context).primaryColor,
@@ -309,7 +382,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Text('Login'),
+                                : Text(_needsSetup && !cfg.isCloud
+                                    ? 'Create administrator'
+                                    : 'Login'),
                           ),
                         ),
                         AppSpacing.hSmall,

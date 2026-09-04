@@ -451,11 +451,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           setState(() => _cheques = chequeRows);
         case 12:
           final (tFrom, tTo) = _range;
-          final tb =
-              await LedgerService.getTrialBalance(
-                  from: tFrom,
-                  to: tTo,
-                  currencyCode: _reportCurrencyCode);
+          final tb = await LedgerService.getTrialBalance(
+              from: tFrom, to: tTo, currencyCode: _reportCurrencyCode);
           if (!mounted) return;
           setState(() => _trialBalance = tb);
         case 13:
@@ -807,9 +804,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       4 => l10n.navProducts,
       5 => l10n.navQuotations,
       6 => l10n.reportsNavInvoiceStatusLabel,
+      7 => l10n.reportsNavDailyReportLabel,
       8 => 'Day Book',
       9 => 'Profit & Loss',
       10 => 'Expiries',
+      11 => 'Cheques',
       12 => 'Trial Balance',
       13 => 'Balance Sheet',
       _ => 'Cheques',
@@ -953,8 +952,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 8),
-                      for (int i = 0; i < _navIcons.length; i++)
+                      for (int i = 0; i < _navIcons.length; i++) ...[
+                        if (_reportSectionAt(i) != null)
+                          _reportSectionHeader(_reportSectionAt(i)!),
                         _navItem(i, primary),
+                      ],
                       Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 12),
@@ -1025,7 +1027,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
         children: [
           const SizedBox(height: 8),
           // ── Nav items ──
-          for (int i = 0; i < _navIcons.length; i++) _navItem(i, primary),
+          for (int i = 0; i < _navIcons.length; i++) ...[
+            if (_reportSectionAt(i) != null)
+              _reportSectionHeader(_reportSectionAt(i)!),
+            _navItem(i, primary),
+          ],
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Divider(
@@ -1169,6 +1175,23 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
   }
 
+  String? _reportSectionAt(int index) => switch (index) {
+        0 => 'Performance',
+        8 => 'Accounting',
+        10 => 'Operations',
+        _ => null,
+      };
+
+  Widget _reportSectionHeader(String label) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+        child: Text(label.toUpperCase(),
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: .8,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      );
+
   Widget _periodItem(_DatePreset p, Color primary) {
     final sel = _preset == p;
     final isCustom = p == _DatePreset.custom;
@@ -1224,23 +1247,18 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   Widget _buildTrialBalance() {
     final tb = _trialBalance;
     if (tb == null) {
-      return _sectionCard(
-          child: _emptyState('Loading trial balance…'));
+      return _sectionCard(child: _emptyState('Loading trial balance…'));
     }
     return Column(children: [
       _kpiGrid([
-        _kpiCard(
-            'Total Debit', _money(tb.totalDebit), const Color(0xFF002E78),
+        _kpiCard('Total Debit', _money(tb.totalDebit), const Color(0xFF002E78),
             Icons.south_west),
-        _kpiCard(
-            'Total Credit', _money(tb.totalCredit), const Color(0xFF7C3AED),
-            Icons.north_east),
+        _kpiCard('Total Credit', _money(tb.totalCredit),
+            const Color(0xFF7C3AED), Icons.north_east),
         _kpiCard(
             tb.balanced ? 'Balanced' : 'Imbalance',
             tb.balanced ? '✓' : _money((tb.totalDebit - tb.totalCredit).abs()),
-            tb.balanced
-                ? const Color(0xFF16A34A)
-                : const Color(0xFFDC2626),
+            tb.balanced ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
             Icons.check_circle_outline),
       ]),
       _sectionCard(
@@ -1253,9 +1271,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 decoration: BoxDecoration(
                     border: Border(
                         bottom: BorderSide(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .outlineVariant))),
+                            color:
+                                Theme.of(context).colorScheme.outlineVariant))),
                 child: Row(children: [
                   Expanded(
                       flex: 4,
@@ -1279,8 +1296,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 ]),
               )),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Row(children: [
               const Expanded(
@@ -1307,8 +1323,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   Widget _buildBalanceSheet() {
     final bs = _balanceSheet;
     if (bs == null) {
-      return _sectionCard(
-          child: _emptyState('Loading balance sheet…'));
+      return _sectionCard(child: _emptyState('Loading balance sheet…'));
     }
     Widget row(String label, double value, {bool bold = false}) {
       return Padding(
@@ -1329,52 +1344,47 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
 
     return Column(children: [
       _sectionCard(
-        child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('ASSETS',
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      letterSpacing: 0.8)),
-              const SizedBox(height: 8),
-              row('Cash & Bank', bs.cash),
-              row('Accounts Receivable', bs.receivable),
-              row('GST Input Credit (ITC)', bs.gstInput),
-              const Divider(),
-              row('Total Assets', bs.assets, bold: true),
-            ]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('ASSETS',
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  letterSpacing: 0.8)),
+          const SizedBox(height: 8),
+          row('Cash & Bank', bs.cash),
+          row('Accounts Receivable', bs.receivable),
+          row('GST Input Credit (ITC)', bs.gstInput),
+          const Divider(),
+          row('Total Assets', bs.assets, bold: true),
+        ]),
       ),
       _sectionCard(
-        child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('LIABILITIES',
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      letterSpacing: 0.8)),
-              const SizedBox(height: 8),
-              row('Accounts Payable', bs.payables),
-              row('GST Output Payable', bs.gstOutput),
-              const SizedBox(height: 16),
-              Text('EQUITY',
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      letterSpacing: 0.8)),
-              const SizedBox(height: 8),
-              row('Opening Capital', bs.openingCapital),
-              row('Net Profit', bs.netProfit),
-              const Divider(),
-              row(
-                  'Total Liabilities & Equity',
-                  bs.payables + bs.gstOutput + bs.openingCapital + bs.netProfit,
-                  bold: true),
-            ]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('LIABILITIES',
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  letterSpacing: 0.8)),
+          const SizedBox(height: 8),
+          row('Accounts Payable', bs.payables),
+          row('GST Output Payable', bs.gstOutput),
+          const SizedBox(height: 16),
+          Text('EQUITY',
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  letterSpacing: 0.8)),
+          const SizedBox(height: 8),
+          row('Opening Capital', bs.openingCapital),
+          row('Net Profit', bs.netProfit),
+          const Divider(),
+          row('Total Liabilities & Equity',
+              bs.payables + bs.gstOutput + bs.openingCapital + bs.netProfit,
+              bold: true),
+        ]),
       ),
     ]);
   }
@@ -2542,7 +2552,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                         _gstrExportStatus!,
                         style: TextStyle(
                             fontSize: 12.5,
-                            color: _gstrExportError!
+                            color: _gstrExportError
                                 ? Theme.of(context).colorScheme.error
                                 : Theme.of(context)
                                     .colorScheme

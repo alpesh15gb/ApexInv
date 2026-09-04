@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/database/accounting_service.dart';
+import 'package:apexbooks/database/invoice_service.dart';
 import 'package:apexbooks/services/backend_services.dart';
 import 'package:apexbooks/services/pdf/pdf_report_header.dart';
 import 'package:apexbooks/common/common.dart';
@@ -80,14 +81,16 @@ class ReportService {
       'THEN ii.discount * ii.quantity ELSE ii.discount END';
   // Revenue basis for P&L/dashboard: backs out embedded tax for
   // tax-inclusive-priced items so "revenue" stays a tax-exclusive figure,
-  // matching the sales tax report and invoice subtotal. Only applies in
-  // per-item tax mode — global-mode invoices never derive tax from
-  // per-product rates, so the stored product tax rate isn't part of that
-  // invoice's actual tax calc.
+  // matching the sales tax report and invoice subtotal. Applies in per-item
+  // mode via the line's product rate, and in global mode via the invoice's
+  // global rate (global-mode tax never derives from per-product rates).
   static const _invoiceItemTaxableNetSql =
       "CASE WHEN i.tax_mode = 'per_item' AND ii.product_price_includes_tax = 1 "
       'AND ii.product_tax_rate > 0 '
       'THEN ($_invoiceItemNetSql) / (1 + ii.product_tax_rate / 100.0) '
+      "WHEN i.tax_mode = 'global' AND ii.product_price_includes_tax = 1 "
+      'AND i.tax_rate > 0 '
+      'THEN ($_invoiceItemNetSql) / (1 + i.tax_rate) '
       'ELSE $_invoiceItemNetSql END';
 
   // ── Batch loader: invoice totals computed in Dart (accurate, no N+1) ────────
@@ -247,21 +250,20 @@ class ReportService {
     final db = await _db.database;
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
-    final ccFilter = currencyCode != null
-        ? 'AND i.currency_code = ? '
-        : '';
+    final ccFilter = currencyCode != null ? 'AND i.currency_code = ? ' : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
       f,
       t,
     ];
     final rows = await db.rawQuery(
+      // Accrual revenue: invoices only. Payment/cheque status must not
+      // filter revenue (a bounced cheque affects cash, not sales).
       "SELECT SUM($_invoiceItemTaxableNetSql) AS revenue, "
       "SUM(ii.quantity * ii.product_purchase_price) AS cogs "
       "FROM invoice_items ii "
       "JOIN invoices i ON i.id = ii.invoice_id "
       "WHERE i.deleted_at IS NULL AND i.type = 'Invoice' "
-      "AND ip.cheque_status NOT IN ('bounced', 'cancelled') "
       "$ccFilter"
       "AND i.date >= ? AND i.date <= ?",
       args,
@@ -281,9 +283,7 @@ class ReportService {
     final db = await _db.database;
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
-    final ccFilter = currencyCode != null
-        ? 'AND i.currency_code = ? '
-        : '';
+    final ccFilter = currencyCode != null ? 'AND i.currency_code = ? ' : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
       f,
@@ -313,9 +313,8 @@ class ReportService {
 
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
-    final currencyFilter = currencyCode != null
-        ? 'AND i.currency_code = ? '
-        : '';
+    final currencyFilter =
+        currencyCode != null ? 'AND i.currency_code = ? ' : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
       f,
@@ -389,9 +388,8 @@ class ReportService {
     final db = await _db.database;
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
-    final currencyFilter = currencyCode != null
-        ? 'AND i.currency_code = ? '
-        : '';
+    final currencyFilter =
+        currencyCode != null ? 'AND i.currency_code = ? ' : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
       f,
@@ -506,9 +504,7 @@ class ReportService {
     final db = await _db.database;
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
-    final ccFilter = currencyCode != null
-        ? 'AND i.currency_code = ? '
-        : '';
+    final ccFilter = currencyCode != null ? 'AND i.currency_code = ? ' : '';
     final dateArgs = <Object?>[
       if (currencyCode != null) currencyCode,
       f,
@@ -802,9 +798,7 @@ class ReportService {
     final db = await _db.database;
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
-    final ccFilter = currencyCode != null
-        ? 'AND i.currency_code = ? '
-        : '';
+    final ccFilter = currencyCode != null ? 'AND i.currency_code = ? ' : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
       f,
@@ -849,9 +843,7 @@ class ReportService {
     final db = await _db.database;
     final f = AppDate.dateKeyStart(from);
     final t = AppDate.dateKeyEnd(to);
-    final currencyFilter = currencyCode != null
-        ? 'AND currency_code = ? '
-        : '';
+    final currencyFilter = currencyCode != null ? 'AND currency_code = ? ' : '';
     final args = <Object?>[
       if (currencyCode != null) currencyCode,
       f,
@@ -1216,8 +1208,8 @@ class ReportService {
 
   /// Every cash event in the period. Purchase bills are not cash events;
   /// their separately recorded payments are included instead.
-  static Future<List<DayBookEntry>> getDayBook(
-      DateTime from, DateTime to, {String? currencyCode}) async {
+  static Future<List<DayBookEntry>> getDayBook(DateTime from, DateTime to,
+      {String? currencyCode}) async {
     final db = await _db.database;
     final rows = <DayBookEntry>[];
 
@@ -1232,8 +1224,11 @@ class ReportService {
         ${currencyCode == null ? '' : 'AND i.currency_code = ?'}
       GROUP BY substr(date_paid, 1, 10), invoice_number
       ORDER BY d
-    ''', [from.toIso8601String(), to.toIso8601String(),
-          if (currencyCode != null) currencyCode]);
+    ''', [
+      from.toIso8601String(),
+      to.toIso8601String(),
+      if (currencyCode != null) currencyCode
+    ]);
     for (final r in payRows) {
       rows.add(DayBookEntry(
         date: DateTime.tryParse(r['d'] as String? ?? '') ?? from,
@@ -1250,8 +1245,11 @@ class ReportService {
       WHERE e.date >= ? AND e.date <= ?
       ${currencyCode == null ? '' : 'AND COALESCE(a.currency_code, \'INR\') = ?'}
       ORDER BY e.date
-    ''', [from.toIso8601String(), to.toIso8601String(),
-      if (currencyCode != null) currencyCode]);
+    ''', [
+      from.toIso8601String(),
+      to.toIso8601String(),
+      if (currencyCode != null) currencyCode
+    ]);
     for (final r in expRows) {
       rows.add(DayBookEntry(
         date: DateTime.tryParse(r['date'] as String? ?? '') ?? from,
@@ -1268,8 +1266,11 @@ class ReportService {
       WHERE p.date_paid >= ? AND p.date_paid <= ?
         ${currencyCode == null ? '' : 'AND b.currency_code = ?'}
       ORDER BY p.date_paid
-    ''', [from.toIso8601String(), to.toIso8601String(),
-          if (currencyCode != null) currencyCode]);
+    ''', [
+      from.toIso8601String(),
+      to.toIso8601String(),
+      if (currencyCode != null) currencyCode
+    ]);
     for (final r in pbRows) {
       rows.add(DayBookEntry(
         date: DateTime.tryParse(r['date'] as String? ?? '') ?? from,
@@ -1283,55 +1284,96 @@ class ReportService {
     return rows;
   }
 
-  /// Cash-basis P&L. `revenue` is collected invoice payments and `purchases`
-  /// is purchase-bill payments; the legacy fields remain for UI compatibility.
+  /// ACCRUAL-basis P&L, matching LedgerService.getBalanceSheet netProfit
+  /// (Sales − Purchases − Expenses on document dates, not payment dates).
+  /// `revenue` is net sales (total − tax) for Invoice + Debit Note minus
+  /// Credit Note in the period; `purchases` is bill net (total − total_tax)
+  /// for ITC-eligible bills (RC uses net too — its tax is a self-assessed
+  /// Input/Output pair) or the full total for ITC-ineligible bills.
+  /// `collected` (invoice receipts incl. note-linked payments) and `paid`
+  /// (purchase-bill payments) are cash memo fields, excluded from profit.
   static Future<PnlSummary> getPnl(DateTime from, DateTime to,
       {String? currencyCode}) async {
     final db = await _db.database;
-    final invRes = await db.rawQuery(
-      "SELECT COALESCE(SUM(amount_paid), 0) AS v FROM invoice_payments p "
-      "JOIN invoices i ON i.id = p.invoice_id "
-      "WHERE i.deleted_at IS NULL AND i.type = 'Invoice' AND p.date_paid >= ? AND p.date_paid <= ? "
-      "AND p.cheque_status NOT IN ('bounced', 'cancelled') "
-      "${currencyCode == null ? '' : 'AND i.currency_code = ?'}",
-      [from.toIso8601String(), to.toIso8601String(),
-        if (currencyCode != null) currencyCode],
-    );
+    // Revenue: same domain calculator as the ledger (InvoiceService), so
+    // accrual revenue here always agrees with ledger Sales.
+    final allInvoices = await InvoiceService.getAllInvoices();
+    double revenue = 0;
+    for (final inv in allInvoices) {
+      if (inv.date.isBefore(from) || inv.date.isAfter(to)) continue;
+      if (currencyCode != null && inv.currencyCode != currencyCode) continue;
+      final net = inv.total - inv.tax;
+      if (inv.type == 'Invoice' || inv.type == 'Debit Note') {
+        revenue += net;
+      } else if (inv.type == 'Credit Note') {
+        revenue -= net;
+      }
+    }
     final expRes = await db.rawQuery(
       "SELECT COALESCE(SUM(e.amount), 0) AS v FROM expenses e "
       "LEFT JOIN financial_accounts a ON a.id = e.account_id "
       "WHERE e.date >= ? AND e.date <= ? "
       "${currencyCode == null ? '' : 'AND COALESCE(a.currency_code, \'INR\') = ?'}",
-      [from.toIso8601String(), to.toIso8601String(),
-        if (currencyCode != null) currencyCode],
+      [
+        from.toIso8601String(),
+        to.toIso8601String(),
+        if (currencyCode != null) currencyCode
+      ],
     );
+    // Purchases accrual mirrors the ledger ITC rules: eligible (incl. RC)
+    // contributes net, ineligible contributes the full total.
+    final billRows = await db.rawQuery(
+      "SELECT total_amount, total_tax, itc_eligible, reverse_charge, currency_code "
+      "FROM purchase_bills WHERE date >= ? AND date <= ? "
+      "${currencyCode == null ? '' : 'AND currency_code = ?'}",
+      [
+        from.toIso8601String(),
+        to.toIso8601String(),
+        if (currencyCode != null) currencyCode
+      ],
+    );
+    double purchases = 0;
+    for (final b in billRows) {
+      final total = (b['total_amount'] as num?)?.toDouble() ?? 0;
+      final tax = (b['total_tax'] as num?)?.toDouble() ?? 0;
+      final eligible = (b['itc_eligible'] as int? ?? 1) == 1;
+      purchases += eligible ? total - tax : total;
+    }
     final pbRes = await db.rawQuery(
       "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM purchase_bill_payments p "
       "JOIN purchase_bills b ON b.id = p.purchase_bill_id "
       "WHERE p.date_paid >= ? AND p.date_paid <= ? "
       "AND p.cheque_status NOT IN ('bounced', 'cancelled') "
       "${currencyCode == null ? '' : 'AND b.currency_code = ?'}",
-      [from.toIso8601String(), to.toIso8601String(),
-        if (currencyCode != null) currencyCode],
+      [
+        from.toIso8601String(),
+        to.toIso8601String(),
+        if (currencyCode != null) currencyCode
+      ],
     );
+    // Cash memo: receipts for invoices AND credit/debit notes.
     final collectedRes = await db.rawQuery(
       "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM invoice_payments p "
       "JOIN invoices i ON i.id = p.invoice_id "
-      "WHERE p.date_paid >= ? AND p.date_paid <= ? "
+      "WHERE i.deleted_at IS NULL AND i.type IN ('Invoice', 'Credit Note', 'Debit Note') "
+      "AND p.date_paid >= ? AND p.date_paid <= ? "
       "AND p.cheque_status NOT IN ('bounced', 'cancelled') "
       "${currencyCode == null ? '' : 'AND i.currency_code = ?'}",
-      [from.toIso8601String(), to.toIso8601String(),
-        if (currencyCode != null) currencyCode],
+      [
+        from.toIso8601String(),
+        to.toIso8601String(),
+        if (currencyCode != null) currencyCode
+      ],
     );
-    final revenue = (invRes.first['v'] as num?)?.toDouble() ?? 0;
     final expenses = (expRes.first['v'] as num?)?.toDouble() ?? 0;
-    final purchases = (pbRes.first['v'] as num?)?.toDouble() ?? 0;
+    final paid = (pbRes.first['v'] as num?)?.toDouble() ?? 0;
     final collected = (collectedRes.first['v'] as num?)?.toDouble() ?? 0;
     return PnlSummary(
       revenue: revenue,
       expenses: expenses,
       purchases: purchases,
       collected: collected,
+      paid: paid,
     );
   }
 
@@ -1422,17 +1464,27 @@ class DayBookEntry {
 }
 
 class PnlSummary {
+  /// Accrual net sales (Invoice + Debit Note − Credit Note, total − tax).
   final double revenue;
   final double expenses;
+
+  /// Accrual purchases: eligible bill net, ineligible bill full total.
   final double purchases;
+
+  /// Cash memo: invoice receipts collected (incl. note-linked payments).
   final double collected;
+
+  /// Cash memo: purchase-bill payments paid.
+  final double paid;
   const PnlSummary({
     required this.revenue,
     required this.expenses,
     required this.purchases,
     required this.collected,
+    this.paid = 0,
   });
 
+  /// Accrual profit, equals LedgerService BalanceSheet.netProfit.
   double get profit => revenue - expenses - purchases;
 }
 

@@ -121,6 +121,54 @@ class PurchaseOrderService {
         where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Marks a purchase order received AND adds its lines to on-hand stock in a
+  /// single transaction. Idempotent: returns false without touching stock
+  /// when the order is already received (or cancelled), so a double-tap or a
+  /// stale detail view can never double-add. Only lines linked to a product
+  /// with limited stock move the needle.
+  ///
+  /// No schema change (stays db v51): bills carry no po_id, so a PO receive
+  /// plus a separate purchase bill booked for the same goods would still
+  /// double-add. That residual risk is inherent to the missing PO↔bill
+  /// linkage, not to this path — each path is individually single-counting.
+  static Future<bool> markAsReceived(String id) async {
+    final db = await dbHelper.database;
+    var applied = false;
+    await db.transaction((txn) async {
+      final orders = await txn.query('purchase_orders',
+          columns: ['status'], where: 'id = ?', whereArgs: [id], limit: 1);
+      if (orders.isEmpty) throw StateError('Purchase order not found');
+      final status = orders.first['status'] as String? ?? 'draft';
+      if (status == 'received' || status == 'cancelled') return;
+      final items = await txn.query('purchase_order_items',
+          columns: ['product_id', 'quantity'],
+          where: 'purchase_order_id = ?',
+          whereArgs: [id]);
+      for (final item in items) {
+        final productId = item['product_id'] as String?;
+        if (productId == null || productId.isEmpty) continue;
+        final products = await txn.query('products',
+            columns: ['stock', 'unlimited_stock'],
+            where: 'id = ?',
+            whereArgs: [productId],
+            limit: 1);
+        if (products.isEmpty ||
+            (products.first['unlimited_stock'] as int? ?? 0) == 1) {
+          continue;
+        }
+        final stock = (products.first['stock'] as num? ?? 0).toDouble();
+        final qty = (item['quantity'] as num? ?? 0).toDouble();
+        if (qty.abs() <= 0.000001) continue;
+        await txn.update('products', {'stock': stock + qty},
+            where: 'id = ?', whereArgs: [productId]);
+      }
+      await txn.update('purchase_orders', {'status': 'received'},
+          where: 'id = ?', whereArgs: [id]);
+      applied = true;
+    });
+    return applied;
+  }
+
   static Future<void> deletePurchaseOrder(String id) async {
     final db = await dbHelper.database;
     await db.transaction((txn) async {

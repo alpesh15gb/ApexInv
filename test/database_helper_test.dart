@@ -21,8 +21,8 @@ void main() {
       onCreate: (db, v) => DatabaseHelper().createDbForTest(db, v),
     );
 
-    final tables = await db
-        .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+    final tables =
+        await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
     final tableNames = tables.map((r) => r['name']).toSet();
 
     expect(
@@ -35,17 +35,17 @@ void main() {
         'users',
         'company_info',
         'settings',
-         'invoice_payments',
-         'purchase_bills',
-         'purchase_bill_items',
-         'purchase_bill_payments',
-         'financial_accounts',
-         'financial_transactions',
-         'sale_orders',
-         'sale_order_items',
-         'cheques',
-         'loan_accounts',
-         'loan_movements',
+        'invoice_payments',
+        'purchase_bills',
+        'purchase_bill_items',
+        'purchase_bill_payments',
+        'financial_accounts',
+        'financial_transactions',
+        'sale_orders',
+        'sale_order_items',
+        'cheques',
+        'loan_accounts',
+        'loan_movements',
       ]),
     );
 
@@ -112,16 +112,17 @@ void main() {
     await db.close();
   });
 
-  test('default admin user is seeded on fresh create', () async {
+  test('no credentials are seeded on fresh create', () async {
     final db = await openDatabase(
       inMemoryDatabasePath,
       version: currentVersion,
       onCreate: (db, v) => DatabaseHelper().createDbForTest(db, v),
     );
 
-    final users = await db.query('users', where: 'username = ?', whereArgs: ['admin']);
-    expect(users, hasLength(1));
-    expect(users.first['user_type'], 'admin');
+    // First launch must create the owner through the setup flow; there
+    // must be no default admin/admin login.
+    final users = await db.query('users');
+    expect(users, isEmpty);
 
     await db.close();
   });
@@ -134,8 +135,7 @@ void main() {
     );
 
     await expectLater(
-      DatabaseHelper()
-          .upgradeDbForTest(db, currentVersion, currentVersion),
+      DatabaseHelper().upgradeDbForTest(db, currentVersion, currentVersion),
       completes,
     );
 

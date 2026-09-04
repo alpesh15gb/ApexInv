@@ -144,6 +144,13 @@ Future<void> installSyncCapture(Database db) async {
             [table])) ==
         1;
     if (!exists) continue;
+    // A database upgraded by an older build may predate this table's sync
+    // registration (e.g. expense_categories): ensure the columns exist before
+    // (re)installing triggers that reference them, otherwise every later
+    // write to the table fails with "no such column: updated_at".
+    await addSyncColumns(db, table,
+        withCloudId: cloudIdTables.contains(table),
+        withDeletedAt: table == 'customers' || table == 'products');
     await _installTableTriggers(db, table);
   }
 }
@@ -228,6 +235,14 @@ Future<void> backfillSyncColumns(Database db) async {
             [table])) ==
         1;
     if (!exists) continue;
+    // Defensive: databases upgraded by older builds may lack the column
+    // entirely (table registered for sync after their migration ran).
+    // Skipping keeps the upgrade moving; the matching addSyncColumns pass
+    // fills the column in. Without this guard startup crashes with
+    // "no such column: updated_at".
+    final cols = await db.rawQuery('PRAGMA table_info($table)');
+    final names = cols.map((r) => r['name'] as String).toSet();
+    if (!names.contains('updated_at')) continue;
     await db.execute('''
       UPDATE $table SET updated_at =
         strftime('%Y-%m-%dT%H:%M:%fZ', '2000-01-01 00:00:00', '+' || rowid || ' seconds')
@@ -237,6 +252,14 @@ Future<void> backfillSyncColumns(Database db) async {
 
   // cloud_id backfill for invoices/company_info.
   for (final table in cloudIdTables) {
+    final exists = Sqflite.firstIntValue(await db.rawQuery(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+            [table])) ==
+        1;
+    if (!exists) continue;
+    final cols = await db.rawQuery('PRAGMA table_info($table)');
+    final names = cols.map((r) => r['name'] as String).toSet();
+    if (!names.contains('cloud_id')) continue;
     await db.execute('''
       UPDATE $table SET cloud_id = lower(hex(randomblob(4)) || '-' || hex(randomblob(2))
         || '-4' || substr(lower(hex(randomblob(2))),2) || '-'

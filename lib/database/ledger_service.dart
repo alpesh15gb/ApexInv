@@ -9,10 +9,14 @@ import 'invoice_service.dart';
 /// from the business data and needs no sync of its own. Posting rules
 /// (single-company cash+accrual hybrid, standard Indian chart of accounts):
 ///
-///   Sale (invoice)      Dr Accounts Receivable / Cr Sales + Cr GST Output
-///   Receipt (payment)   Dr Cash/Bank / Cr Accounts Receivable
+///   Sale (invoice/Debit Note) Dr Accounts Receivable / Cr Sales + Cr GST Output
+///   Credit Note (sale reversal) Dr Sales + Dr GST Output / Cr AR
+///   Receipt (payment, incl. note-linked) Dr Cash/Bank / Cr Accounts Receivable
 ///   Expense             Dr <category expense> / Cr Cash
-///   Purchase bill       Dr Purchases + Dr GST Input (ITC) / Cr Payables
+///   Purchase bill (eligible) Dr Purchases net + Dr GST Input / Cr Payables total
+///   Purchase bill (ITC ineligible) Dr Purchases FULL total / Cr Payables
+///   Purchase bill (reverse charge) Dr Purchases net + Dr GST Input /
+///     Cr GST Output (self-assessed) + Cr Payables net
 ///   Purchase payment    Dr Accounts Payable / Cr Cash
 ///
 /// The projection is deterministic: same DB → same ledger.
@@ -63,7 +67,10 @@ class LedgerService {
           if (toS != null) "$col <= '$toS'",
         ].isEmpty
             ? ''
-            : ' AND ${[if (fromS != null) "$col >= '$fromS'", if (toS != null) "$col <= '$toS'"].join(' AND ')}';
+            : ' AND ${[
+                if (fromS != null) "$col >= '$fromS'",
+                if (toS != null) "$col <= '$toS'"
+              ].join(' AND ')}';
 
     bool inRange(DateTime date) =>
         (from == null || !date.isBefore(from)) &&
@@ -82,12 +89,16 @@ class LedgerService {
       return '$prefix: ${row['name']}';
     }
 
-    // 1. Sales invoices → AR / Sales + GST Output. Invoice totals are
-    // computed by the same domain calculator as the UI/PDF; they are not
-    // stale denormalized columns in SQLite.
+    // 1. Sales invoices + Debit/Credit Notes → AR / Sales + GST Output.
+    // Invoice totals are computed by the same domain calculator as the
+    // UI/PDF; they are not stale denormalized columns in SQLite.
+    // Credit Note reverses a sale (Dr Sales net + Dr GST Output / Cr AR);
+    // Debit Note is an additional sale (same posting as an Invoice).
     final invoices = (await InvoiceService.getAllInvoices())
         .where((invoice) =>
-            invoice.type == 'Invoice' &&
+            (invoice.type == 'Invoice' ||
+                invoice.type == 'Credit Note' ||
+                invoice.type == 'Debit Note') &&
             (currencyCode == null || invoice.currencyCode == currencyCode) &&
             inRange(invoice.date))
         .toList()
@@ -96,17 +107,29 @@ class LedgerService {
       final total = inv.total;
       final tax = inv.tax;
       final net = total - tax;
-      entries.add(JournalEntry(
-        date: inv.date,
-        description:
-            'Sale — ${inv.customer.name} (${inv.currencySymbol}${total.toStringAsFixed(2)})',
-        lines: [
-          LedgerLine(
-              account: accReceivable, debit: total, credit: 0),
-          LedgerLine(account: accSales, debit: 0, credit: net),
-          LedgerLine(account: accGstOutput, debit: 0, credit: tax),
-        ],
-      ));
+      if (inv.type == 'Credit Note') {
+        entries.add(JournalEntry(
+          date: inv.date,
+          description:
+              'Credit Note — ${inv.customer.name} (${inv.currencySymbol}${total.toStringAsFixed(2)})',
+          lines: [
+            LedgerLine(account: accSales, debit: net, credit: 0),
+            LedgerLine(account: accGstOutput, debit: tax, credit: 0),
+            LedgerLine(account: accReceivable, debit: 0, credit: total),
+          ],
+        ));
+      } else {
+        entries.add(JournalEntry(
+          date: inv.date,
+          description:
+              '${inv.type == 'Debit Note' ? 'Debit Note' : 'Sale'} — ${inv.customer.name} (${inv.currencySymbol}${total.toStringAsFixed(2)})',
+          lines: [
+            LedgerLine(account: accReceivable, debit: total, credit: 0),
+            LedgerLine(account: accSales, debit: 0, credit: net),
+            LedgerLine(account: accGstOutput, debit: 0, credit: tax),
+          ],
+        ));
+      }
     }
 
     // 2. Receipts → Cash/Bank / AR
@@ -115,7 +138,7 @@ class LedgerService {
              p.account_id, p.cheque_status, i.customer_name
       FROM invoice_payments p
       JOIN invoices i ON i.id = p.invoice_id
-      WHERE i.deleted_at IS NULL AND i.type = 'Invoice'
+      WHERE i.deleted_at IS NULL AND i.type IN ('Invoice', 'Credit Note', 'Debit Note')
         AND COALESCE(p.cheque_status, 'none') NOT IN ('bounced', 'cancelled')
       ${currencyFilter('i.currency_code')}
       ${dateFilter('p.date_paid')}
@@ -129,8 +152,7 @@ class LedgerService {
               fallback: method == 'Cash' ? accCash : accBank);
       entries.add(JournalEntry(
         date: DateTime.tryParse(p['d'] as String? ?? '') ?? DateTime.now(),
-        description:
-            'Receipt — ${p['customer_name'] ?? ''} ($method)',
+        description: 'Receipt — ${p['customer_name'] ?? ''} ($method)',
         lines: [
           LedgerLine(
               account: account,
@@ -172,10 +194,21 @@ class LedgerService {
       ));
     }
 
-    // 4. Purchase bills → Purchases + ITC / Payables.
+    // 4. Purchase bills → Purchases + ITC / Payables, honouring ITC
+    // eligibility and reverse charge (columns itc_eligible/reverse_charge,
+    // same meaning as GstrExportService._loadItc):
+    //   eligible non-RC → Dr Purchases net + Dr GST Input / Cr Payables total
+    //   ineligible      → Dr Purchases FULL total (no ITC split)
+    //   eligible RC     → Dr Purchases net + Dr GST Input / Cr GST Output
+    //     (self-assessed RC liability, net zero payable effect but visible);
+    //     only the supplier net is owed, so Cr Payables is net, not total.
+    // Ineligible takes precedence over RC (no ITC claimed at all).
+    // Consequently BalanceSheet gstInput accumulates only eligible ITC
+    // (non-RC net asset plus RC gross offset by the paired Output).
     final bills = await db.rawQuery('''
       SELECT b.id, b.date, b.supplier_name, b.total_amount, b.total_tax,
              b.amount_paid, b.currency_symbol, b.currency_code,
+             b.itc_eligible, b.reverse_charge,
              COALESCE(SUM(p.amount_paid), 0) AS recorded_paid
       FROM purchase_bills b
       LEFT JOIN purchase_bill_payments p ON p.purchase_bill_id = b.id
@@ -189,32 +222,71 @@ class LedgerService {
       final total = (b['total_amount'] as num?)?.toDouble() ?? 0;
       final tax = (b['total_tax'] as num?)?.toDouble() ?? 0;
       final net = total - tax;
+      final isEligible = (b['itc_eligible'] as int? ?? 1) == 1;
+      final isRC = (b['reverse_charge'] as int? ?? 0) == 1 && isEligible;
+      // Supplier payable: RC tax goes to the government, not the supplier.
+      final payableTotal = isRC ? net : total;
+      // P&L charge: ineligible bills expense the full total (tax included).
+      final purchaseDebit = isEligible ? net : total;
       // Pre-v47 bills stored only an aggregate paid amount. Preserve that
       // historical payment as a bill-date cash movement when no payment
       // records exist, while newer bills use the dated payment rows below.
       final recordedPaid = (b['recorded_paid'] as num?)?.toDouble() ?? 0;
       final legacyPaid = recordedPaid <= 0
           ? ((b['amount_paid'] as num?)?.toDouble() ?? 0)
-              .clamp(0, total)
+              .clamp(0, payableTotal)
               .toDouble()
           : 0.0;
       final date =
           DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime.now();
-      entries.add(JournalEntry(
-        date: date,
-        description:
-            'Purchase — ${b['supplier_name'] ?? ''} (${b['currency_symbol'] ?? ''}${total.toStringAsFixed(2)})',
-        lines: [
-          LedgerLine(account: accPurchases, debit: net, credit: 0),
-          LedgerLine(account: accGstInput, debit: tax, credit: 0),
-          if (legacyPaid > 0)
-            LedgerLine(account: accCash, debit: 0, credit: legacyPaid),
-          LedgerLine(
-              account: accPayable,
-              debit: 0,
-              credit: total - legacyPaid),
-        ],
-      ));
+      final tag = isRC ? ' [RC]' : (!isEligible ? ' [ITC ineligible]' : '');
+      if (!isEligible) {
+        entries.add(JournalEntry(
+          date: date,
+          description:
+              'Purchase — ${b['supplier_name'] ?? ''} (${b['currency_symbol'] ?? ''}${total.toStringAsFixed(2)})$tag',
+          lines: [
+            LedgerLine(account: accPurchases, debit: purchaseDebit, credit: 0),
+            if (legacyPaid > 0)
+              LedgerLine(account: accCash, debit: 0, credit: legacyPaid),
+            LedgerLine(
+                account: accPayable,
+                debit: 0,
+                credit: payableTotal - legacyPaid),
+          ],
+        ));
+      } else if (isRC) {
+        entries.add(JournalEntry(
+          date: date,
+          description:
+              'Purchase — ${b['supplier_name'] ?? ''} (${b['currency_symbol'] ?? ''}${total.toStringAsFixed(2)})$tag',
+          lines: [
+            LedgerLine(account: accPurchases, debit: net, credit: 0),
+            LedgerLine(account: accGstInput, debit: tax, credit: 0),
+            LedgerLine(account: accGstOutput, debit: 0, credit: tax),
+            if (legacyPaid > 0)
+              LedgerLine(account: accCash, debit: 0, credit: legacyPaid),
+            LedgerLine(
+                account: accPayable,
+                debit: 0,
+                credit: payableTotal - legacyPaid),
+          ],
+        ));
+      } else {
+        entries.add(JournalEntry(
+          date: date,
+          description:
+              'Purchase — ${b['supplier_name'] ?? ''} (${b['currency_symbol'] ?? ''}${total.toStringAsFixed(2)})',
+          lines: [
+            LedgerLine(account: accPurchases, debit: net, credit: 0),
+            LedgerLine(account: accGstInput, debit: tax, credit: 0),
+            if (legacyPaid > 0)
+              LedgerLine(account: accCash, debit: 0, credit: legacyPaid),
+            LedgerLine(
+                account: accPayable, debit: 0, credit: total - legacyPaid),
+          ],
+        ));
+      }
     }
 
     // Purchase payments settle payables on their actual payment date.
@@ -259,8 +331,8 @@ class LedgerService {
     ''', [if (currencyCode != null) currencyCode]);
     for (final cheque in clearedCheques) {
       final amount = (cheque['amount'] as num).toDouble();
-      final bank = accountName(cheque['bank_account_id'] as String?,
-          fallback: accBank);
+      final bank =
+          accountName(cheque['bank_account_id'] as String?, fallback: accBank);
       final received = cheque['direction'] == 'received';
       entries.add(JournalEntry(
           date: DateTime.tryParse(cheque['cleared_at'] as String? ?? '') ??
@@ -301,12 +373,10 @@ class LedgerService {
                         account: accountName(row['account_id'] as String),
                         debit: amount,
                         credit: 0),
-                    LedgerLine(
-                        account: accCapital, debit: 0, credit: amount),
+                    LedgerLine(account: accCapital, debit: 0, credit: amount),
                   ]
                 : [
-                    LedgerLine(
-                        account: accCapital, debit: -amount, credit: 0),
+                    LedgerLine(account: accCapital, debit: -amount, credit: 0),
                     LedgerLine(
                         account: accountName(row['account_id'] as String),
                         debit: 0,
@@ -341,10 +411,8 @@ class LedgerService {
       ORDER BY m.date
     ''', [if (currencyCode != null) currencyCode]);
     for (final movement in loanRows) {
-      final principal =
-          (movement['principal_amount'] as num?)?.toDouble() ?? 0;
-      final interest =
-          (movement['interest_amount'] as num?)?.toDouble() ?? 0;
+      final principal = (movement['principal_amount'] as num?)?.toDouble() ?? 0;
+      final interest = (movement['interest_amount'] as num?)?.toDouble() ?? 0;
       final fees = (movement['fee_amount'] as num?)?.toDouble() ?? 0;
       final account = accountName(movement['account_id'] as String?);
       final drawdown = movement['type'] == 'drawdown';
@@ -382,8 +450,7 @@ class LedgerService {
     // Account-level opening balances are equity-funded balance forwards, not
     // income. They are distinct from the legacy single opening_capital key.
     for (final accountRow in accountRows) {
-      final opening =
-          (accountRow['opening_balance'] as num?)?.toDouble() ?? 0;
+      final opening = (accountRow['opening_balance'] as num?)?.toDouble() ?? 0;
       final openingDate =
           DateTime.tryParse(accountRow['opening_date'] as String? ?? '') ??
               DateTime(2000);
@@ -400,12 +467,10 @@ class LedgerService {
           lines: opening >= 0
               ? [
                   LedgerLine(account: account, debit: opening, credit: 0),
-                  LedgerLine(
-                      account: accCapital, debit: 0, credit: opening),
+                  LedgerLine(account: accCapital, debit: 0, credit: opening),
                 ]
               : [
-                  LedgerLine(
-                      account: accCapital, debit: -opening, credit: 0),
+                  LedgerLine(account: accCapital, debit: -opening, credit: 0),
                   LedgerLine(account: account, debit: 0, credit: -opening),
                 ]));
     }
@@ -440,8 +505,8 @@ class LedgerService {
     DateTime? to,
     String? currencyCode,
   }) async {
-    final journal = await getJournal(
-        from: from, to: to, currencyCode: currencyCode);
+    final journal =
+        await getJournal(from: from, to: to, currencyCode: currencyCode);
     final byAccount = <String, ({double debit, double credit})>{};
     for (final entry in journal) {
       for (final line in entry.lines) {
@@ -496,7 +561,8 @@ class LedgerService {
     for (final r in tb.rows) {
       if (r.account == accSales) salesCredit += r.credit - r.debit;
       if (r.account == accPurchases) purchasesDebit += r.debit - r.credit;
-      if (r.account.startsWith(accExpenses)) expensesDebit += r.debit - r.credit;
+      if (r.account.startsWith(accExpenses))
+        expensesDebit += r.debit - r.credit;
       if (r.account == accInterestExpense || r.account == accBankFees) {
         expensesDebit += r.debit - r.credit;
       }
@@ -511,6 +577,9 @@ class LedgerService {
     final loans = -getNet(accLoanLiability);
     final cash = getNet(accCash) + getNet(accBank);
     final payable = -(getNet(accPayable));
+    // ITC asset: ineligible bills post no GST Input, so only eligible ITC
+    // lands here. RC bills post a paired Dr Input / Cr Output (net zero
+    // payable effect, both visible); the Output leg sits in gstOutput.
     final gstInput = getNet(accGstInput);
 
     return BalanceSheet(

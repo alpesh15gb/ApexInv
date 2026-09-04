@@ -101,6 +101,11 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
   Future<void> _saveUser() async {
     if (_formKey.currentState!.validate()) {
       final l10n = AppLocalizations.of(context)!;
+      final normalizedType = _userTypeController.text.trim().toLowerCase();
+      if (normalizedType != 'admin' && normalizedType != 'user') {
+        _showSnackBar('Invalid user type. Use admin or user.', Colors.red);
+        return;
+      }
       setState(() => _isLoading = true);
 
       try {
@@ -108,7 +113,7 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
           id: _editingUserId ?? UniqueKey().toString(),
           username: _usernameController.text.trim(),
           password: _passwordController.text,
-          userType: _userTypeController.text,
+          userType: normalizedType,
         );
 
         if (_editingUserId == null) {
@@ -376,8 +381,8 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
                       final user = _users.firstWhere((u) => u.id == userId);
-                      if (user.password ==
-                          PasswordUtils.hash(oldPasswordController.text)) {
+                      if (PasswordUtils.verify(oldPasswordController.text,
+                          user.password, user.salt)) {
                         await ref
                             .read(authRepositoryProvider)
                             .updatePassword(userId, newPasswordController.text);

@@ -96,6 +96,13 @@ class ProductService {
     }
   }
 
+  static const Set<String> _allowedOrderBy = {
+    'name',
+    'price',
+    'stock',
+    'tax_rate',
+  };
+
   static Future<List<Product>> getProductsPaginated({
     required int offset,
     required int limit,
@@ -105,6 +112,7 @@ class ProductService {
     String? type,
   }) async {
     final db = await dbHelper.database;
+    final safeOrderBy = _allowedOrderBy.contains(orderBy) ? orderBy : 'name';
     final order = orderASC ? "ASC" : "DESC";
     final typeFilter = (type != null && type != 'both') ? type : null;
 
@@ -133,7 +141,7 @@ class ProductService {
       'products',
       where: where,
       whereArgs: whereArgs,
-      orderBy: '$orderBy COLLATE NOCASE $order',
+      orderBy: '$safeOrderBy COLLATE NOCASE $order',
       limit: limit,
       offset: offset,
     );

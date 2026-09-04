@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/backup/backup_manager.dart';
 import 'package:apexbooks/common/app_config.dart';
+import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/providers/locale_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
@@ -111,6 +113,7 @@ class _MyAppState extends ConsumerState<MyApp> {
     _loadThemeMode();
     _loadAppLocale();
     _initSync();
+    _runAutoBackup();
   }
 
   /// Restores any persisted cloud-sync account and arms the sync engine
@@ -120,6 +123,17 @@ class _MyAppState extends ConsumerState<MyApp> {
       settings: ref.read(settingsRepositoryProvider),
       installation: SqliteInstallationRepository(),
     );
+  }
+
+  /// Weekly auto-backup safety net (fire-and-forget, no background service):
+  /// [BackupManager.performAutoBackup] already no-ops unless the newest
+  /// backup is 7+ days stale. Failures are swallowed — a missed backup must
+  /// never block startup.
+  void _runAutoBackup() {
+    DatabaseHelper()
+        .database
+        .then((db) => BackupManager().performAutoBackup(db))
+        .catchError((_) {});
   }
 
   Future<void> _loadThemeMode() async {

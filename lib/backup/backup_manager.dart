@@ -35,6 +35,37 @@ class BackupManager {
   // Tables excluded from JSON exports (contain sensitive data).
   static const Set<String> _excludedFromJsonExport = {'users'};
 
+  /// Allowlist for JSON restore. Credentials, sync protocol state, audit
+  /// history, and migration logs are never overwritten from a backup file —
+  /// a crafted or foreign file must not be able to rotate roles, replay
+  /// cursors/outbox rows, or forge audit entries.
+  static const Set<String> _restorableTables = {
+    'company_info',
+    'customers',
+    'products',
+    'product_metadata',
+    'batch_info',
+    'custom_fields',
+    'invoices',
+    'invoice_items',
+    'invoice_payments',
+    'expense_categories',
+    'expenses',
+    'purchase_orders',
+    'purchase_order_items',
+    'purchase_bills',
+    'purchase_bill_items',
+    'purchase_bill_payments',
+    'financial_accounts',
+    'financial_transactions',
+    'sale_orders',
+    'sale_order_items',
+    'cheques',
+    'loan_accounts',
+    'loan_movements',
+    'settings',
+  };
+
   // Restore order ensures parent tables are inserted before child tables,
   // preventing foreign-key constraint violations.
   static const List<String> _restoreTableOrder = [
@@ -118,7 +149,14 @@ class BackupManager {
     for (final table in tables) {
       final tableName = table['name'] as String;
       if (_excludedFromJsonExport.contains(tableName)) continue;
-      final tableData = await database.query(tableName);
+      var tableData = await database.query(tableName);
+      if (tableName == 'settings') {
+        // Never export the cloud sync bearer token; a shared backup file
+        // must not carry credentials.
+        tableData = tableData
+            .where((row) => row['key'] != 'cloud_sync_account')
+            .toList();
+      }
       backupData[tableName] = tableData;
     }
 
@@ -186,37 +224,86 @@ class BackupManager {
   }
 
   // Restore from database backup.
-  // Takes a safety copy first, then replaces the file and re-initializes the
-  // singleton so all subsequent DB calls get a live connection.
+  // The singleton is closed BEFORE any file copy: copying a live WAL-mode
+  // database can miss WAL pages, so both the safety copy and the replacement
+  // happen with no open handle. Stale -wal/-shm/-journal sidecars belong to
+  // the pre-restore file and are deleted so they can never replay onto the
+  // restored copy. The restored file must pass PRAGMA integrity_check before
+  // it is accepted — on failure the safety copy is restored instead, and the
+  // safety copy is deleted only on success (it is the operator's last resort
+  // after a failed restore, so a failure path must never remove it).
   Future<void> _restoreFromDatabaseBackup(String backupPath) async {
     final dbPath = DatabaseHelper.path!;
     final safetyPath = '$dbPath.pre_restore_backup';
+    var restored = false;
 
-    // Safety copy of current database
-    await File(dbPath).copy(safetyPath);
+    // Close singleton and null its reference first (see above).
+    await DatabaseHelper().close();
+
+    // Safety copy of current database (absent on a first-run device).
+    if (await File(dbPath).exists()) {
+      await File(dbPath).copy(safetyPath);
+    }
 
     try {
-      // Close singleton and null its reference
-      await DatabaseHelper().close();
-
       // Replace the database file on disk
       await File(backupPath).copy(dbPath);
 
+      await _deleteDbSidecars(dbPath);
+
       // Re-initialize through the singleton — runs migrations if needed
-      await DatabaseHelper().reinitialize();
+      final db = await DatabaseHelper().reinitialize();
+
+      final integrity = await db.rawQuery('PRAGMA integrity_check');
+      if (integrity.isEmpty || integrity.first.values.first != 'ok') {
+        throw StateError('Restored database failed integrity_check');
+      }
+      restored = true;
     } catch (e) {
       // Restore safety copy on failure
       try {
         await DatabaseHelper().close();
-        await File(safetyPath).copy(dbPath);
-        await DatabaseHelper().reinitialize();
+        if (await File(safetyPath).exists()) {
+          await File(safetyPath).copy(dbPath);
+          await _deleteDbSidecars(dbPath);
+          await DatabaseHelper().reinitialize();
+        }
       } catch (_) {}
       rethrow;
     } finally {
-      // Clean up safety copy
-      final safetyFile = File(safetyPath);
-      if (await safetyFile.exists()) await safetyFile.delete();
+      // Clean up safety copy only on success.
+      if (restored) {
+        final safetyFile = File(safetyPath);
+        if (await safetyFile.exists()) await safetyFile.delete();
+      }
     }
+  }
+
+  /// Deletes the WAL/SHM/journal sidecars beside [dbPath], if any.
+  Future<void> _deleteDbSidecars(String dbPath) async {
+    for (final suffix in ['-wal', '-shm', '-journal']) {
+      final sidecar = File('$dbPath$suffix');
+      if (await sidecar.exists()) await sidecar.delete();
+    }
+  }
+
+  /// Drops keys that are not columns of [table] so a foreign or newer
+  /// backup file cannot crash the restore (or smuggle data) with unknown
+  /// fields. Reads live schema once per table per restore.
+  final Map<String, Set<String>> _restoreColumnCache = {};
+
+  Future<Map<String, dynamic>> _stripUnknownColumns(
+      Transaction txn, String table, Map<String, dynamic> row) async {
+    var known = _restoreColumnCache[table];
+    if (known == null) {
+      final cols = await txn.rawQuery('PRAGMA table_info($table)');
+      known = {for (final c in cols) (c['name'] as String).toLowerCase()};
+      _restoreColumnCache[table] = known;
+    }
+    return {
+      for (final e in row.entries)
+        if (known.contains(e.key.toLowerCase())) e.key: e.value
+    };
   }
 
   // Restore from JSON backup
@@ -248,25 +335,31 @@ class BackupManager {
       // Restore in FK-safe order (parents before children)
       for (final tableName in _restoreTableOrder) {
         if (!backupData.containsKey(tableName)) continue;
+        if (!_restorableTables.contains(tableName)) continue;
         final tableData = backupData[tableName] as List<dynamic>;
         for (final row in tableData) {
           await txn.insert(
             tableName,
-            row as Map<String, dynamic>,
+            await _stripUnknownColumns(
+                txn, tableName, row as Map<String, dynamic>),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
       }
 
-      // Restore any tables not in the ordered list (excluding metadata keys)
+      // Restore any allowlisted tables not in the ordered list.
+      // Anything else in the file (users, _sync_*, audit_log,
+      // _migration_log, unknown keys) is ignored, never written.
       for (final entry in backupData.entries) {
         if (entry.key.startsWith('_')) continue;
         if (_restoreTableOrder.contains(entry.key)) continue;
+        if (!_restorableTables.contains(entry.key)) continue;
         final tableData = entry.value as List<dynamic>;
         for (final row in tableData) {
           await txn.insert(
             entry.key,
-            row as Map<String, dynamic>,
+            await _stripUnknownColumns(
+                txn, entry.key, row as Map<String, dynamic>),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }

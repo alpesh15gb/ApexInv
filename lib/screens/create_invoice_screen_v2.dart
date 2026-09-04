@@ -24,6 +24,7 @@ import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/widgets/barcode_scanner_sheet.dart';
 import 'package:apexbooks/widgets/document_editor_shell.dart';
+import 'package:apexbooks/licensing/license_gate.dart';
 
 class InvoiceFormGuard {
   Future<bool> Function()? canLeave;
@@ -1304,6 +1305,8 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   }
 
   Future<bool> _createInvoice() async {
+    // Trial/licence gate: new documents only. Reads are never blocked.
+    if (!await LicenseGate.canCreate(context)) return false;
     if (nameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

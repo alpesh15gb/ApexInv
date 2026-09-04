@@ -15,6 +15,8 @@ import 'package:apexbooks/providers/app_config_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/services/update_service.dart';
 import 'package:apexbooks/services/analytics/cloudflare_analytics_service.dart';
+import 'package:apexbooks/licensing/license_gate.dart';
+import 'package:apexbooks/licensing/license_service.dart';
 import 'package:apexbooks/widgets/update_dialog.dart';
 import 'package:apexbooks/domain/invoice_calculator.dart';
 import 'package:apexbooks/domain/customer_identity.dart';
@@ -121,6 +123,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     // Anonymous usage heartbeat: at most one ping per day, only with
     // explicit consent. Fire-and-forget; offline or opted-out = silence.
     _sendAnalyticsHeartbeat();
+    // License/trial status for the banner. Display-only; enforcement lives
+    // in LicenseGate at the document-creation choke points.
+    _loadLicenseStatus();
     // Offline-first recurring billing: generate due instances on start.
     RecurringInvoiceEngine.generateDue().catchError((_) => 0);
     if (ref.read(appEditionConfigProvider).enableUpdateCheck) {
@@ -153,6 +158,78 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     } catch (_) {
       // Telemetry must never disturb the app.
     }
+  }
+
+  LicenseStatus? _licenseStatus;
+  bool _licenseBannerDismissed = false;
+
+  Future<void> _loadLicenseStatus() async {
+    try {
+      final status = await LicenseGate.check();
+      if (!mounted) return;
+      setState(() => _licenseStatus = status);
+    } catch (_) {
+      // Licensing display must never disturb the app.
+    }
+  }
+
+  bool get _showLicenseBanner {
+    final status = _licenseStatus;
+    if (status == null) return false;
+    if (status.isReadOnly) return true;
+    if (status.isGrace) return true;
+    if (status.isTrialExpiring && !_licenseBannerDismissed) return true;
+    return false;
+  }
+
+  Widget _buildLicenseBanner() {
+    final status = _licenseStatus!;
+    final Color bg;
+    final String text;
+    if (status.isReadOnly) {
+      bg = Theme.of(context).colorScheme.error;
+      text = 'Trial expired — read-only. Your data is safe.';
+    } else if (status.isGrace) {
+      bg = Colors.orange.shade800;
+      text =
+          'Trial ended — ${status.daysLeft} grace days left. Activate to keep creating documents.';
+    } else {
+      bg = Colors.orange.shade800;
+      text = 'Free trial ends in ${status.daysLeft} days (5 May 2027).';
+    }
+    return Material(
+      color: bg,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.workspace_premium_outlined,
+                  color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ),
+              TextButton(
+                onPressed: () => LicenseGate.openLicenseScreen(context),
+                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                child: const Text('Activate'),
+              ),
+              if (!status.isReadOnly && !status.isGrace)
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                  onPressed: () =>
+                      setState(() => _licenseBannerDismissed = true),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadCreateInvoiceLayout() async {
@@ -517,6 +594,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           bottom: 16,
                           right: 16,
                           child: _buildCreateInvoiceLayoutToggle()),
+                    // License/trial banner overlays the top of every tab.
+                    if (_showLicenseBanner)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: _buildLicenseBanner(),
+                      ),
                   ],
                 );
                 if (constraints.maxWidth >= Breakpoints.expandedMin) {

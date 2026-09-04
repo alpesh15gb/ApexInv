@@ -85,6 +85,8 @@ enum SettingKey {
   cloudSyncChoice, // onboarding cloud decision: '' = not asked, 'enabled' = wants cloud sign-in, 'declined' = user opted out of cloud services
   analyticsConsent, // anonymous usage telemetry: '' = not asked, 'granted' = opted in, 'denied' = opted out. Unset/denied = never ping.
   analyticsLastSent, // UTC yyyy-MM-dd of the last successful heartbeat; enforces max one ping per day
+  licenseKey, // activated license key (AB1.<payload>.<sig>); '' = none, trial rules apply
+  licenseLastSeen, // UTC ISO timestamp of the last license check; clock-rollback guard
 }
 
 extension SettingKeyExtension on SettingKey {
@@ -262,6 +264,10 @@ extension SettingKeyExtension on SettingKey {
         return 'analytics_consent';
       case SettingKey.analyticsLastSent:
         return 'analytics_last_sent';
+      case SettingKey.licenseKey:
+        return 'license_key';
+      case SettingKey.licenseLastSeen:
+        return 'license_last_seen';
     }
   }
 }

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:apexbooks/database/purchase_order_service.dart';
 import 'package:apexbooks/database/product_service.dart';
 import 'package:apexbooks/database/settings_service.dart';
+import 'package:apexbooks/licensing/license_gate.dart';
 import 'package:apexbooks/models/purchase_order.dart';
 import 'package:apexbooks/models/product.dart';
 import 'package:apexbooks/widgets/document_editor_shell.dart';
@@ -565,6 +566,10 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
     );
 
     if (result == true) {
+      // Trial/licence gate: new orders only; edits to existing stay allowed.
+      if (existingOrder == null && !await LicenseGate.canCreate(context)) {
+        return;
+      }
       final totalAmount =
           items.fold(0.0, (sum, item) => sum + item.totalFor(pricesIncludeTax));
       final id =

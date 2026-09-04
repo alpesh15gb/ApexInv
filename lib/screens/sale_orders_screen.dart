@@ -5,6 +5,7 @@ import 'package:apexbooks/database/customer_service.dart';
 import 'package:apexbooks/database/product_service.dart';
 import 'package:apexbooks/database/sale_order_service.dart';
 import 'package:apexbooks/database/settings_service.dart';
+import 'package:apexbooks/licensing/license_gate.dart';
 import 'package:apexbooks/database/invoice_service.dart';
 import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/product.dart';
@@ -403,6 +404,13 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
                   ),
                 )));
     if (ok != true) {
+      for (final d in drafts) {
+        d.dispose();
+      }
+      return;
+    }
+    // Trial/licence gate: new orders only; edits to existing stay allowed.
+    if (existing == null && !await LicenseGate.canCreate(context)) {
       for (final d in drafts) {
         d.dispose();
       }

@@ -8,6 +8,7 @@ import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/common/setting_key.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
+import 'package:apexbooks/screens/settings/license_screen.dart';
 import 'package:apexbooks/services/update_service.dart';
 
 class AppInfoScreen extends ConsumerStatefulWidget {
@@ -275,7 +276,26 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
                 const SizedBox(height: 20),
 
                 // ── Privacy card ─────────────────────────────────────────
-                _infoCard('Privacy', [
+                _infoCard('Privacy & license', [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.workspace_premium_outlined),
+                    title: const Text(
+                      'License & free trial',
+                      style: TextStyle(
+                          fontSize: AppFontSize.medium,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: const Text(
+                      'View status, activate a purchased key',
+                      style: TextStyle(fontSize: AppFontSize.small),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LicenseScreen()),
+                    ),
+                  ),
                   SwitchListTile(
                     value: _analyticsGranted ?? false,
                     contentPadding: EdgeInsets.zero,

@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/database/purchase_bill_service.dart';
 import 'package:apexbooks/database/settings_service.dart';
+import 'package:apexbooks/licensing/license_gate.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/purchase_bill.dart';
 import 'package:apexbooks/models/user.dart';
@@ -532,6 +533,8 @@ class _PurchaseBillFormScreenState
   double get _grandTotal => _computedItems.fold(0, (s, i) => s + i.amount);
 
   Future<void> _save() async {
+    // Trial/licence gate: new bills only; edits to existing stay allowed.
+    if (!_isEdit && !await LicenseGate.canCreate(context)) return;
     if (_supplierCtrl.text.trim().isEmpty ||
         _isSaving ||
         _computedItems.isEmpty) {

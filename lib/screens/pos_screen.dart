@@ -9,6 +9,7 @@ import 'package:apexbooks/database/pos_service.dart';
 import 'package:apexbooks/database/product_service.dart';
 import 'package:apexbooks/database/sale_order_service.dart';
 import 'package:apexbooks/database/settings_service.dart';
+import 'package:apexbooks/licensing/license_gate.dart';
 import 'package:apexbooks/models/accounting.dart';
 import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/invoice.dart';
@@ -361,6 +362,8 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _checkout() async {
     if (_cart.isEmpty || _saving) return;
+    // Trial/licence gate: new sales only.
+    if (!await LicenseGate.canCreate(context)) return;
     if (_accounts.isEmpty) {
       _error('Create a cash or bank account first.');
       return;

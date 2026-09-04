@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:apexbooks/database/expense_service.dart';
+import 'package:apexbooks/licensing/license_gate.dart';
 import 'package:apexbooks/database/accounting_service.dart';
 import 'package:apexbooks/models/accounting.dart';
 import 'package:apexbooks/models/expense.dart';
@@ -466,7 +467,8 @@ class _ExpenseManagementScreenState
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: paymentMethod,
-                  decoration: const InputDecoration(labelText: 'Payment method'),
+                  decoration:
+                      const InputDecoration(labelText: 'Payment method'),
                   items: const ['Cash', 'Bank Transfer', 'Online', 'Other']
                       .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                       .toList(),
@@ -579,6 +581,8 @@ class _ExpenseManagementScreenState
       }
 
       if (expense == null) {
+        // Trial/licence gate: new expenses only; edits stay allowed.
+        if (!await LicenseGate.canCreate(context)) return;
         final id = 'exp-${DateTime.now().millisecondsSinceEpoch}';
         await ExpenseService.insertExpense(Expense(
           id: id,

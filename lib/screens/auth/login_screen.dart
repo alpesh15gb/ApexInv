@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:apexbooks/providers/app_config_provider.dart';
 import 'package:apexbooks/utils/post_auth_navigation.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 // Login Screen
 class LoginScreen extends ConsumerStatefulWidget {
@@ -195,7 +196,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final cardPadding = isPhone ? 20.0 : 32.0;
     final logoWidth = (cardWidth * 0.65).clamp(140.0, 230.0);
     return Scaffold(
-      backgroundColor: isDark ? null : Colors.blue[50],
+      backgroundColor:
+          isDark ? null : Theme.of(context).colorScheme.surfaceContainerHighest,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -317,75 +319,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           AppSpacing.hLarge,
                         ],
-                        TextField(
+                        AppTextField(
                           controller: _usernameController,
-                          decoration: InputDecoration(
-                            labelText: cfg.isCloud ? 'Email' : 'Username',
-                            prefixIcon: const Icon(Icons.person),
-                            border: const OutlineInputBorder(),
-                          ),
+                          labelText: cfg.isCloud ? 'Email' : 'Username',
+                          prefixIcon: const Icon(Icons.person),
                           keyboardType: cfg.isCloud
                               ? TextInputType.emailAddress
                               : TextInputType.text,
                         ),
                         AppSpacing.hMedium,
-                        TextField(
+                        AppTextField(
                           controller: _passwordController,
+                          labelText: 'Password',
+                          prefixIcon: const Icon(Icons.lock),
                           obscureText: _obscurePassword,
-                          onSubmitted: (_) => _login(cfg),
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            prefixIcon: const Icon(Icons.lock),
-                            border: const OutlineInputBorder(),
-                            suffixIcon: IconButton(
-                              icon: Icon(_obscurePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined),
-                              onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword),
-                            ),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
                           ),
+                          onSubmitted: (_) => _login(cfg),
                         ),
                         if (!cfg.isCloud && _needsSetup) ...[
-                          TextField(
+                          AppTextField(
                             controller: _confirmPasswordController,
+                            labelText: 'Confirm password',
+                            prefixIcon: const Icon(Icons.lock_outline),
                             obscureText: _obscurePassword,
                             onSubmitted: (_) => _createOwner(cfg),
-                            decoration: const InputDecoration(
-                              labelText: 'Confirm password',
-                              prefixIcon: Icon(Icons.lock_outline),
-                              border: OutlineInputBorder(),
-                            ),
                           ),
                           AppSpacing.hMedium,
                         ],
                         AppSpacing.hXlarge,
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isLoading
-                                ? null
-                                : () => _needsSetup && !cfg.isCloud
-                                    ? _createOwner(cfg)
-                                    : _login(cfg),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 50),
-                              backgroundColor: Theme.of(context).primaryColor,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text(_needsSetup && !cfg.isCloud
-                                    ? 'Create administrator'
-                                    : 'Login'),
-                          ),
+                        AppPrimaryButton(
+                          onPressed: _isLoading
+                              ? null
+                              : () => _needsSetup && !cfg.isCloud
+                                  ? _createOwner(cfg)
+                                  : _login(cfg),
+                          label: Text(_needsSetup && !cfg.isCloud
+                              ? 'Create administrator'
+                              : 'Login'),
+                          expanded: true,
+                          loading: _isLoading,
                         ),
                         AppSpacing.hSmall,
                         if (!cfg.isCloud)

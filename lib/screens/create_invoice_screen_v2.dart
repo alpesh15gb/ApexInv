@@ -24,6 +24,8 @@ import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/widgets/barcode_scanner_sheet.dart';
 import 'package:apexbooks/widgets/document_editor_shell.dart';
+import 'package:apexbooks/utils/formatters.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 import 'package:apexbooks/licensing/license_gate.dart';
 
 class InvoiceFormGuard {
@@ -2929,7 +2931,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         const SizedBox(width: 8),
         Flexible(
           child: Text(
-            '$_currencySymbol${amount.toStringAsFixed(2)}',
+            AppFormatters.formatAmount(amount, _currencySymbol),
             textAlign: TextAlign.end,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -4059,20 +4061,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         suffixText: suffixText);
   }
 
-  Widget _sectionLabelV2(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
+  Widget _sectionLabelV2(String text) => AppSectionHeader(text);
 
   Widget _customerDetailsFormV2() {
     return _flatCardV2(
@@ -5030,9 +5019,11 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            '$_currencySymbol${item.total.toStringAsFixed(2)}',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          AppMoney(
+            item.total,
+            currencySymbol: _currencySymbol,
+            bold: true,
+            style: const TextStyle(fontSize: 15),
           ),
           if (item.product.id.startsWith('custom-') &&
               !_savedAdHocIds.contains(item.product.id)) ...[

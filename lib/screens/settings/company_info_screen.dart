@@ -17,6 +17,7 @@ import 'package:apexbooks/widgets/adaptive/adaptive_field_grid.dart';
 import 'package:apexbooks/widgets/adaptive/sticky_action_bar.dart';
 import 'package:apexbooks/common/invoiso_colors.dart';
 import 'package:apexbooks/models/company_info.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 import 'package:apexbooks/common/app_countries.dart';
 
@@ -528,33 +529,15 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
                               // Save button pinned at bottom
                               Padding(
                                 padding: const EdgeInsets.all(16),
-                                child: SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    onPressed:
-                                        _isSaving ? null : _saveCompanyInfo,
-                                    icon: _isSaving
-                                        ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.white))
-                                        : const Icon(Icons.save_rounded),
-                                    label: Text(_isSaving
-                                        ? l10n.createInvoiceSavingEllipsisLabel
-                                        : l10n.actionSave),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: primaryColor,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(
-                                            AppBorderRadius.small),
-                                      ),
-                                    ),
-                                  ),
+                                child: AppPrimaryButton(
+                                  onPressed:
+                                      _isSaving ? null : _saveCompanyInfo,
+                                  icon: const Icon(Icons.save_rounded),
+                                  label: Text(_isSaving
+                                      ? l10n.createInvoiceSavingEllipsisLabel
+                                      : l10n.actionSave),
+                                  expanded: true,
+                                  loading: _isSaving,
                                 ),
                               ),
                             ],
@@ -1172,30 +1155,14 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
               ),
               if (stacked)
                 StickyActionBar(
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _saveCompanyInfo,
-                      icon: _isSaving
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.save_rounded),
-                      label: Text(_isSaving
-                          ? l10n.createInvoiceSavingEllipsisLabel
-                          : l10n.actionSave),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppBorderRadius.small),
-                        ),
-                      ),
-                    ),
+                  child: AppPrimaryButton(
+                    onPressed: _isSaving ? null : _saveCompanyInfo,
+                    icon: const Icon(Icons.save_rounded),
+                    label: Text(_isSaving
+                        ? l10n.createInvoiceSavingEllipsisLabel
+                        : l10n.actionSave),
+                    expanded: true,
+                    loading: _isSaving,
                   ),
                 ),
             ],
@@ -1288,15 +1255,7 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
   }
 
   Widget _sectionLabel(String title) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: AppFontSize.xsmall,
-        fontWeight: FontWeight.w600,
-        color: CompanyInfoScreenColors.sectionHeadingColor,
-        letterSpacing: 1.0,
-      ),
-    );
+    return AppSectionHeader(title);
   }
 
   Widget _buildCountryField() {

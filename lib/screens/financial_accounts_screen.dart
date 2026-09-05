@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:apexbooks/database/accounting_service.dart';
 import 'package:apexbooks/models/accounting.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class FinancialAccountsScreen extends StatefulWidget {
   final String accountType; // cash | bank
@@ -329,7 +330,7 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoadingState()
           : LayoutBuilder(builder: (context, constraints) {
               final list = _accountList();
               final register = _register(selected);
@@ -350,30 +351,37 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
   }
 
   Widget _accountList() => _accounts.isEmpty
-      ? Center(child: Text('No ${widget.accountType} accounts yet.'))
+      ? AppEmptyState(
+          icon: widget.accountType == 'bank'
+              ? Icons.account_balance
+              : Icons.account_balance_wallet,
+          title: 'No ${widget.accountType} accounts yet.')
       : ListView.builder(
+          padding: const EdgeInsets.all(16),
           itemCount: _accounts.length,
           itemBuilder: (context, index) {
             final account = _accounts[index];
             final selected = account.id == _selectedId;
             return ListTile(
               selected: selected,
-              leading: Icon(widget.accountType == 'bank'
+              leading: AppRowIcon(widget.accountType == 'bank'
                   ? Icons.account_balance
                   : Icons.account_balance_wallet),
               title: Text(account.name),
               subtitle: Text(account.active
                   ? account.institution
                   : 'Inactive • ${account.institution}'),
-              trailing: Text(
-                  '${account.currencySymbol} ${(_balances[account.id] ?? 0).toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              trailing: AppMoney((_balances[account.id] ?? 0),
+                  currencySymbol: account.currencySymbol, bold: true),
               onTap: () => _select(account.id),
             );
           });
 
   Widget _register(FinancialAccount? account) {
-    if (account == null) return const Center(child: Text('Select an account'));
+    if (account == null) {
+      return const AppEmptyState(
+          icon: Icons.account_balance, title: 'Select an account');
+    }
     final balance = _balances[account.id] ?? 0;
     final movementTotal =
         _transactions.fold<double>(0, (sum, tx) => sum + tx.amount);
@@ -444,7 +452,9 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
       const Divider(height: 1),
       Expanded(
         child: _transactions.isEmpty
-            ? const Center(child: Text('No account movements yet.'))
+            ? const AppEmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: 'No account movements yet.')
             : ListView.separated(
                 itemCount: _transactions.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
@@ -453,15 +463,9 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
                   return ListTile(
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-                    leading: CircleAvatar(
-                      backgroundColor: tx.amount >= 0
-                          ? Colors.green.withValues(alpha: .12)
-                          : Colors.red.withValues(alpha: .12),
-                      child: Icon(
-                          tx.amount >= 0 ? Icons.south_west : Icons.north_east,
-                          color: tx.amount >= 0 ? Colors.green : Colors.red,
-                          size: 18),
-                    ),
+                    leading: AppRowIcon(
+                        tx.amount >= 0 ? Icons.south_west : Icons.north_east,
+                        color: tx.amount >= 0 ? Colors.green : Colors.red),
                     title: Text(tx.reference.isEmpty ? tx.kind : tx.reference),
                     subtitle: Text(
                         '${tx.date.toLocal().toString().split(' ').first}${tx.notes.isEmpty ? '' : ' • ${tx.notes}'}'),

@@ -6,6 +6,7 @@ import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
+import 'package:apexbooks/screens/import_screen.dart';
 
 /// Mobile "More" destination — grouped secondary navigation shown when the
 /// window is too narrow for the persistent sidebar (see mobile_plan.md).
@@ -41,7 +42,8 @@ class MoreMenuScreen extends ConsumerWidget {
             _tile(context, 16, Icons.request_page_outlined, 'Proforma Invoice'),
             _tile(context, 4, Icons.payments_outlined, 'Payment In'),
             _tile(context, 19, Icons.shopping_bag_outlined, 'Sale Order'),
-            _tile(context, 15, Icons.local_shipping_outlined, 'Delivery Challan'),
+            _tile(
+                context, 15, Icons.local_shipping_outlined, 'Delivery Challan'),
             _tile(context, 13, Icons.note_alt_outlined, 'Credit Note'),
             _tile(context, 20, Icons.point_of_sale_outlined, 'POS'),
           ]),
@@ -73,6 +75,15 @@ class MoreMenuScreen extends ConsumerWidget {
                 'Payment Reminders'),
             if (user.isAdmin())
               _tile(context, 18, Icons.fact_check_outlined, 'Audit Log'),
+            _pushTile(
+              context,
+              Icons.upload_file_outlined,
+              'Import from Vyapar',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ImportScreen()),
+              ),
+            ),
           ]),
           const SizedBox(height: 16),
           _logoutTile(context),
@@ -254,6 +265,43 @@ class MoreMenuScreen extends ConsumerWidget {
                 decoration: const BoxDecoration(
                     color: Colors.orange, shape: BoxShape.circle),
               ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pushTile(
+      BuildContext context, IconData icon, String label, VoidCallback onTap) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: theme.primaryColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 20, color: theme.primaryColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                    fontSize: 14.5, fontWeight: FontWeight.w500),
+              ),
+            ),
             Icon(
               Icons.chevron_right_rounded,
               size: 20,

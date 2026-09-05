@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:apexbooks/database/accounting_service.dart';
 import 'package:apexbooks/models/accounting.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class LoanAccountsScreen extends StatefulWidget {
   const LoanAccountsScreen({super.key});
@@ -290,7 +291,8 @@ class _LoanAccountsScreenState extends State<LoanAccountsScreen> {
                   width: 620,
                   height: 420,
                   child: rows.isEmpty
-                      ? const Center(child: Text('No movements'))
+                      ? const AppEmptyState(
+                          icon: Icons.history, title: 'No movements')
                       : ListView.separated(
                           itemCount: rows.length,
                           separatorBuilder: (_, __) => const Divider(height: 1),
@@ -335,9 +337,11 @@ class _LoanAccountsScreenState extends State<LoanAccountsScreen> {
           const SizedBox(width: 8),
         ]),
         body: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const AppLoadingState()
             : _loans.isEmpty
-                ? const Center(child: Text('No loan accounts yet.'))
+                ? const AppEmptyState(
+                    icon: Icons.request_quote_outlined,
+                    title: 'No loan accounts yet.')
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: _loans.length + 1,
@@ -351,72 +355,65 @@ class _LoanAccountsScreenState extends State<LoanAccountsScreen> {
                           : (1 - outstanding / loan.originalPrincipal)
                               .clamp(0, 1)
                               .toDouble();
-                      return Card(
-                          child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(children: [
-                                      const Icon(Icons.request_quote_outlined),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                          child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                            Text(loan.name,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleMedium),
-                                            Text(
-                                                '${loan.lender} • ${loan.annualInterestRate.toStringAsFixed(2)}% p.a.')
-                                          ])),
-                                      Chip(label: Text(loan.status)),
-                                    ]),
-                                    const SizedBox(height: 12),
-                                    LinearProgressIndicator(value: progress),
-                                    const SizedBox(height: 8),
+                      return AppCard(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Row(children: [
+                              const AppRowIcon(Icons.request_quote_outlined),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                    Text(loan.name,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium),
                                     Text(
-                                        'Outstanding ${loan.currencySymbol} ${outstanding.toStringAsFixed(2)} '
-                                        'of ${loan.originalPrincipal.toStringAsFixed(2)}'),
-                                    const SizedBox(height: 12),
-                                    _loanLifecycle(loan, outstanding),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          TextButton.icon(
-                                              onPressed: () => _history(loan),
-                                              icon: const Icon(Icons.history),
-                                              label: const Text('History')),
-                                          const SizedBox(width: 8),
-                                          FilledButton.icon(
-                                              onPressed: loan.status == 'closed'
-                                                  ? null
-                                                  : () => _repay(loan),
-                                              icon: const Icon(
-                                                  Icons.payments_outlined),
-                                              label: const Text('Repay')),
-                                        ]),
-                                  ])));
+                                        '${loan.lender} • ${loan.annualInterestRate.toStringAsFixed(2)}% p.a.')
+                                  ])),
+                              Chip(label: Text(loan.status)),
+                            ]),
+                            const SizedBox(height: 12),
+                            LinearProgressIndicator(value: progress),
+                            const SizedBox(height: 8),
+                            Text(
+                                'Outstanding ${loan.currencySymbol} ${outstanding.toStringAsFixed(2)} '
+                                'of ${loan.originalPrincipal.toStringAsFixed(2)}'),
+                            const SizedBox(height: 12),
+                            _loanLifecycle(loan, outstanding),
+                            const SizedBox(height: 8),
+                            Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton.icon(
+                                      onPressed: () => _history(loan),
+                                      icon: const Icon(Icons.history),
+                                      label: const Text('History')),
+                                  const SizedBox(width: 8),
+                                  FilledButton.icon(
+                                      onPressed: loan.status == 'closed'
+                                          ? null
+                                          : () => _repay(loan),
+                                      icon: const Icon(Icons.payments_outlined),
+                                      label: const Text('Repay')),
+                                ]),
+                          ]));
                     }),
       );
 
   Widget _loanSummary() {
     final total =
         _outstanding.values.fold<double>(0, (sum, value) => sum + value);
-    return Card(
-        child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Wrap(spacing: 32, runSpacing: 12, children: [
-              _metric('Active loans',
-                  '${_loans.where((l) => l.status != 'closed').length}'),
-              _metric('Total outstanding', total.toStringAsFixed(2)),
-              _metric('Closed',
-                  '${_loans.where((l) => l.status == 'closed').length}'),
-            ])));
+    return AppCard(
+        child: Wrap(spacing: 32, runSpacing: 12, children: [
+      _metric('Active loans',
+          '${_loans.where((l) => l.status != 'closed').length}'),
+      _metric('Total outstanding', total.toStringAsFixed(2)),
+      _metric('Closed', '${_loans.where((l) => l.status == 'closed').length}'),
+    ]));
   }
 
   Widget _metric(String label, String value) => SizedBox(

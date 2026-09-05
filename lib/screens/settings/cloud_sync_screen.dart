@@ -7,6 +7,7 @@ import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/sync/sync_controller.dart';
 import 'package:apexbooks/sync/sync_engine.dart';
 import 'package:apexbooks/sync/sync_account.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 /// Cloud sync settings (dbplan Phase 2): link/unlink an account on the
 /// self-hosted sync server, show status, and trigger manual cycles.
@@ -106,22 +107,12 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
   }
 
   Future<void> _unlink() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Unlink cloud sync?'),
-        content: const Text(
-            'This device stops syncing. Data already on the server stays '
-            'there and other devices keep syncing.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Unlink')),
-        ],
-      ),
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Unlink cloud sync?',
+      message: 'This device stops syncing. Data already on the server stays '
+          'there and other devices keep syncing.',
+      confirmLabel: 'Unlink',
     );
     if (confirmed == true) {
       await SyncController.instance.unlink();
@@ -271,45 +262,22 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
     }
   }
 
-  Future<bool?> _showLocalWipeWarning() => showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Erase local app data?'),
-          content: const Text(
+  Future<bool> _showLocalWipeWarning() => AppConfirmDialog.show(
+        context,
+        title: 'Erase local app data?',
+        message:
             'This deletes this device\'s database and app-managed backups. '
             'Files previously exported or shared outside the app cannot be deleted.',
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Continue')),
-          ],
-        ),
+        confirmLabel: 'Continue',
       );
 
-  Future<bool?> _showLocalWipeFinalConfirmation() => showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Final confirmation'),
-          content: const Text(
-            'Erase all local app data now? This cannot be undone. Files '
+  Future<bool> _showLocalWipeFinalConfirmation() => AppConfirmDialog.show(
+        context,
+        title: 'Final confirmation',
+        message: 'Erase all local app data now? This cannot be undone. Files '
             'previously exported or shared outside the app cannot be deleted.',
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(ctx).colorScheme.error),
-              child: const Text('Erase local data'),
-            ),
-          ],
-        ),
+        confirmLabel: 'Erase local data',
+        danger: true,
       );
 
   @override
@@ -321,7 +289,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
 
     return Scaffold(
       body: _busy
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoadingState()
           : ListView(
               padding: const EdgeInsets.all(24),
               children: [
@@ -396,79 +364,77 @@ class _StatusCard extends StatelessWidget {
     final healthy =
         !errored && status.pendingOps == 0 && status.lastSyncAt != null;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                errored
+                    ? Icons.sync_problem
+                    : syncing
+                        ? Icons.sync
+                        : Icons.cloud_done,
+                color: errored
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
                   errored
-                      ? Icons.sync_problem
+                      ? 'Sync error'
                       : syncing
-                          ? Icons.sync
-                          : Icons.cloud_done,
-                  color: errored
-                      ? theme.colorScheme.error
-                      : theme.colorScheme.primary,
+                          ? 'Syncing…'
+                          : 'Sync is on',
+                  style: theme.textTheme.titleMedium,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    errored
-                        ? 'Sync error'
-                        : syncing
-                            ? 'Syncing…'
-                            : 'Sync is on',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
-                TextButton(onPressed: onSyncNow, child: const Text('Sync now')),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: (healthy ? Colors.green : theme.colorScheme.primary)
-                    .withValues(alpha: .1),
-                borderRadius: BorderRadius.circular(10),
               ),
-              child: Row(children: [
-                Icon(healthy ? Icons.verified_outlined : Icons.info_outline,
-                    size: 18,
-                    color: healthy ? Colors.green : theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: Text(healthy
-                        ? 'System health: all changes are synced.'
-                        : 'System health: review pending changes or sync status.')),
-              ]),
-            ),
-            const SizedBox(height: 8),
-            _row('Account', account?.email ?? '—'),
-            _row('Company', account?.companyName ?? '—'),
-            _row('Pending changes', '${status.pendingOps}'),
-            _row('Last sync', lastSync),
-            if (status.error != null) ...[
-              const SizedBox(height: 8),
-              Text(status.error!,
-                  style: TextStyle(color: theme.colorScheme.error)),
+              TextButton(onPressed: onSyncNow, child: const Text('Sync now')),
             ],
-            const Divider(height: 32),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: onUnlink,
-                style: TextButton.styleFrom(
-                    foregroundColor: theme.colorScheme.error),
-                child: const Text('Unlink this device'),
-              ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: (healthy ? Colors.green : theme.colorScheme.primary)
+                  .withValues(alpha: .1),
+              borderRadius: BorderRadius.circular(10),
             ),
+            child: Row(children: [
+              Icon(healthy ? Icons.verified_outlined : Icons.info_outline,
+                  size: 18,
+                  color: healthy ? Colors.green : theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text(healthy
+                      ? 'System health: all changes are synced.'
+                      : 'System health: review pending changes or sync status.')),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          _row('Account', account?.email ?? '—'),
+          _row('Company', account?.companyName ?? '—'),
+          _row('Pending changes', '${status.pendingOps}'),
+          _row('Last sync', lastSync),
+          if (status.error != null) ...[
+            const SizedBox(height: 8),
+            Text(status.error!,
+                style: TextStyle(color: theme.colorScheme.error)),
           ],
-        ),
+          const Divider(height: 32),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onUnlink,
+              style: TextButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error),
+              child: const Text('Unlink this device'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -493,38 +459,32 @@ class _DataRemovalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Data removal', style: theme.textTheme.titleMedium),
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Data removal', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          const Text(
+            'App-managed backups are removed too. Previously exported or '
+            'shared files remain outside the app and cannot be deleted here.',
+          ),
+          const SizedBox(height: 12),
+          if (onPurgeCompany != null) ...[
+            AppDangerButton(
+              onPressed: onPurgeCompany,
+              icon: const Icon(Icons.cloud_off_outlined),
+              label: const Text('Delete cloud company and local data'),
+            ),
             const SizedBox(height: 8),
-            const Text(
-              'App-managed backups are removed too. Previously exported or '
-              'shared files remain outside the app and cannot be deleted here.',
-            ),
-            const SizedBox(height: 12),
-            if (onPurgeCompany != null) ...[
-              OutlinedButton.icon(
-                onPressed: onPurgeCompany,
-                icon: const Icon(Icons.cloud_off_outlined),
-                style: OutlinedButton.styleFrom(
-                    foregroundColor: theme.colorScheme.error),
-                label: const Text('Delete cloud company and local data'),
-              ),
-              const SizedBox(height: 8),
-            ],
-            OutlinedButton.icon(
-              onPressed: onWipeLocal,
-              icon: const Icon(Icons.delete_forever_outlined),
-              style: OutlinedButton.styleFrom(
-                  foregroundColor: theme.colorScheme.error),
-              label: const Text('Erase local app data'),
-            ),
           ],
-        ),
+          AppDangerButton(
+            onPressed: onWipeLocal,
+            icon: const Icon(Icons.delete_forever_outlined),
+            label: const Text('Erase local app data'),
+          ),
+        ],
       ),
     );
   }
@@ -562,61 +522,57 @@ class _AuthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: email,
-              keyboardType: TextInputType.emailAddress,
-              autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                prefixIcon: Icon(Icons.alternate_email),
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: email,
+            keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
+            decoration: const InputDecoration(
+              labelText: 'Email',
+              prefixIcon: Icon(Icons.alternate_email),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: password,
+            obscureText: obscure,
+            autofillHints: const [AutofillHints.password],
+            decoration: InputDecoration(
+              labelText: 'Password (8+ characters)',
+              prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: IconButton(
+                icon: Icon(obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined),
+                onPressed: onToggleObscure,
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: password,
-              obscureText: obscure,
-              autofillHints: const [AutofillHints.password],
-              decoration: InputDecoration(
-                labelText: 'Password (8+ characters)',
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  icon: Icon(obscure
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined),
-                  onPressed: onToggleObscure,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: company,
-              decoration: const InputDecoration(
-                labelText: 'Company name (new account)',
-                prefixIcon: Icon(Icons.business_outlined),
-                helperText:
-                    'Only used when registering; ignored when logging in',
-              ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: onRegister,
-              icon: const Icon(Icons.person_add_alt),
-              label: const Text('Create account & sync'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: onLogin,
-              icon: const Icon(Icons.login),
-              label: const Text('Sign in to existing account'),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          AppTextField(
+            controller: company,
+            labelText: 'Company name (new account)',
+            prefixIcon: const Icon(Icons.business_outlined),
+            helperText: 'Only used when registering; ignored when logging in',
+          ),
+          const SizedBox(height: 20),
+          AppPrimaryButton(
+            onPressed: onRegister,
+            icon: const Icon(Icons.person_add_alt),
+            label: const Text('Create account & sync'),
+            expanded: true,
+          ),
+          const SizedBox(height: 8),
+          AppSecondaryButton(
+            onPressed: onLogin,
+            icon: const Icon(Icons.login),
+            label: const Text('Sign in to existing account'),
+          ),
+        ],
       ),
     );
   }
@@ -632,34 +588,31 @@ class _CompanyStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Name your cloud company',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            const Text(
-                'Your account has no company yet. Pick a name — books from '
-                'this device become its first data.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: company,
-              decoration: const InputDecoration(
-                labelText: 'Company name',
-                prefixIcon: Icon(Icons.business_outlined),
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onCreate,
-              icon: const Icon(Icons.cloud_upload_outlined),
-              label: const Text('Create & start syncing'),
-            ),
-          ],
-        ),
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Name your cloud company',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          const Text(
+              'Your account has no company yet. Pick a name — books from '
+              'this device become its first data.'),
+          const SizedBox(height: 16),
+          AppTextField(
+            controller: company,
+            labelText: 'Company name',
+            prefixIcon: const Icon(Icons.business_outlined),
+          ),
+          const SizedBox(height: 16),
+          AppPrimaryButton(
+            onPressed: onCreate,
+            icon: const Icon(Icons.cloud_upload_outlined),
+            label: const Text('Create & start syncing'),
+            expanded: true,
+          ),
+        ],
       ),
     );
   }

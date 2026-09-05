@@ -5,6 +5,7 @@ import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/utils/password_utils.dart';
 import 'package:apexbooks/utils/post_auth_navigation.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class ChangePasswordScreen extends ConsumerStatefulWidget {
   final User user;
@@ -136,7 +137,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
       child: Scaffold(
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? null
-            : Colors.blue[50],
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -215,7 +216,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                         ),
                         AppSpacing.hXlarge,
                         if (!widget.forced) ...[
-                          TextField(
+                          AppTextField(
                             controller: _currentPasswordController,
                             focusNode: _currentPasswordFocus,
                             autofocus: true,
@@ -223,21 +224,19 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                             textInputAction: TextInputAction.next,
                             onSubmitted: (_) =>
                                 _newPasswordFocus.requestFocus(),
-                            decoration: InputDecoration(
-                                labelText: 'Current Password',
-                                prefixIcon: Icon(Icons.lock_outline),
-                                border: OutlineInputBorder(),
-                                suffixIcon: IconButton(
-                                  icon: Icon(_obscurePassword
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined),
-                                  onPressed: () => setState(() =>
-                                      _obscurePassword = !_obscurePassword),
-                                )),
+                            labelText: 'Current Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(_obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined),
+                              onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword),
+                            ),
                           ),
                           AppSpacing.hMedium,
                         ],
-                        TextField(
+                        AppTextField(
                           controller: _newPasswordController,
                           focusNode: _newPasswordFocus,
                           autofocus: widget.forced,
@@ -245,37 +244,33 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                           textInputAction: TextInputAction.next,
                           onSubmitted: (_) =>
                               _confirmPasswordFocus.requestFocus(),
-                          decoration: InputDecoration(
-                              labelText: 'New Password (min 8 characters)',
-                              prefixIcon: const Icon(Icons.lock),
-                              border: const OutlineInputBorder(),
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscurePassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined),
-                                onPressed: () => setState(
-                                    () => _obscurePassword = !_obscurePassword),
-                              )),
+                          labelText: 'New Password (min 8 characters)',
+                          prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
+                          ),
                         ),
                         AppSpacing.hMedium,
-                        TextField(
+                        AppTextField(
                           controller: _confirmPasswordController,
                           focusNode: _confirmPasswordFocus,
                           obscureText: _obscurePassword,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) =>
                               _isLoading ? null : _changePassword(),
-                          decoration: InputDecoration(
-                              labelText: 'Confirm New Password',
-                              prefixIcon: const Icon(Icons.lock),
-                              border: const OutlineInputBorder(),
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscurePassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined),
-                                onPressed: () => setState(
-                                    () => _obscurePassword = !_obscurePassword),
-                              )),
+                          labelText: 'Confirm New Password',
+                          prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
+                          ),
                         ),
                         if (_errorMessage != null) ...[
                           AppSpacing.hMedium,
@@ -303,26 +298,11 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                           ),
                         ],
                         AppSpacing.hXlarge,
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _changePassword,
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 50),
-                              backgroundColor: Theme.of(context).primaryColor,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text('Change Password'),
-                          ),
+                        AppPrimaryButton(
+                          onPressed: _isLoading ? null : _changePassword,
+                          label: const Text('Change Password'),
+                          expanded: true,
+                          loading: _isLoading,
                         ),
                       ],
                     ),

@@ -10,6 +10,7 @@ import 'package:apexbooks/database/invoice_service.dart';
 import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/product.dart';
 import 'package:apexbooks/models/sale_order.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 import 'package:apexbooks/widgets/document_editor_shell.dart';
 
 class SaleOrdersScreen extends StatefulWidget {
@@ -667,10 +668,11 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
           const Divider(height: 1),
           Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const AppLoadingState()
                   : _orders.isEmpty
-                      ? const Center(
-                          child: Text('No sale orders in this view.'))
+                      ? const AppEmptyState(
+                          icon: Icons.shopping_bag_outlined,
+                          title: 'No sale orders in this view.')
                       : ListView.separated(
                           padding: const EdgeInsets.all(16),
                           itemCount: _orders.length,
@@ -689,17 +691,17 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
       'cancelled' => Colors.red,
       _ => Colors.orange,
     };
-    return Card(
-        child: ListTile(
-      leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: .12),
-          child: Icon(Icons.shopping_bag_outlined, color: color)),
-      title: Text('${order.orderNumber} • ${order.customerName}'),
-      subtitle: Text('${order.date.toLocal().toString().split(' ').first} • '
-          '${order.items.length} item(s) • ${order.status}'),
+    return AppListRow(
+      leading: AppRowIcon(Icons.shopping_bag_outlined, color: color),
+      title: '${order.orderNumber} • ${order.customerName}',
+      subtitle: '${order.date.toLocal().toString().split(' ').first} • '
+          '${order.items.length} item(s) • ${order.status}',
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text('${order.currencySymbol} ${order.displayTotal.toStringAsFixed(2)}',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        AppMoney(
+          order.displayTotal,
+          currencySymbol: order.currencySymbol,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         PopupMenuButton<String>(
             onSelected: (v) => _act(order, v),
             itemBuilder: (_) => [
@@ -719,7 +721,7 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
                     const PopupMenuItem(value: 'delete', child: Text('Delete')),
                 ]),
       ]),
-    ));
+    );
   }
 }
 

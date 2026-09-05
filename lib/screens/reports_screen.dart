@@ -18,6 +18,7 @@ import 'package:apexbooks/services/gstr_export_service.dart';
 import 'package:apexbooks/providers/repositories.dart';
 
 import '../common/supported_currencies.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 // ─── Date preset enum ─────────────────────────────────────────────────────────
 
@@ -811,7 +812,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       11 => 'Cheques',
       12 => 'Trial Balance',
       13 => 'Balance Sheet',
-      _ => 'Cheques',
+      _ => l10n.navReports,
     };
   }
 
@@ -1869,22 +1870,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   }
 
   Widget _emptyState(String msg) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.bar_chart_outlined,
-                size: 48, color: Theme.of(context).colorScheme.outlineVariant),
-            const SizedBox(height: 12),
-            Text(msg,
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 14)),
-          ],
-        ),
-      ),
+    return AppEmptyState(
+      icon: Icons.bar_chart_outlined,
+      title: msg,
     );
   }
 

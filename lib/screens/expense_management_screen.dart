@@ -7,6 +7,7 @@ import 'package:apexbooks/database/accounting_service.dart';
 import 'package:apexbooks/models/accounting.dart';
 import 'package:apexbooks/models/expense.dart';
 import 'package:apexbooks/models/expense_category.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class ExpenseManagementScreen extends ConsumerStatefulWidget {
   const ExpenseManagementScreen({super.key});
@@ -236,30 +237,16 @@ class _ExpenseManagementScreenState
           // Expense list
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState()
                 : _expenses.isEmpty
                     ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.receipt_long,
-                                size: 64, color: colorScheme.outlineVariant),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No expenses found',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            FilledButton.tonal(
-                              onPressed: () => _showAddExpenseDialog(),
-                              child: const Text('Add First Expense'),
-                            ),
-                          ],
+                        child: AppEmptyState(
+                          icon: Icons.receipt_long,
+                          title: 'No expenses found',
+                          action: FilledButton.tonal(
+                            onPressed: _showAddExpenseDialog,
+                            child: const Text('Add First Expense'),
+                          ),
                         ),
                       )
                     : ListView.builder(
@@ -267,39 +254,22 @@ class _ExpenseManagementScreenState
                         itemCount: _expenses.length,
                         itemBuilder: (context, index) {
                           final expense = _expenses[index];
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: colorScheme.primaryContainer,
-                                child: Icon(
-                                  Icons.receipt,
-                                  color: colorScheme.primary,
-                                  size: 20,
-                                ),
-                              ),
-                              title: Text(
-                                expense.description,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(
-                                '${expense.categoryName ?? expense.categoryId} • ${DateFormat('dd MMM yyyy').format(expense.date)}',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: AppListRow(
+                              leading: AppRowIcon(Icons.receipt,
+                                  color: colorScheme.primary),
+                              title: expense.description,
+                              subtitle:
+                                  '${expense.categoryName ?? expense.categoryId} • ${DateFormat('dd MMM yyyy').format(expense.date)}',
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    currencyFormat.format(expense.amount),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleSmall
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          color: colorScheme.error,
-                                        ),
-                                  ),
+                                  AppMoney(expense.amount,
+                                      currencySymbol: '₹',
+                                      bold: true,
+                                      style:
+                                          TextStyle(color: colorScheme.error)),
                                   PopupMenuButton<String>(
                                     itemBuilder: (context) => [
                                       const PopupMenuItem(

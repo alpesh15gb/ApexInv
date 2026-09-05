@@ -5,6 +5,7 @@ import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/services/backend_services.dart';
 import 'package:apexbooks/utils/reset_code_verifier.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -163,7 +164,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark
           ? null
-          : Colors.blue[50],
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -234,48 +235,27 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           'Successfully verified. Enter your new password.',
                         )
                       else ...[
-                        TextField(
+                        AppTextField(
                           controller: _usernameController,
-                          decoration: const InputDecoration(
-                            labelText: 'Username',
-                            prefixIcon: Icon(Icons.person),
-                            border: OutlineInputBorder(),
-                          ),
+                          labelText: 'Username',
+                          prefixIcon: const Icon(Icons.person),
                         ),
                         AppSpacing.hMedium,
-                        TextField(
+                        AppTextField(
                           controller: _responseCodeController,
-                          decoration: const InputDecoration(
-                            labelText: 'Response Code',
-                            prefixIcon: Icon(Icons.vpn_key_outlined),
-                            border: OutlineInputBorder(),
-                          ),
+                          labelText: 'Response Code',
+                          prefixIcon: const Icon(Icons.vpn_key_outlined),
                         ),
                         if (_errorMessage != null) ...[
                           AppSpacing.hMedium,
                           _buildErrorBox(_errorMessage!),
                         ],
                         AppSpacing.hXlarge,
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isVerifying ? null : _verifyCode,
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 50),
-                              backgroundColor: Theme.of(context).primaryColor,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: _isVerifying
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text('Verify'),
-                          ),
+                        AppPrimaryButton(
+                          onPressed: _isVerifying ? null : _verifyCode,
+                          label: const Text('Verify'),
+                          expanded: true,
+                          loading: _isVerifying,
                         ),
                       ],
                     ] else ...[
@@ -283,57 +263,36 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                         'Successfully verified. Enter your new password.',
                       ),
                       AppSpacing.hMedium,
-                      TextField(
+                      AppTextField(
                         controller: _newPasswordController,
+                        labelText: 'New Password (min 8 characters)',
+                        prefixIcon: const Icon(Icons.lock),
                         obscureText: _obscurePassword,
-                        decoration: InputDecoration(
-                          labelText: 'New Password (min 8 characters)',
-                          prefixIcon: const Icon(Icons.lock),
-                          border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined),
-                            onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword),
-                          ),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined),
+                          onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword),
                         ),
                       ),
                       AppSpacing.hMedium,
-                      TextField(
+                      AppTextField(
                         controller: _confirmPasswordController,
+                        labelText: 'Confirm New Password',
+                        prefixIcon: const Icon(Icons.lock),
                         obscureText: _obscurePassword,
-                        decoration: const InputDecoration(
-                          labelText: 'Confirm New Password',
-                          prefixIcon: Icon(Icons.lock),
-                          border: OutlineInputBorder(),
-                        ),
                       ),
                       if (_errorMessage != null) ...[
                         AppSpacing.hMedium,
                         _buildErrorBox(_errorMessage!),
                       ],
                       AppSpacing.hXlarge,
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isSubmitting ? null : _submitNewPassword,
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 50),
-                            backgroundColor: Theme.of(context).primaryColor,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: _isSubmitting
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text('Set New Password'),
-                        ),
+                      AppPrimaryButton(
+                        onPressed: _isSubmitting ? null : _submitNewPassword,
+                        label: const Text('Set New Password'),
+                        expanded: true,
+                        loading: _isSubmitting,
                       ),
                     ],
                     AppSpacing.hMedium,

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/services/reminder_service.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 /// Payment reminders: overdue invoices with WhatsApp / SMS / copy actions
 /// and a UPI payment link baked into the message.
@@ -47,8 +48,7 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
     final theme = Theme.of(context);
     final df = DateFormat('dd MMM yyyy');
     return Scaffold(
-      backgroundColor:
-          theme.brightness == Brightness.dark ? null : Colors.grey[50],
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text('Payment Reminders'),
         backgroundColor:
@@ -59,7 +59,7 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoadingState()
           : Column(
               children: [
                 Container(
@@ -99,20 +99,11 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                 ),
                 Expanded(
                   child: _overdue.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.celebration_outlined,
-                                  size: 64,
-                                  color: theme.colorScheme.outlineVariant),
-                              const SizedBox(height: 12),
-                              const Text('Nothing overdue. Great job!'),
-                            ],
-                          ),
-                        )
+                      ? const AppEmptyState(
+                          icon: Icons.celebration_outlined,
+                          title: 'Nothing overdue. Great job!')
                       : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                           itemCount: _overdue.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 2),
@@ -123,33 +114,17 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                                 : DateTime.now()
                                     .difference(inv.dueDate!)
                                     .inDays;
-                            return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              child: ListTile(
-                                title: Text(
+                            return AppListRow(
+                              title:
                                   '#${inv.invoiceNumber} · ${inv.customerName}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600),
-                                ),
-                                subtitle: Text(
-                                  inv.dueDate == null
-                                      ? ''
-                                      : 'Due ${df.format(inv.dueDate!)}'
-                                          '  ·  $overdueDays day${overdueDays == 1 ? '' : 's'} over',
-                                  style: TextStyle(
-                                      fontSize: 12.5,
-                                      color:
-                                          theme.colorScheme.onSurfaceVariant),
-                                ),
-                                trailing: Text(
-                                  '${inv.currencySymbol} ${inv.outstanding.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.red[700]),
-                                ),
-                              ),
+                              subtitle: inv.dueDate == null
+                                  ? null
+                                  : 'Due ${df.format(inv.dueDate!)}'
+                                      '  ·  $overdueDays day${overdueDays == 1 ? '' : 's'} over',
+                              trailing: AppMoney(inv.outstanding,
+                                  currencySymbol: inv.currencySymbol,
+                                  bold: true,
+                                  style: TextStyle(color: Colors.red[700])),
                             );
                           },
                         ),

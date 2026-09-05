@@ -21,6 +21,7 @@ import 'package:apexbooks/models/product.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/utils/formatters.dart';
 import 'package:apexbooks/screens/settings/product_columns_settings_screen.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class ProductManagementScreenV2 extends ConsumerStatefulWidget {
   final User user;
@@ -2540,18 +2541,29 @@ class _ProductManagementScreenV2State
             ),
           Expanded(
             flex: 2,
-            child: Text('$_currencySymbol${p.price.toStringAsFixed(2)}',
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: AppMoney(
+              p.price,
+              currencySymbol: _currencySymbol,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
           if (_columnsConfig.purchasePrice)
             Expanded(
               flex: 2,
-              child: Text(
-                  p.purchasePrice > 0
-                      ? '$_currencySymbol${p.purchasePrice.toStringAsFixed(2)}'
-                      : '—',
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              child: p.purchasePrice > 0
+                  ? AppMoney(
+                      p.purchasePrice,
+                      currencySymbol: _currencySymbol,
+                      style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                    )
+                  : Text(
+                      '—',
+                      style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
             ),
           if (_columnsConfig.stock) Expanded(flex: 1, child: _stockCellV2(p)),
           if (_columnsConfig.taxRate)
@@ -2686,9 +2698,7 @@ class _ProductManagementScreenV2State
           mainAxisSize: MainAxisSize.min,
           children: [
             _statsLoadingV2 && _allProductsV2.isEmpty
-                ? const SizedBox(
-                    height: 240,
-                    child: Center(child: CircularProgressIndicator()))
+                ? const SizedBox(height: 240, child: AppLoadingState())
                 : _products.isEmpty
                     ? SizedBox(height: 240, child: _buildEmptyState())
                     : ListView.separated(
@@ -2713,9 +2723,7 @@ class _ProductManagementScreenV2State
         children: [
           _tableHeaderRowV2(),
           _statsLoadingV2 && _allProductsV2.isEmpty
-              ? const SizedBox(
-                  height: 240,
-                  child: Center(child: CircularProgressIndicator()))
+              ? const SizedBox(height: 240, child: AppLoadingState())
               : _products.isEmpty
                   ? SizedBox(height: 240, child: _buildEmptyState())
                   : ListView.builder(
@@ -2800,10 +2808,12 @@ class _ProductManagementScreenV2State
                             color: Theme.of(context)
                                 .colorScheme
                                 .onSurfaceVariant)),
-                    Text('$_currencySymbol ${p.price.toStringAsFixed(2)}',
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14)),
+                    AppMoney(
+                      p.price,
+                      currencySymbol: _currencySymbol,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
                   ],
                 ),
               ),
@@ -4124,31 +4134,13 @@ class _ProductManagementScreenV2State
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inventory_2_outlined,
-              size: 80, color: Theme.of(context).colorScheme.outlineVariant),
-          const SizedBox(height: 16),
-          Text(
-            AppLocalizations.of(context)!.createInvoiceNoProductsFoundMessage,
-            style: TextStyle(
-                fontSize: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _searchQuery.isEmpty
-                ? AppLocalizations.of(context)!
-                    .productMgmtAddFirstProductSubtitle
-                : AppLocalizations.of(context)!
-                    .customerMgmtTryAdjustingSearchSubtitle,
-            style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-        ],
-      ),
+    final l10n = AppLocalizations.of(context)!;
+    return AppEmptyState(
+      icon: Icons.inventory_2_outlined,
+      title: l10n.createInvoiceNoProductsFoundMessage,
+      subtitle: _searchQuery.isEmpty
+          ? l10n.productMgmtAddFirstProductSubtitle
+          : l10n.customerMgmtTryAdjustingSearchSubtitle,
     );
   }
 }

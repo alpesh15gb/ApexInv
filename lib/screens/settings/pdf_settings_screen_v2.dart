@@ -10,6 +10,7 @@ import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/widgets/template_list_tile.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class PdfSettingsScreenV2 extends ConsumerStatefulWidget {
   final VoidCallback? onNavigateToCustomization;
@@ -341,31 +342,19 @@ class _PdfSettingsScreenV2State extends ConsumerState<PdfSettingsScreenV2> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                OutlinedButton(
+                AppSecondaryButton(
                   onPressed: _isSaving ? null : _resetToDefaultV2,
-                  child: Text(l10n.pdfSettingsResetToDefaultButton),
+                  label: Text(l10n.pdfSettingsResetToDefaultButton),
                 ),
-                FilledButton.icon(
+                AppPrimaryButton(
                   onPressed: (_hasUnsavedChangeV2 && !_isSaving)
                       ? _saveTemplate
                       : null,
-                  icon: _isSaving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.save_rounded, size: 16),
+                  icon: const Icon(Icons.save_rounded, size: 16),
                   label: Text(_isSaving
                       ? l10n.createInvoiceSavingEllipsisLabel
                       : l10n.pdfSettingsSaveSettingsButton),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppBorderRadius.xsmall)),
-                  ),
+                  loading: _isSaving,
                 ),
               ],
             ),
@@ -694,15 +683,7 @@ class _PdfSettingsScreenV2State extends ConsumerState<PdfSettingsScreenV2> {
   }
 
   Widget _sectionLabel(String text) {
-    return Text(
-      text.toUpperCase(),
-      style: TextStyle(
-        fontSize: AppFontSize.xsmall,
-        fontWeight: FontWeight.w700,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-        letterSpacing: 0.9,
-      ),
-    );
+    return AppSectionHeader(text);
   }
 
   Widget _buildTotalQuantityToggle() {
@@ -871,7 +852,7 @@ class _PdfSettingsScreenV2State extends ConsumerState<PdfSettingsScreenV2> {
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
+            child: AppSecondaryButton(
               onPressed: widget.onNavigateToCustomization,
               icon: const Icon(Icons.arrow_forward_rounded, size: 14),
               label: Text(
@@ -880,15 +861,6 @@ class _PdfSettingsScreenV2State extends ConsumerState<PdfSettingsScreenV2> {
                   fontSize: AppFontSize.xsmall,
                   fontWeight: FontWeight.w600,
                 ),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: primaryColor,
-                side: BorderSide(color: primaryColor.withValues(alpha: 0.5)),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppBorderRadius.small),
-                ),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
           ),

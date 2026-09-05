@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:apexbooks/services/vyapar_import_service.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class ImportScreen extends ConsumerStatefulWidget {
   const ImportScreen({super.key});
@@ -118,65 +119,60 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
         title: const Text('Import from Vyapar'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.upload_file,
-                            color: colorScheme.primary, size: 32),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Import Vyapar Backup',
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Import customers, products, sales, quotations, purchase orders, and purchase bills from a Vyapar .vyb backup file.',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
-                              ),
-                            ],
-                          ),
+            AppCard(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      AppRowIcon(Icons.upload_file, color: colorScheme.primary),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Import Vyapar Backup',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Import customers, products, sales, quotations, purchase orders, and purchase bills from a Vyapar .vyb backup file.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _isLoading ? null : _pickFile,
-                        icon: _isLoading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.folder_open),
-                        label: Text(_isLoading
-                            ? 'Reading file...'
-                            : 'Select .vyb File'),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _isLoading ? null : _pickFile,
+                      icon: _isLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.folder_open),
+                      label: Text(
+                          _isLoading ? 'Reading file...' : 'Select .vyb File'),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
 
@@ -205,65 +201,57 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
             // Preview
             if (_preview != null && !_isImporting && _result == null)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              AppCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AppSectionHeader('Preview'),
+                    if (_preview!.firmName.isNotEmpty) ...[
+                      const SizedBox(height: 8),
                       Text(
-                        'Preview',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (_preview!.firmName.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Company: ${_preview!.firmName}',
-                          style:
-                              Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      _buildPreviewRow(
-                          Icons.people, 'Customers', _preview!.customerCount),
-                      _buildPreviewRow(Icons.inventory_2, 'Products',
-                          _preview!.productCount),
-                      _buildPreviewRow(Icons.receipt_long, 'Invoices',
-                          _preview!.invoiceCount),
-                      if (_preview!.vendorCount > 0)
-                        _buildPreviewRow(Icons.local_shipping, 'Vendors',
-                            _preview!.vendorCount),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: _startImport,
-                          icon: const Icon(Icons.download),
-                          label: const Text('Start Import'),
-                        ),
+                        'Company: ${_preview!.firmName}',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                       ),
                     ],
-                  ),
+                    const SizedBox(height: 16),
+                    _buildPreviewRow(
+                        Icons.people, 'Customers', _preview!.customerCount),
+                    _buildPreviewRow(
+                        Icons.inventory_2, 'Products', _preview!.productCount),
+                    _buildPreviewRow(
+                        Icons.receipt_long, 'Invoices', _preview!.invoiceCount),
+                    if (_preview!.vendorCount > 0)
+                      _buildPreviewRow(Icons.local_shipping, 'Vendors',
+                          _preview!.vendorCount),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _startImport,
+                        icon: const Icon(Icons.download),
+                        label: const Text('Start Import'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
             // Progress
             if (_isImporting)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
-                      Text(
-                        _progressMessage,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
+              AppCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    const AppLoadingState(),
+                    const SizedBox(height: 16),
+                    Text(
+                      _progressMessage,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                 ),
               ),
 
@@ -360,29 +348,23 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
 
             // Instructions
             if (_preview == null && !_isLoading && _result == null) ...[
-              const SizedBox(height: 24),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'How to get a .vyb file',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildInstructionStep(1, 'Open the Vyapar app'),
-                      _buildInstructionStep(
-                          2, 'Go to Settings → Data Backup & Restore'),
-                      _buildInstructionStep(
-                          3, 'Tap "Create Backup" to generate a .vyb file'),
-                      _buildInstructionStep(
-                          4, 'Transfer the file to this computer'),
-                      _buildInstructionStep(
-                          5, 'Click "Select .vyb File" above'),
-                    ],
-                  ),
+              const SizedBox(height: 16),
+              AppCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AppSectionHeader('How to get a .vyb file'),
+                    const SizedBox(height: 12),
+                    _buildInstructionStep(1, 'Open the Vyapar app'),
+                    _buildInstructionStep(
+                        2, 'Go to Settings → Data Backup & Restore'),
+                    _buildInstructionStep(
+                        3, 'Tap "Create Backup" to generate a .vyb file'),
+                    _buildInstructionStep(
+                        4, 'Transfer the file to this computer'),
+                    _buildInstructionStep(5, 'Click "Select .vyb File" above'),
+                  ],
                 ),
               ),
             ],
@@ -397,7 +379,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+          AppRowIcon(icon, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 12),
           Expanded(child: Text(label)),
           Container(

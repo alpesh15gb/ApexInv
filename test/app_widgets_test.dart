@@ -47,6 +47,21 @@ void main() {
     expect(find.text('card body'), findsOneWidget);
   });
 
+  testWidgets('AppListRow renders title, subtitle and trailing',
+      (tester) async {
+    await tester.pumpWidget(_wrap(
+      AppListRow(
+        leading: const AppRowIcon(Icons.receipt_outlined),
+        title: 'INV-001',
+        subtitle: 'Acme · 12 Aug',
+        trailing: const AppMoney(1500, currencySymbol: '₹', bold: true),
+      ),
+    ));
+    expect(find.text('INV-001'), findsOneWidget);
+    expect(find.text('Acme · 12 Aug'), findsOneWidget);
+    expect(find.text('₹ 1,500.00'), findsOneWidget);
+  });
+
   testWidgets('AppSearchField shows hint and clear action', (tester) async {
     final controller = TextEditingController();
     await tester.pumpWidget(_wrap(

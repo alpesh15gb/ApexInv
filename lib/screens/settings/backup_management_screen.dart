@@ -7,6 +7,7 @@ import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/backup_info.dart';
 import 'package:apexbooks/screens/import_screen.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class BackupManagementScreen extends StatefulWidget {
   const BackupManagementScreen({super.key});
@@ -181,7 +182,7 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoadingState()
           : Column(
               children: [
                 // Action buttons
@@ -195,23 +196,23 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final buttons = <Widget>[
-                            ElevatedButton.icon(
+                            AppPrimaryButton(
                               onPressed: () =>
                                   _createBackup(BackupType.database),
                               icon: const Icon(Icons.backup),
                               label: Text(l10n.backupCreateDbButton),
                             ),
-                            ElevatedButton.icon(
+                            AppSecondaryButton(
                               onPressed: () => _createBackup(BackupType.json),
                               icon: const Icon(Icons.download),
                               label: Text(l10n.backupExportJsonButton),
                             ),
-                            ElevatedButton.icon(
+                            AppSecondaryButton(
                               onPressed: _importBackup,
                               icon: const Icon(Icons.upload),
                               label: Text(l10n.backupImportButton),
                             ),
-                            ElevatedButton.icon(
+                            AppSecondaryButton(
                               onPressed: () {
                                 Navigator.push(
                                   context,
@@ -259,11 +260,9 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
                 // Backup list
                 Expanded(
                   child: _backups.isEmpty
-                      ? Center(
-                          child: Text(
-                            l10n.backupNoBackupsFoundMessage,
-                            style: const TextStyle(fontSize: 16),
-                          ),
+                      ? AppEmptyState(
+                          icon: Icons.backup_outlined,
+                          title: l10n.backupNoBackupsFoundMessage,
                         )
                       : Center(
                           child: ConstrainedBox(
@@ -287,72 +286,76 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
     final l10n = AppLocalizations.of(context)!;
     final dateFormat = DateFormat('MMM dd, yyyy HH:mm');
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor:
-              backup.type == BackupType.database ? Colors.blue : Colors.green,
-          child: Icon(
-            backup.type == BackupType.database ? Icons.storage : Icons.code,
-            color: Colors.white,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor:
+                backup.type == BackupType.database ? Colors.blue : Colors.green,
+            child: Icon(
+              backup.type == BackupType.database ? Icons.storage : Icons.code,
+              color: Colors.white,
+            ),
           ),
-        ),
-        title: Text(backup.fileName),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(l10n.backupSizeLabel(backup.formattedSize)),
-            Text(l10n.backupCreatedLabel(dateFormat.format(backup.createdAt))),
-          ],
-        ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            switch (value) {
-              case 'restore':
-                _restoreBackup(backup);
-                break;
-              case 'download':
-                _downloadBackup(backup);
-                break;
-              case 'share':
-                _shareBackup(backup);
-                break;
-              case 'delete':
-                _deleteBackup(backup);
-                break;
-            }
-          },
-          itemBuilder: (context) => [
-            PopupMenuItem(
-              value: 'restore',
-              child: ListTile(
-                leading: const Icon(Icons.restore),
-                title: Text(l10n.actionRestore),
+          title: Text(backup.fileName),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l10n.backupSizeLabel(backup.formattedSize)),
+              Text(
+                  l10n.backupCreatedLabel(dateFormat.format(backup.createdAt))),
+            ],
+          ),
+          trailing: PopupMenuButton<String>(
+            onSelected: (value) {
+              switch (value) {
+                case 'restore':
+                  _restoreBackup(backup);
+                  break;
+                case 'download':
+                  _downloadBackup(backup);
+                  break;
+                case 'share':
+                  _shareBackup(backup);
+                  break;
+                case 'delete':
+                  _deleteBackup(backup);
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'restore',
+                child: ListTile(
+                  leading: const Icon(Icons.restore),
+                  title: Text(l10n.actionRestore),
+                ),
               ),
-            ),
-            PopupMenuItem(
-              value: 'download',
-              child: ListTile(
-                leading: const Icon(Icons.download),
-                title: Text(l10n.createInvoiceDownloadLabel),
+              PopupMenuItem(
+                value: 'download',
+                child: ListTile(
+                  leading: const Icon(Icons.download),
+                  title: Text(l10n.createInvoiceDownloadLabel),
+                ),
               ),
-            ),
-            PopupMenuItem(
-              value: 'share',
-              child: ListTile(
-                leading: const Icon(Icons.share),
-                title: Text(l10n.actionShare),
+              PopupMenuItem(
+                value: 'share',
+                child: ListTile(
+                  leading: const Icon(Icons.share),
+                  title: Text(l10n.actionShare),
+                ),
               ),
-            ),
-            PopupMenuItem(
-              value: 'delete',
-              child: ListTile(
-                leading: const Icon(Icons.delete),
-                title: Text(l10n.actionDelete),
+              PopupMenuItem(
+                value: 'delete',
+                child: ListTile(
+                  leading: const Icon(Icons.delete),
+                  title: Text(l10n.actionDelete),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -364,10 +367,9 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
         latest == null ? null : DateTime.now().difference(latest).inDays;
     final healthy = age != null && age <= 7;
     final color = healthy ? Colors.green : Colors.orange;
-    return Card(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+    return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: AppCard(
           child: Row(children: [
             Icon(
                 healthy
@@ -396,24 +398,12 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
 
   Future<bool> _showConfirmDialog(String title, String message) async {
     final l10n = AppLocalizations.of(context)!;
-    return await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(title),
-            content: Text(message),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: Text(l10n.actionCancel),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: Text(l10n.actionConfirm),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+    return AppConfirmDialog.show(
+      context,
+      title: title,
+      message: message,
+      confirmLabel: l10n.actionConfirm,
+    );
   }
 
   void _showRestartDialog() {

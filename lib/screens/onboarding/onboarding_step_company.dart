@@ -8,6 +8,7 @@ import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/providers/theme_provider.dart';
 import 'package:apexbooks/widgets/language_picker.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 /// Step 1 of the onboarding wizard: language, theme, and core company
 /// details. All values live in [OnboardingScreen]'s state — this widget
@@ -112,13 +113,10 @@ class OnboardingStepCompany extends ConsumerWidget {
                     color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ),
           const SizedBox(height: 24),
-          TextField(
+          AppTextField(
             controller: nameController,
-            decoration: InputDecoration(
-              labelText: l10n.onboardingCompanyNameLabel,
-              prefixIcon: const Icon(Icons.business_rounded),
-              border: const OutlineInputBorder(),
-            ),
+            labelText: l10n.onboardingCompanyNameLabel,
+            prefixIcon: const Icon(Icons.business_rounded),
           ),
           const SizedBox(height: 16),
           _CountryField(

@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class CustomizationScreen extends StatefulWidget {
   final int? highlightIndex;
@@ -62,21 +63,13 @@ class _CustomizationScreenState extends State<CustomizationScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark
           ? null
-          : Colors.grey[50],
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
       body: SingleChildScrollView(
         padding: EdgeInsets.all(context.isCompact ? 16 : 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              l10n.customizationEyebrowLabel,
-              style: TextStyle(
-                fontSize: AppFontSize.xsmall,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                letterSpacing: 1.2,
-              ),
-            ),
+            AppSectionHeader(l10n.customizationEyebrowLabel),
             const SizedBox(height: 8),
             Text(
               l10n.customizationHeadline,

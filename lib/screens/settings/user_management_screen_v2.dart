@@ -6,6 +6,7 @@ import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/utils/password_utils.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class UserManagementScreenV2 extends ConsumerStatefulWidget {
   final User currentUser;
@@ -768,9 +769,7 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
               child: Text(l10n.actionCancel)),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, foregroundColor: Colors.white),
+          AppDangerButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             icon: const Icon(Icons.delete_forever, size: 18),
             label: Text(l10n.actionDelete),
@@ -962,17 +961,10 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                 tooltip: l10n.actionRefresh,
               ),
               if (widget.currentUser.isAdmin())
-                FilledButton.icon(
+                AppPrimaryButton(
                   onPressed: _openAddPanelV2,
                   icon: const Icon(Icons.add, size: 18),
                   label: Text(l10n.userMgmtAddUserButton),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppBorderRadius.xsmall)),
-                  ),
                 ),
             ],
           ),
@@ -986,29 +978,12 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
     return Row(
       children: [
         Expanded(
-          child: TextField(
+          child: AppSearchField(
             controller: _searchController,
-            decoration: InputDecoration(
-              hintText: l10n.userMgmtSearchHint,
-              prefixIcon: const Icon(Icons.search, size: 20),
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 16),
-                      onPressed: _searchController.clear,
-                    )
-                  : null,
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                  borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant)),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-                  borderSide: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant)),
-            ),
+            hintText: l10n.userMgmtSearchHint,
+            onClear: _searchController.text.isNotEmpty
+                ? () => _searchController.clear()
+                : null,
           ),
         ),
         const SizedBox(width: 10),
@@ -1354,31 +1329,14 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
         children: [
           _tableHeaderRowV2(),
           _isLoading && _users.isEmpty
-              ? const SizedBox(
-                  height: 240,
-                  child: Center(child: CircularProgressIndicator()))
+              ? const SizedBox(height: 240, child: AppLoadingState())
               : pageItems.isEmpty
                   ? SizedBox(
                       height: 240,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.person_search_outlined,
-                                size: 48,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outlineVariant),
-                            const SizedBox(height: 12),
-                            Text(
-                                AppLocalizations.of(context)!
-                                    .userMgmtNoUsersFoundMessage,
-                                style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant)),
-                          ],
-                        ),
+                      child: AppEmptyState(
+                        icon: Icons.person_search_outlined,
+                        title: AppLocalizations.of(context)!
+                            .userMgmtNoUsersFoundMessage,
                       ),
                     )
                   : ListView.builder(
@@ -1401,7 +1359,6 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
   Widget _addPanelV2() {
     final l10n = AppLocalizations.of(context)!;
     final isAdding = _editingUserId == null;
-    final primaryColor = Theme.of(context).primaryColor;
     // Width is controlled by the Positioned wrapper in _buildV2 (scales with
     // the window, capped between 520-680px, full width on narrow screens).
     return Container(
@@ -1439,15 +1396,10 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextFormField(
+                    AppTextField(
                       controller: _usernameController,
-                      decoration: InputDecoration(
-                        labelText: l10n.userMgmtUsernameRequiredLabel,
-                        hintText: l10n.userMgmtEnterUsernameHint,
-                        border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppBorderRadius.xsmall)),
-                      ),
+                      labelText: l10n.userMgmtUsernameRequiredLabel,
+                      hintText: l10n.userMgmtEnterUsernameHint,
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return l10n.userMgmtUsernameRequiredMessage;
@@ -1460,22 +1412,17 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                     ),
                     if (isAdding) ...[
                       const SizedBox(height: 16),
-                      TextFormField(
+                      AppTextField(
                         controller: _passwordController,
+                        labelText: l10n.userMgmtPasswordRequiredLabel,
+                        hintText: l10n.userMgmtEnterPasswordHint,
                         obscureText: _obscurePassword,
-                        decoration: InputDecoration(
-                          labelText: l10n.userMgmtPasswordRequiredLabel,
-                          hintText: l10n.userMgmtEnterPasswordHint,
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(
-                                  AppBorderRadius.xsmall)),
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility),
-                            onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword),
-                          ),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility),
+                          onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
@@ -1526,31 +1473,24 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
             child: Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
+                  child: AppSecondaryButton(
                     onPressed: () {
                       _resetForm();
                       setState(() => _showAddPanelV2 = false);
                     },
-                    child: Text(l10n.actionCancel),
+                    label: Text(l10n.actionCancel),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   flex: 2,
-                  child: FilledButton.icon(
+                  child: AppPrimaryButton(
                     onPressed: _isLoading ? null : _saveUserV2,
-                    style:
-                        FilledButton.styleFrom(backgroundColor: primaryColor),
-                    icon: _isLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white))
-                        : Icon(isAdding ? Icons.add : Icons.check, size: 18),
+                    icon: Icon(isAdding ? Icons.add : Icons.check, size: 18),
                     label: Text(isAdding
                         ? l10n.userMgmtSaveUserButton
                         : l10n.productMgmtSaveChangesButton),
+                    loading: _isLoading,
                   ),
                 ),
               ],
@@ -1609,14 +1549,9 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
               const SizedBox(height: 20),
               Form(
                 key: _formKey,
-                child: TextFormField(
+                child: AppTextField(
                   controller: _usernameController,
-                  decoration: InputDecoration(
-                    labelText: l10n.userMgmtUsernameRequiredLabel,
-                    border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppBorderRadius.xsmall)),
-                  ),
+                  labelText: l10n.userMgmtUsernameRequiredLabel,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return l10n.userMgmtUsernameRequiredMessage;
@@ -1632,7 +1567,7 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: AppSecondaryButton(
                       onPressed: () =>
                           _showChangePasswordDialog(user.id, user.username),
                       icon: const Icon(Icons.lock_reset, size: 18),
@@ -1641,16 +1576,11 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: FilledButton.icon(
+                    child: AppPrimaryButton(
                       onPressed: _isLoading ? null : _saveUser,
-                      icon: _isLoading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.check, size: 18),
+                      icon: const Icon(Icons.check, size: 18),
                       label: Text(l10n.actionSave),
+                      loading: _isLoading,
                     ),
                   ),
                 ],

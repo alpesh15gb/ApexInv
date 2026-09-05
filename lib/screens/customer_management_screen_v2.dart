@@ -7,6 +7,7 @@ import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/utils/formatters.dart';
 import 'package:apexbooks/utils/gstin_validator.dart';
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 import 'package:apexbooks/common/supported_currencies.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2128,18 +2129,20 @@ class _CustomerManagementScreenV2State
           if (_visibleColumnsV2['outstanding'] ?? true)
             Expanded(
               flex: 2,
-              child: Text(
-                hasOutstanding
-                    ? '$_outstandingCurrencySymbol ${outstanding.toStringAsFixed(2)}'
-                    : '—',
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontWeight:
-                        hasOutstanding ? FontWeight.w600 : FontWeight.normal,
-                    color: hasOutstanding
-                        ? Colors.orange.shade800
-                        : Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
+              child: hasOutstanding
+                  ? AppMoney(
+                      outstanding,
+                      currencySymbol: _outstandingCurrencySymbol,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange.shade800),
+                    )
+                  : Text(
+                      '—',
+                      style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
             ),
           SizedBox(
             width: 200,
@@ -2375,9 +2378,7 @@ class _CustomerManagementScreenV2State
           mainAxisSize: MainAxisSize.min,
           children: [
             _isLoading && _customers.isEmpty
-                ? const SizedBox(
-                    height: 240,
-                    child: Center(child: CircularProgressIndicator()))
+                ? const SizedBox(height: 240, child: AppLoadingState())
                 : pageItems.isEmpty
                     ? SizedBox(height: 240, child: _buildEmptyState())
                     : ListView.separated(
@@ -2402,9 +2403,7 @@ class _CustomerManagementScreenV2State
         children: [
           _tableHeaderRowV2(),
           _isLoading && _customers.isEmpty
-              ? const SizedBox(
-                  height: 240,
-                  child: Center(child: CircularProgressIndicator()))
+              ? const SizedBox(height: 240, child: AppLoadingState())
               : pageItems.isEmpty
                   ? SizedBox(height: 240, child: _buildEmptyState())
                   : ListView.builder(
@@ -2492,17 +2491,23 @@ class _CustomerManagementScreenV2State
                     color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               const SizedBox(width: 8),
-              Text(
-                hasOutstanding
-                    ? '$_outstandingCurrencySymbol ${outstanding.toStringAsFixed(2)}'
-                    : '—',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: hasOutstanding
-                        ? Colors.orange.shade800
-                        : Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
+              hasOutstanding
+                  ? AppMoney(
+                      outstanding,
+                      currencySymbol: _outstandingCurrencySymbol,
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.orange.shade800),
+                    )
+                  : Text(
+                      '—',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
               const Spacer(),
               // 2-3 common quick actions visible; statement/edit/delete live
               // in the card overflow menu.
@@ -2848,31 +2853,13 @@ class _CustomerManagementScreenV2State
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.person_off,
-              size: 80, color: Theme.of(context).colorScheme.outlineVariant),
-          const SizedBox(height: 16),
-          Text(
-            AppLocalizations.of(context)!.createInvoiceNoCustomersFoundMessage,
-            style: TextStyle(
-                fontSize: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _searchQuery.isEmpty
-                ? AppLocalizations.of(context)!
-                    .customerMgmtAddFirstCustomerSubtitle
-                : AppLocalizations.of(context)!
-                    .customerMgmtTryAdjustingSearchSubtitle,
-            style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-        ],
-      ),
+    return AppEmptyState(
+      icon: Icons.person_off,
+      title: AppLocalizations.of(context)!.createInvoiceNoCustomersFoundMessage,
+      subtitle: _searchQuery.isEmpty
+          ? AppLocalizations.of(context)!.customerMgmtAddFirstCustomerSubtitle
+          : AppLocalizations.of(context)!
+              .customerMgmtTryAdjustingSearchSubtitle,
     );
   }
 }

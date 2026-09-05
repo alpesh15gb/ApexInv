@@ -10,6 +10,7 @@ import 'package:apexbooks/providers/app_config_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/screens/settings/license_screen.dart';
 import 'package:apexbooks/services/update_service.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class AppInfoScreen extends ConsumerStatefulWidget {
   final UpdateInfo? updateInfo;
@@ -63,7 +64,7 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark
           ? null
-          : Colors.grey[50],
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
       appBar: AppBar(
         title: Text(l10n.appInfoTitle),
         backgroundColor:
@@ -81,136 +82,123 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // ── Hero card ────────────────────────────────────────────
-                Card(
-                  elevation: 0,
-                  color: Theme.of(context).colorScheme.surfaceContainer,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppBorderRadius.medium),
-                    side: BorderSide(
-                        color: Theme.of(context).colorScheme.outlineVariant),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 32, vertical: 28),
-                    // Compact: stack logo / name / description / version so
-                    // nothing fights for width. Expanded: keep the hero Row.
-                    child: context.isCompact
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Image.asset(
-                                Theme.of(context).brightness == Brightness.dark
-                                    ? 'assets/images/logo_dark.png'
-                                    : 'assets/images/logo.png',
-                                width: 160,
-                                height: 64,
-                                fit: BoxFit.contain,
+                AppCard(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+                  child: context.isCompact
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              Theme.of(context).brightness == Brightness.dark
+                                  ? 'assets/images/logo_dark.png'
+                                  : 'assets/images/logo.png',
+                              width: 160,
+                              height: 64,
+                              fit: BoxFit.contain,
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              cfg.name.toUpperCase(),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: AppFontSize.xlarge,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.2,
                               ),
-                              const SizedBox(height: 14),
-                              Text(
-                                cfg.name.toUpperCase(),
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: AppFontSize.xlarge,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.2,
-                                ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              cfg.description,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: AppFontSize.small,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                height: 1.5,
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                cfg.description,
-                                textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: primaryColor.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: primaryColor.withValues(alpha: 0.3)),
+                              ),
+                              child: Text(
+                                cfg.version,
                                 style: TextStyle(
-                                  fontSize: AppFontSize.small,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                  height: 1.5,
+                                  fontSize: AppFontSize.medium,
+                                  fontWeight: FontWeight.bold,
+                                  color: primaryColor,
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color:
-                                          primaryColor.withValues(alpha: 0.3)),
-                                ),
-                                child: Text(
-                                  cfg.version,
-                                  style: TextStyle(
-                                    fontSize: AppFontSize.medium,
-                                    fontWeight: FontWeight.bold,
-                                    color: primaryColor,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          )
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Image.asset(
-                                Theme.of(context).brightness == Brightness.dark
-                                    ? 'assets/images/logo_dark.png'
-                                    : 'assets/images/logo.png',
-                                width: 130,
-                                height: 52,
-                                fit: BoxFit.contain,
-                              ),
-                              const SizedBox(width: 24),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      cfg.name.toUpperCase(),
-                                      style: const TextStyle(
-                                        fontSize: AppFontSize.xxlarge,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.2,
-                                      ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              Theme.of(context).brightness == Brightness.dark
+                                  ? 'assets/images/logo_dark.png'
+                                  : 'assets/images/logo.png',
+                              width: 130,
+                              height: 52,
+                              fit: BoxFit.contain,
+                            ),
+                            const SizedBox(width: 24),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    cfg.name.toUpperCase(),
+                                    style: const TextStyle(
+                                      fontSize: AppFontSize.xxlarge,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.2,
                                     ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      cfg.description,
-                                      style: TextStyle(
-                                        fontSize: AppFontSize.small,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                        height: 1.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color:
-                                          primaryColor.withValues(alpha: 0.3)),
-                                ),
-                                child: Text(
-                                  cfg.version,
-                                  style: TextStyle(
-                                    fontSize: AppFontSize.medium,
-                                    fontWeight: FontWeight.bold,
-                                    color: primaryColor,
                                   ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    cfg.description,
+                                    style: TextStyle(
+                                      fontSize: AppFontSize.small,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 24),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: primaryColor.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: primaryColor.withValues(alpha: 0.3)),
+                              ),
+                              child: Text(
+                                cfg.version,
+                                style: TextStyle(
+                                  fontSize: AppFontSize.medium,
+                                  fontWeight: FontWeight.bold,
+                                  color: primaryColor,
                                 ),
                               ),
-                            ],
-                          ),
-                  ),
+                            ),
+                          ],
+                        ),
                 ),
 
                 const SizedBox(height: 20),
@@ -414,210 +402,184 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
       statusBadge = const SizedBox.shrink();
     }
 
-    return Card(
-      elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceContainer,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppBorderRadius.medium),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  l10n.appInfoUpdatesTitle,
-                  style: TextStyle(
-                    fontSize: AppFontSize.xsmall,
-                    fontWeight: FontWeight.w700,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    letterSpacing: 1.0,
-                  ),
+    return AppCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                l10n.appInfoUpdatesTitle,
+                style: TextStyle(
+                  fontSize: AppFontSize.xsmall,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  letterSpacing: 1.0,
                 ),
-                const SizedBox(width: 12),
-                statusBadge,
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Divider(height: 1, color: Color(0xFFF5F5F5)),
-            const SizedBox(height: 16),
-            // Compact: the version blocks stack and the action buttons wrap —
-            // Current+Latest in one Row can still exceed a 320px card.
-            // Wide: single space-between Wrap.
-            LayoutBuilder(builder: (context, updateConstraints) {
-              final currentVersionRow = Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.tag_rounded,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 14),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(l10n.appInfoCurrentVersionLabel,
-                          style: TextStyle(
-                              fontSize: AppFontSize.xsmall,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 3),
-                      Text(cfg.version,
-                          style: const TextStyle(
-                              fontSize: AppFontSize.medium,
-                              fontWeight: FontWeight.w500)),
-                    ],
-                  ),
-                ],
-              );
-              final latestVersionRow = info == null
-                  ? const SizedBox.shrink()
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.new_releases_outlined,
-                            size: 18,
-                            color: hasUpdate
-                                ? Colors.orange.shade400
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant),
-                        const SizedBox(width: 14),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(l10n.appInfoLatestVersionLabel,
-                                style: TextStyle(
-                                    fontSize: AppFontSize.xsmall,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                    fontWeight: FontWeight.w500)),
-                            const SizedBox(height: 3),
-                            Text(
-                              info.latestVersion,
-                              style: TextStyle(
-                                fontSize: AppFontSize.medium,
-                                fontWeight: FontWeight.w600,
-                                color: hasUpdate
-                                    ? Colors.orange.shade700
-                                    : Colors.green.shade700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    );
-              final actionButtons = Wrap(
-                spacing: 10,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: widget.isCheckingUpdate
-                        ? null
-                        : widget.onCheckForUpdates,
-                    icon: const Icon(Icons.refresh_rounded, size: 16),
-                    label: Text(l10n.appInfoCheckNowButton),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: primaryColor,
-                      side: BorderSide(
-                          color: primaryColor.withValues(alpha: 0.4)),
-                    ),
-                  ),
-                  if (hasUpdate)
-                    FilledButton.icon(
-                      style:
-                          FilledButton.styleFrom(backgroundColor: primaryColor),
-                      icon: const Icon(Icons.download_rounded, size: 16),
-                      label: Text(l10n.createInvoiceDownloadLabel),
-                      onPressed: () => launchUrl(
-                        Uri.parse('${AppConfig.appUrl}'),
-                        mode: LaunchMode.externalApplication,
-                      ),
-                    ),
-                ],
-              );
-              if (updateConstraints.maxWidth < Breakpoints.compactMax) {
-                return Column(
+              ),
+              const SizedBox(width: 12),
+              statusBadge,
+            ],
+          ),
+          const SizedBox(height: 16),
+          Divider(
+              height: 1, color: Theme.of(context).colorScheme.outlineVariant),
+          const SizedBox(height: 16),
+          // Compact: the version blocks stack and the action buttons wrap —
+          // Current+Latest in one Row can still exceed a 320px card.
+          // Wide: single space-between Wrap.
+          LayoutBuilder(builder: (context, updateConstraints) {
+            final currentVersionRow = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.tag_rounded,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+                const SizedBox(width: 14),
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    currentVersionRow,
-                    if (info != null) ...[
-                      const SizedBox(height: 12),
-                      latestVersionRow,
-                    ],
-                    const SizedBox(height: 12),
-                    actionButtons,
+                    Text(l10n.appInfoCurrentVersionLabel,
+                        style: TextStyle(
+                            fontSize: AppFontSize.xsmall,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 3),
+                    Text(cfg.version,
+                        style: const TextStyle(
+                            fontSize: AppFontSize.medium,
+                            fontWeight: FontWeight.w500)),
                   ],
-                );
-              }
-              return Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 16,
-                runSpacing: 12,
-                children: [
-                  Row(
+                ),
+              ],
+            );
+            final latestVersionRow = info == null
+                ? const SizedBox.shrink()
+                : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      currentVersionRow,
-                      if (info != null) ...[
-                        const SizedBox(width: 32),
-                        latestVersionRow,
-                      ],
+                      Icon(Icons.new_releases_outlined,
+                          size: 18,
+                          color: hasUpdate
+                              ? Colors.orange.shade400
+                              : Theme.of(context).colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 14),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(l10n.appInfoLatestVersionLabel,
+                              style: TextStyle(
+                                  fontSize: AppFontSize.xsmall,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                  fontWeight: FontWeight.w500)),
+                          const SizedBox(height: 3),
+                          Text(
+                            info.latestVersion,
+                            style: TextStyle(
+                              fontSize: AppFontSize.medium,
+                              fontWeight: FontWeight.w600,
+                              color: hasUpdate
+                                  ? Colors.orange.shade700
+                                  : Colors.green.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
+                  );
+            final actionButtons = Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                AppSecondaryButton(
+                  onPressed:
+                      widget.isCheckingUpdate ? null : widget.onCheckForUpdates,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: Text(l10n.appInfoCheckNowButton),
+                ),
+                if (hasUpdate)
+                  AppPrimaryButton(
+                    icon: const Icon(Icons.download_rounded, size: 16),
+                    label: Text(l10n.createInvoiceDownloadLabel),
+                    onPressed: () => launchUrl(
+                      Uri.parse('${AppConfig.appUrl}'),
+                      mode: LaunchMode.externalApplication,
+                    ),
                   ),
+              ],
+            );
+            if (updateConstraints.maxWidth < Breakpoints.compactMax) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  currentVersionRow,
+                  if (info != null) ...[
+                    const SizedBox(height: 12),
+                    latestVersionRow,
+                  ],
+                  const SizedBox(height: 12),
                   actionButtons,
                 ],
               );
-            }),
-          ],
-        ),
+            }
+            return Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    currentVersionRow,
+                    if (info != null) ...[
+                      const SizedBox(width: 32),
+                      latestVersionRow,
+                    ],
+                  ],
+                ),
+                actionButtons,
+              ],
+            );
+          }),
+        ],
       ),
     );
   }
 
   Widget _infoCard(String title, List<Widget> rows) {
-    return Card(
-      elevation: 0,
-      color: Theme.of(context).colorScheme.surfaceContainer,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppBorderRadius.medium),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: AppFontSize.xsmall,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                letterSpacing: 1.0,
-              ),
+    return AppCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: AppFontSize.xsmall,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              letterSpacing: 1.0,
             ),
-            const SizedBox(height: 16),
-            ...rows
-                .expand((row) => [
-                      row,
-                      Divider(
-                          height: 1,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest),
-                    ])
-                .toList()
-              ..removeLast(),
-          ],
-        ),
+          ),
+          const SizedBox(height: 16),
+          ...rows
+              .expand((row) => [
+                    row,
+                    Divider(
+                        height: 1,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest),
+                  ])
+              .toList()
+            ..removeLast(),
+        ],
       ),
     );
   }

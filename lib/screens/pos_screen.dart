@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter/services.dart';
 
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 import 'package:apexbooks/database/accounting_service.dart';
 import 'package:apexbooks/database/customer_service.dart';
 import 'package:apexbooks/database/pos_service.dart';
@@ -214,7 +215,8 @@ class _PosScreenState extends State<PosScreen> {
         child: SizedBox(
           height: 360,
           child: _heldCarts.isEmpty
-              ? const Center(child: Text('No held carts'))
+              ? const AppEmptyState(
+                  icon: Icons.pause_circle_outline, title: 'No held carts')
               : ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: _heldCarts.length,
@@ -709,7 +711,7 @@ class _PosScreenState extends State<PosScreen> {
               const SizedBox(width: 8),
             ]),
             body: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState()
                 : LayoutBuilder(builder: (context, constraints) {
                     final products = _productPane();
                     final cart = _cartPane();
@@ -731,7 +733,7 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _productPane() => Column(children: [
         Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             child: TextField(
                 controller: _search,
                 focusNode: _searchFocus,
@@ -744,7 +746,7 @@ class _PosScreenState extends State<PosScreen> {
                         'Enter scans an exact barcode or product name. F2 focuses here.',
                     border: OutlineInputBorder()))),
         Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(children: [
               Icon(Icons.inventory_2_outlined,
                   size: 18, color: Theme.of(context).colorScheme.primary),
@@ -760,11 +762,13 @@ class _PosScreenState extends State<PosScreen> {
         const SizedBox(height: 8),
         Expanded(
             child: _filtered.isEmpty
-                ? const Center(child: Text('No products found'))
+                ? const AppEmptyState(
+                    icon: Icons.inventory_2_outlined,
+                    title: 'No products found')
                 : RefreshIndicator(
                     onRefresh: _load,
                     child: ListView(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       children: [
                         if (_search.text.trim().isEmpty &&
                             _favouriteProducts().isNotEmpty)
@@ -784,10 +788,7 @@ class _PosScreenState extends State<PosScreen> {
   Widget _productSection(String title, List<Product> products) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 8),
-              child:
-                  Text(title, style: Theme.of(context).textTheme.titleSmall)),
+          AppSectionHeader(title),
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -835,8 +836,8 @@ class _PosScreenState extends State<PosScreen> {
                                         size: 20)),
                               ]),
                               const Spacer(),
-                              Text(
-                                  '$_currencySymbol ${product.price.toStringAsFixed(2)}',
+                              AppMoney(product.price,
+                                  currencySymbol: _currencySymbol,
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w600)),
                               Text(
@@ -856,7 +857,7 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _cartPane() => Column(children: [
         Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(children: [
               Text('Current sale',
                   style: Theme.of(context).textTheme.titleMedium),
@@ -872,7 +873,7 @@ class _PosScreenState extends State<PosScreen> {
                         Text('$_itemCount item${_itemCount == 1 ? '' : 's'}')),
             ])),
         Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
             child: TextField(
               controller: _customerSearch,
               onChanged: (_) => setState(() {}),
@@ -902,7 +903,7 @@ class _PosScreenState extends State<PosScreen> {
                 }),
               )),
         Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonFormField<String>(
                 value: _customer?.id ?? 'walk-in',
                 decoration: const InputDecoration(
@@ -918,7 +919,9 @@ class _PosScreenState extends State<PosScreen> {
         const Divider(height: 1),
         Expanded(
             child: _cart.isEmpty
-                ? const Center(child: Text('Tap a product to add it'))
+                ? const AppEmptyState(
+                    icon: Icons.shopping_cart_outlined,
+                    title: 'Tap a product to add it')
                 : ListView.separated(
                     itemCount: _cart.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
@@ -1000,10 +1003,10 @@ class _PosScreenState extends State<PosScreen> {
                 ? const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)
                 : null),
         const Spacer(),
-        Text('$_currencySymbol ${amount.toStringAsFixed(2)}',
-            style: bold
-                ? const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)
-                : null),
+        AppMoney(amount,
+            currencySymbol: _currencySymbol,
+            bold: bold,
+            style: bold ? const TextStyle(fontSize: 17) : null),
       ]));
 }
 

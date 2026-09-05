@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:apexbooks/database/accounting_service.dart';
 import 'package:apexbooks/models/accounting.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class ChequesScreen extends StatefulWidget {
   const ChequesScreen({super.key});
@@ -223,10 +224,13 @@ class _ChequesScreenState extends State<ChequesScreen> {
           const Divider(height: 1),
           Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const AppLoadingState()
                   : _cheques.isEmpty
-                      ? const Center(child: Text('No cheques in this view.'))
+                      ? const AppEmptyState(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'No cheques in this view.')
                       : ListView.separated(
+                          padding: const EdgeInsets.all(16),
                           itemCount: _cheques.length,
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, index) =>
@@ -264,21 +268,18 @@ class _ChequesScreenState extends State<ChequesScreen> {
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           ListTile(
-            leading: CircleAvatar(
-                backgroundColor: color.withValues(alpha: .12),
-                child: Icon(
-                    cheque.direction == 'received'
-                        ? Icons.call_received
-                        : Icons.call_made,
-                    color: color)),
+            leading: AppRowIcon(
+                cheque.direction == 'received'
+                    ? Icons.call_received
+                    : Icons.call_made,
+                color: color),
             title: Text('${cheque.partyName} • ${cheque.chequeNumber}'),
             subtitle: Text(
                 '${cheque.direction == 'received' ? 'Received' : 'Issued'} • '
                 '${cheque.chequeDate.toLocal().toString().split(' ').first} • ${cheque.status}'),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text(
-                  '${cheque.currencySymbol} ${cheque.amount.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              AppMoney(cheque.amount,
+                  currencySymbol: cheque.currencySymbol, bold: true),
               if (actions.isNotEmpty)
                 PopupMenuButton<String>(
                     itemBuilder: (_) => actions,

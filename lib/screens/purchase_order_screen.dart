@@ -7,6 +7,7 @@ import 'package:apexbooks/database/settings_service.dart';
 import 'package:apexbooks/licensing/license_gate.dart';
 import 'package:apexbooks/models/purchase_order.dart';
 import 'package:apexbooks/models/product.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 import 'package:apexbooks/widgets/document_editor_shell.dart';
 
 class PurchaseOrderScreen extends ConsumerStatefulWidget {
@@ -47,8 +48,6 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Purchase Orders'),
@@ -81,30 +80,14 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
           // Order list
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState()
                 : _orders.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.shopping_cart_outlined,
-                                size: 64, color: colorScheme.outlineVariant),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No purchase orders found',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            FilledButton.tonal(
-                              onPressed: () => _showCreateOrderDialog(),
-                              child: const Text('Create First Order'),
-                            ),
-                          ],
+                    ? AppEmptyState(
+                        icon: Icons.shopping_cart_outlined,
+                        title: 'No purchase orders found',
+                        action: FilledButton.tonal(
+                          onPressed: () => _showCreateOrderDialog(),
+                          child: const Text('Create First Order'),
                         ),
                       )
                     : ListView.builder(
@@ -159,135 +142,132 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
         statusIcon = Icons.edit_note;
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: AppCard(
         onTap: () => _showOrderDetail(order),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth > 400;
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'PO #${order.orderNumber ?? order.id}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            order.vendorName,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(statusIcon, size: 14, color: statusColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            order.status[0].toUpperCase() +
+                                order.status.substring(1),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: statusColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (isWide)
                   Row(
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'PO #${order.orderNumber ?? order.id}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              order.vendorName,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ],
-                        ),
+                      _buildInfoChip(Icons.calendar_today,
+                          DateFormat('dd MMM yyyy').format(order.date)),
+                      const SizedBox(width: 12),
+                      _buildInfoChip(
+                          Icons.inventory_2, '${order.items.length} items'),
+                      const Spacer(),
+                      AppMoney(
+                        order.totalAmount,
+                        currencySymbol: order.currencySymbol,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.primary,
+                                ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(statusIcon, size: 14, color: statusColor),
-                            const SizedBox(width: 4),
-                            Text(
-                              order.status[0].toUpperCase() +
-                                  order.status.substring(1),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: statusColor,
-                              ),
-                            ),
-                          ],
-                        ),
+                    ],
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          _buildInfoChip(Icons.calendar_today,
+                              DateFormat('dd MMM yyyy').format(order.date)),
+                          _buildInfoChip(
+                              Icons.inventory_2, '${order.items.length} items'),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      AppMoney(
+                        order.totalAmount,
+                        currencySymbol: order.currencySymbol,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.primary,
+                                ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  if (isWide)
-                    Row(
-                      children: [
-                        _buildInfoChip(Icons.calendar_today,
-                            DateFormat('dd MMM yyyy').format(order.date)),
-                        const SizedBox(width: 12),
-                        _buildInfoChip(
-                            Icons.inventory_2, '${order.items.length} items'),
-                        const Spacer(),
-                        Text(
-                          currencyFormat.format(order.totalAmount),
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.primary,
-                                  ),
-                        ),
-                      ],
-                    )
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 4,
-                          children: [
-                            _buildInfoChip(Icons.calendar_today,
-                                DateFormat('dd MMM yyyy').format(order.date)),
-                            _buildInfoChip(Icons.inventory_2,
-                                '${order.items.length} items'),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          currencyFormat.format(order.totalAmount),
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.primary,
-                                  ),
-                        ),
-                      ],
-                    ),
-                  if (order.outstandingBalance > 0) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.warning_amber,
-                            size: 14, color: Colors.orange),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Outstanding: ${currencyFormat.format(order.outstandingBalance)}',
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.orange.shade800),
-                        ),
-                      ],
-                    ),
-                  ],
+                if (order.outstandingBalance > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber, size: 14, color: Colors.orange),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Outstanding: ${currencyFormat.format(order.outstandingBalance)}',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.orange.shade800),
+                      ),
+                    ],
+                  ),
                 ],
-              ),
+              ],
             );
           },
         ),

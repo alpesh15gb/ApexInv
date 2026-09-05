@@ -25,6 +25,7 @@ import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/widgets/adaptive/entity_card.dart';
 import 'package:apexbooks/widgets/customer_info_button.dart';
 import 'package:apexbooks/utils/formatters.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class InvoiceManagementScreenV2 extends ConsumerStatefulWidget {
   final Function(Invoice) onEditInvoice;
@@ -234,8 +235,7 @@ class _InvoiceManagementScreenV2State
           final start = _currentPage * _pageSize;
           pageInvoices = start >= filteredCount
               ? <Invoice>[]
-              : pageInvoices.sublist(
-                  start,
+              : pageInvoices.sublist(start,
                   (start + _pageSize).clamp(start, filteredCount).toInt());
         }
         setState(() {
@@ -2134,13 +2134,11 @@ class _InvoiceManagementScreenV2State
               ),
             ),
           Expanded(
-            child: Text(
-              '${invoice.currencySymbol} ${invoice.total.toStringAsFixed(2)}',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green),
+            child: AppMoney(
+              invoice.total,
+              currencySymbol: invoice.currencySymbol,
+              bold: true,
+              style: const TextStyle(fontSize: 14.5, color: Colors.green),
             ),
           ),
           if (widget.filterType == 'Invoice') ...[
@@ -2157,9 +2155,9 @@ class _InvoiceManagementScreenV2State
                       style: TextStyle(
                           color:
                               Theme.of(context).colorScheme.onSurfaceVariant))
-                  : Text(
-                      '${invoice.currencySymbol} ${invoice.outstandingBalance.toStringAsFixed(2)}',
-                      overflow: TextOverflow.ellipsis,
+                  : AppMoney(
+                      invoice.outstandingBalance,
+                      currencySymbol: invoice.currencySymbol,
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -2264,43 +2262,23 @@ class _InvoiceManagementScreenV2State
 
   Widget _emptyStateV2() {
     final l10n = AppLocalizations.of(context)!;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.search_off,
-              size: 72, color: Theme.of(context).colorScheme.outlineVariant),
-          const SizedBox(height: 16),
-          Text(
-            _searchQuery.isEmpty
-                ? l10n.invoiceMgmtNoFilteredTypeFoundMessage(
-                    '${widget.filterType.toLowerCase()}s')
-                : l10n.invoiceMgmtNoResultsForQueryMessage(_searchQuery),
-            style: TextStyle(
-                fontSize: 17,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            _searchQuery.isEmpty
-                ? l10n.invoiceMgmtCreateFirstTypeMessage(
-                    widget.filterType.toLowerCase())
-                : l10n.invoiceMgmtTryAdjustingFiltersMessage,
-            style: TextStyle(
-                fontSize: 13.5,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-          if (_searchQuery.isEmpty) ...[
-            const SizedBox(height: 16),
-            FilledButton.icon(
+    return AppEmptyState(
+      icon: Icons.search_off,
+      title: _searchQuery.isEmpty
+          ? l10n.invoiceMgmtNoFilteredTypeFoundMessage(
+              '${widget.filterType.toLowerCase()}s')
+          : l10n.invoiceMgmtNoResultsForQueryMessage(_searchQuery),
+      subtitle: _searchQuery.isEmpty
+          ? l10n.invoiceMgmtCreateFirstTypeMessage(
+              widget.filterType.toLowerCase())
+          : l10n.invoiceMgmtTryAdjustingFiltersMessage,
+      action: _searchQuery.isEmpty
+          ? FilledButton.icon(
               onPressed: widget.onCreateInvoice,
               icon: const Icon(Icons.add),
               label: Text(l10n.navNewInvoice),
-            ),
-          ],
-        ],
-      ),
+            )
+          : null,
     );
   }
 
@@ -2415,9 +2393,7 @@ class _InvoiceManagementScreenV2State
       final useCards = outerConstraints.maxWidth < Breakpoints.compactMax;
 
       return Scaffold(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? null
-            : Colors.grey[50],
+        backgroundColor: Theme.of(context).colorScheme.surface,
         appBar: AppBar(
           title: Text(AppLocalizations.of(context)!
               .invoiceMgmtManagementTitle(widget.filterType)),
@@ -2446,8 +2422,7 @@ class _InvoiceManagementScreenV2State
             ),
             const SizedBox(height: 16),
             _isLoadingPage
-                ? const Expanded(
-                    child: Center(child: CircularProgressIndicator()))
+                ? const Expanded(child: AppLoadingState())
                 : Expanded(
                     child: _pageInvoices.isEmpty
                         ? _emptyStateV2()
@@ -2474,12 +2449,15 @@ class _InvoiceManagementScreenV2State
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 20),
                                     child: Card(
-                                      elevation: 2,
-                                      shadowColor:
-                                          Colors.black.withValues(alpha: 0.1),
+                                      elevation: 0,
                                       shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                              AppBorderRadius.xsmall)),
+                                        borderRadius: BorderRadius.circular(
+                                            AppBorderRadius.small),
+                                        side: BorderSide(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .outlineVariant),
+                                      ),
                                       clipBehavior: Clip.antiAlias,
                                       child: Column(
                                         children: [
@@ -2595,13 +2573,12 @@ class _InvoiceManagementScreenV2State
                                 .colorScheme
                                 .onSurfaceVariant)),
                     const SizedBox(height: 2),
-                    Text(
-                      '${invoice.currencySymbol} ${invoice.total.toStringAsFixed(2)}',
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green),
+                    AppMoney(
+                      invoice.total,
+                      currencySymbol: invoice.currencySymbol,
+                      bold: true,
+                      style:
+                          const TextStyle(fontSize: 14.5, color: Colors.green),
                     ),
                   ],
                 ),
@@ -2618,19 +2595,30 @@ class _InvoiceManagementScreenV2State
                                   .colorScheme
                                   .onSurfaceVariant)),
                       const SizedBox(height: 2),
-                      Text(
-                        hasOutstanding
-                            ? '${invoice.currencySymbol} ${outstanding.toStringAsFixed(2)}'
-                            : '—',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                          color: invoice.paymentStatus == PaymentStatus.partial
-                              ? Colors.orange[700]
-                              : Colors.red[700],
-                        ),
-                      ),
+                      hasOutstanding
+                          ? AppMoney(
+                              outstanding,
+                              currencySymbol: invoice.currencySymbol,
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: invoice.paymentStatus ==
+                                        PaymentStatus.partial
+                                    ? Colors.orange[700]
+                                    : Colors.red[700],
+                              ),
+                            )
+                          : Text(
+                              '—',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: invoice.paymentStatus ==
+                                        PaymentStatus.partial
+                                    ? Colors.orange[700]
+                                    : Colors.red[700],
+                              ),
+                            ),
                     ],
                   ),
                 ),

@@ -18,6 +18,7 @@ import 'package:apexbooks/screens/onboarding/onboarding_step_done.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_invoice.dart';
 import 'package:apexbooks/screens/settings/cloud_sync_screen.dart';
 import 'package:apexbooks/utils/app_logger.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 /// One-time, skippable first-login setup wizard. Each step persists its own
 /// fields immediately on "Next" so progress survives even if the app is
@@ -463,22 +464,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                               child: Text(l10n.actionSkip),
                             ),
                           const SizedBox(width: 12),
-                          FilledButton.icon(
+                          AppPrimaryButton(
                             onPressed: _isBusy
                                 ? null
                                 : (_currentStep < 4 ? _handleNext : _finish),
                             icon: _isBusy
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2))
+                                ? null
                                 : Icon(_currentStep < 4
                                     ? Icons.arrow_forward_rounded
                                     : Icons.rocket_launch_rounded),
                             label: Text(_currentStep < 4
                                 ? l10n.actionNext
                                 : l10n.actionGetStarted),
+                            loading: _isBusy,
                           ),
                         ],
                       ),

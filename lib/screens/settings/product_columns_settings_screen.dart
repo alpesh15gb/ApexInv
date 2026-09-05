@@ -6,6 +6,7 @@ import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/widgets/adaptive/sticky_action_bar.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class ProductColumnsSettingsScreen extends ConsumerStatefulWidget {
   const ProductColumnsSettingsScreen({super.key});
@@ -105,29 +106,13 @@ class _ProductColumnsSettingsScreenState
 
   Widget _saveButton() {
     final l10n = AppLocalizations.of(context)!;
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: _isSaving ? null : _saveConfig,
-        icon: _isSaving
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white))
-            : const Icon(Icons.save_rounded),
-        label: Text(_isSaving
-            ? l10n.createInvoiceSavingEllipsisLabel
-            : l10n.actionSave),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Theme.of(context).primaryColor,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppBorderRadius.small),
-          ),
-        ),
-      ),
+    return AppPrimaryButton(
+      onPressed: _isSaving ? null : _saveConfig,
+      icon: const Icon(Icons.save_rounded),
+      label: Text(
+          _isSaving ? l10n.createInvoiceSavingEllipsisLabel : l10n.actionSave),
+      expanded: true,
+      loading: _isSaving,
     );
   }
 
@@ -140,192 +125,183 @@ class _ProductColumnsSettingsScreenState
       child: Center(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 900),
-          child: Card(
-            elevation: 4,
-            color: Theme.of(context).colorScheme.surfaceContainer,
-            shadowColor: Colors.black.withValues(alpha: 0.1),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      l10n.productColumnsIntroText,
-                      style: TextStyle(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
+          child: AppCard(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    l10n.productColumnsIntroText,
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
-                  _tile(
-                    title: l10n.productColumnsNameLabel,
-                    subtitle: l10n.productColumnsAlwaysRequiredSubtitle,
-                    icon: Icons.label_outline,
-                    value: true,
-                    onChanged: null,
+                ),
+                _tile(
+                  title: l10n.productColumnsNameLabel,
+                  subtitle: l10n.productColumnsAlwaysRequiredSubtitle,
+                  icon: Icons.label_outline,
+                  value: true,
+                  onChanged: null,
+                ),
+                _tile(
+                  title: l10n.productColumnsPriceLabel,
+                  subtitle: l10n.productColumnsAlwaysRequiredSubtitle,
+                  icon: Icons.currency_rupee,
+                  value: true,
+                  onChanged: null,
+                ),
+                _tile(
+                  title: l10n.productColumnsStockLabel,
+                  subtitle: l10n.productColumnsStockSubtitle,
+                  icon: Icons.inventory_2_outlined,
+                  value: _config.stock,
+                  onChanged: (v) =>
+                      setState(() => _config = _config.copyWith(stock: v)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(l10n.productColumnsProductFieldsSectionTitle,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                _tile(
+                  title: l10n.productColumnsAliasNameLabel,
+                  subtitle: l10n.productColumnsAliasNameSubtitle,
+                  icon: Icons.translate,
+                  value: _config.aliasName,
+                  onChanged: (v) =>
+                      setState(() => _config = _config.copyWith(aliasName: v)),
+                ),
+                _tile(
+                  title: l10n.productColumnsTaxRateLabel,
+                  subtitle: l10n.productColumnsTaxRateSubtitle,
+                  icon: Icons.percent_rounded,
+                  value: _config.taxRate,
+                  onChanged: (v) =>
+                      setState(() => _config = _config.copyWith(taxRate: v)),
+                ),
+                _tile(
+                  title: l10n.productColumnsHsnSacLabel,
+                  subtitle: l10n.productColumnsHsnSacSubtitle,
+                  icon: Icons.qr_code_2,
+                  value: _config.hsncode,
+                  onChanged: (v) =>
+                      setState(() => _config = _config.copyWith(hsncode: v)),
+                ),
+                _tile(
+                  title: l10n.productColumnsDescriptionLabel,
+                  subtitle: l10n.productColumnsDescriptionSubtitle,
+                  icon: Icons.notes,
+                  value: _config.description,
+                  onChanged: (v) => setState(
+                      () => _config = _config.copyWith(description: v)),
+                ),
+                _tile(
+                  title: l10n.productColumnsPurchasePriceLabel,
+                  subtitle: l10n.productColumnsPurchasePriceSubtitle,
+                  icon: Icons.shopping_cart_outlined,
+                  value: _config.purchasePrice,
+                  onChanged: (v) => setState(
+                      () => _config = _config.copyWith(purchasePrice: v)),
+                ),
+                _tile(
+                  title: l10n.productColumnsDefaultDiscountLabel,
+                  subtitle: l10n.productColumnsDefaultDiscountSubtitle,
+                  icon: Icons.discount_outlined,
+                  value: _config.defaultDiscount,
+                  onChanged: (v) => setState(
+                      () => _config = _config.copyWith(defaultDiscount: v)),
+                ),
+                _tile(
+                  title: l10n.productColumnsUnitLabel,
+                  subtitle: l10n.productColumnsUnitSubtitle,
+                  icon: Icons.straighten,
+                  value: _config.unit,
+                  onChanged: (v) =>
+                      setState(() => _config = _config.copyWith(unit: v)),
+                ),
+                _tile(
+                  title: l10n.productColumnsProductServiceTypeLabel,
+                  subtitle: l10n.productColumnsProductServiceTypeSubtitle,
+                  icon: Icons.category_outlined,
+                  value: _config.type,
+                  onChanged: (v) =>
+                      setState(() => _config = _config.copyWith(type: v)),
+                ),
+                _tile(
+                  title: l10n.productColumnsMetadataLabel,
+                  subtitle: l10n.productColumnsMetadataSubtitle,
+                  icon: Icons.more_horiz,
+                  value: _config.productMetadata,
+                  onChanged: (v) => setState(
+                      () => _config = _config.copyWith(productMetadata: v)),
+                ),
+                if (_config.productMetadata) ...[
+                  _subTile(
+                    title: l10n.productColumnsMetaStorageLocationLabel,
+                    value: _config.metaStorageLocation,
+                    onChanged: (v) => setState(() =>
+                        _config = _config.copyWith(metaStorageLocation: v)),
                   ),
-                  _tile(
-                    title: l10n.productColumnsPriceLabel,
-                    subtitle: l10n.productColumnsAlwaysRequiredSubtitle,
-                    icon: Icons.currency_rupee,
-                    value: true,
-                    onChanged: null,
+                  _subTile(
+                    title: l10n.productColumnsMetaContainerNumberLabel,
+                    value: _config.metaContainerNumber,
+                    onChanged: (v) => setState(() =>
+                        _config = _config.copyWith(metaContainerNumber: v)),
                   ),
-                  _tile(
-                    title: l10n.productColumnsStockLabel,
-                    subtitle: l10n.productColumnsStockSubtitle,
-                    icon: Icons.inventory_2_outlined,
-                    value: _config.stock,
-                    onChanged: (v) =>
-                        setState(() => _config = _config.copyWith(stock: v)),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(l10n.productColumnsProductFieldsSectionTitle,
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  _tile(
-                    title: l10n.productColumnsAliasNameLabel,
-                    subtitle: l10n.productColumnsAliasNameSubtitle,
-                    icon: Icons.translate,
-                    value: _config.aliasName,
+                  _subTile(
+                    title: l10n.productColumnsMetaBatchNumberLabel,
+                    value: _config.metaBatchNumber,
                     onChanged: (v) => setState(
-                        () => _config = _config.copyWith(aliasName: v)),
+                        () => _config = _config.copyWith(metaBatchNumber: v)),
                   ),
-                  _tile(
-                    title: l10n.productColumnsTaxRateLabel,
-                    subtitle: l10n.productColumnsTaxRateSubtitle,
-                    icon: Icons.percent_rounded,
-                    value: _config.taxRate,
-                    onChanged: (v) =>
-                        setState(() => _config = _config.copyWith(taxRate: v)),
-                  ),
-                  _tile(
-                    title: l10n.productColumnsHsnSacLabel,
-                    subtitle: l10n.productColumnsHsnSacSubtitle,
-                    icon: Icons.qr_code_2,
-                    value: _config.hsncode,
-                    onChanged: (v) =>
-                        setState(() => _config = _config.copyWith(hsncode: v)),
-                  ),
-                  _tile(
-                    title: l10n.productColumnsDescriptionLabel,
-                    subtitle: l10n.productColumnsDescriptionSubtitle,
-                    icon: Icons.notes,
-                    value: _config.description,
+                  _subTile(
+                    title: l10n.productColumnsMetaExpiryDateLabel,
+                    value: _config.metaExpiryDate,
                     onChanged: (v) => setState(
-                        () => _config = _config.copyWith(description: v)),
+                        () => _config = _config.copyWith(metaExpiryDate: v)),
                   ),
-                  _tile(
-                    title: l10n.productColumnsPurchasePriceLabel,
-                    subtitle: l10n.productColumnsPurchasePriceSubtitle,
-                    icon: Icons.shopping_cart_outlined,
-                    value: _config.purchasePrice,
+                  _subTile(
+                    title: l10n.productColumnsMetaManufactureDateLabel,
+                    value: _config.metaManufactureDate,
+                    onChanged: (v) => setState(() =>
+                        _config = _config.copyWith(metaManufactureDate: v)),
+                  ),
+                  _subTile(
+                    title: l10n.productColumnsMetaSupplierNameLabel,
+                    value: _config.metaSupplierName,
                     onChanged: (v) => setState(
-                        () => _config = _config.copyWith(purchasePrice: v)),
+                        () => _config = _config.copyWith(metaSupplierName: v)),
                   ),
-                  _tile(
-                    title: l10n.productColumnsDefaultDiscountLabel,
-                    subtitle: l10n.productColumnsDefaultDiscountSubtitle,
-                    icon: Icons.discount_outlined,
-                    value: _config.defaultDiscount,
+                  _subTile(
+                    title: l10n.productColumnsMetaSkuCodeLabel,
+                    value: _config.metaSkuCode,
                     onChanged: (v) => setState(
-                        () => _config = _config.copyWith(defaultDiscount: v)),
+                        () => _config = _config.copyWith(metaSkuCode: v)),
                   ),
-                  _tile(
-                    title: l10n.productColumnsUnitLabel,
-                    subtitle: l10n.productColumnsUnitSubtitle,
-                    icon: Icons.straighten,
-                    value: _config.unit,
-                    onChanged: (v) =>
-                        setState(() => _config = _config.copyWith(unit: v)),
-                  ),
-                  _tile(
-                    title: l10n.productColumnsProductServiceTypeLabel,
-                    subtitle: l10n.productColumnsProductServiceTypeSubtitle,
-                    icon: Icons.category_outlined,
-                    value: _config.type,
-                    onChanged: (v) =>
-                        setState(() => _config = _config.copyWith(type: v)),
-                  ),
-                  _tile(
-                    title: l10n.productColumnsMetadataLabel,
-                    subtitle: l10n.productColumnsMetadataSubtitle,
-                    icon: Icons.more_horiz,
-                    value: _config.productMetadata,
+                  _subTile(
+                    title: l10n.productColumnsMetaNotesLabel,
+                    value: _config.metaNotes,
                     onChanged: (v) => setState(
-                        () => _config = _config.copyWith(productMetadata: v)),
-                  ),
-                  if (_config.productMetadata) ...[
-                    _subTile(
-                      title: l10n.productColumnsMetaStorageLocationLabel,
-                      value: _config.metaStorageLocation,
-                      onChanged: (v) => setState(() =>
-                          _config = _config.copyWith(metaStorageLocation: v)),
-                    ),
-                    _subTile(
-                      title: l10n.productColumnsMetaContainerNumberLabel,
-                      value: _config.metaContainerNumber,
-                      onChanged: (v) => setState(() =>
-                          _config = _config.copyWith(metaContainerNumber: v)),
-                    ),
-                    _subTile(
-                      title: l10n.productColumnsMetaBatchNumberLabel,
-                      value: _config.metaBatchNumber,
-                      onChanged: (v) => setState(
-                          () => _config = _config.copyWith(metaBatchNumber: v)),
-                    ),
-                    _subTile(
-                      title: l10n.productColumnsMetaExpiryDateLabel,
-                      value: _config.metaExpiryDate,
-                      onChanged: (v) => setState(
-                          () => _config = _config.copyWith(metaExpiryDate: v)),
-                    ),
-                    _subTile(
-                      title: l10n.productColumnsMetaManufactureDateLabel,
-                      value: _config.metaManufactureDate,
-                      onChanged: (v) => setState(() =>
-                          _config = _config.copyWith(metaManufactureDate: v)),
-                    ),
-                    _subTile(
-                      title: l10n.productColumnsMetaSupplierNameLabel,
-                      value: _config.metaSupplierName,
-                      onChanged: (v) => setState(() =>
-                          _config = _config.copyWith(metaSupplierName: v)),
-                    ),
-                    _subTile(
-                      title: l10n.productColumnsMetaSkuCodeLabel,
-                      value: _config.metaSkuCode,
-                      onChanged: (v) => setState(
-                          () => _config = _config.copyWith(metaSkuCode: v)),
-                    ),
-                    _subTile(
-                      title: l10n.productColumnsMetaNotesLabel,
-                      value: _config.metaNotes,
-                      onChanged: (v) => setState(
-                          () => _config = _config.copyWith(metaNotes: v)),
-                    ),
-                  ],
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(l10n.labelInvoice,
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  _tile(
-                    title: l10n.productColumnsExtraCostLabel,
-                    subtitle: l10n.productColumnsExtraCostSubtitle,
-                    icon: Icons.add_card_outlined,
-                    value: _config.extraCost,
-                    onChanged: (v) => setState(
-                        () => _config = _config.copyWith(extraCost: v)),
+                        () => _config = _config.copyWith(metaNotes: v)),
                   ),
                 ],
-              ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(l10n.labelInvoice,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                _tile(
+                  title: l10n.productColumnsExtraCostLabel,
+                  subtitle: l10n.productColumnsExtraCostSubtitle,
+                  icon: Icons.add_card_outlined,
+                  value: _config.extraCost,
+                  onChanged: (v) =>
+                      setState(() => _config = _config.copyWith(extraCost: v)),
+                ),
+              ],
             ),
           ),
         ),
@@ -339,7 +315,7 @@ class _ProductColumnsSettingsScreenState
       return Scaffold(
         backgroundColor: Theme.of(context).brightness == Brightness.dark
             ? null
-            : Colors.grey[50],
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
         appBar: AppBar(
           title: Text(AppLocalizations.of(context)!.productColumnsScreenTitle),
           backgroundColor: Theme.of(context).appBarTheme.backgroundColor ??
@@ -347,14 +323,14 @@ class _ProductColumnsSettingsScreenState
           foregroundColor: Colors.white,
           centerTitle: false,
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const AppLoadingState(),
       );
     }
 
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark
           ? null
-          : Colors.grey[50],
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
       appBar: AppBar(
         title: Text(AppLocalizations.of(context)!.productColumnsScreenTitle),
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor ??

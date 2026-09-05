@@ -11,6 +11,7 @@ import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/widgets/adaptive/sticky_action_bar.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 class InvoiceSettingsScreenV2 extends ConsumerStatefulWidget {
   final VoidCallback? onNavigateToCustomization;
@@ -553,22 +554,22 @@ class _InvoiceSettingsScreenV2State
     final l10n = AppLocalizations.of(context)!;
     return _fieldWrapV2(
       [
-        TextField(
+        AppTextField(
           controller: invoicePrefixController,
+          labelText: l10n.invoiceSettingsPrefixLabel,
+          prefixIcon: const Icon(Icons.confirmation_number),
           maxLength: 25,
-          decoration: _fieldDecorationV2(context,
-              label: l10n.invoiceSettingsPrefixLabel,
-              prefixIcon: const Icon(Icons.confirmation_number)),
+          filled: true,
         ),
         _invoiceCount == 0
-            ? TextField(
+            ? AppTextField(
                 controller: invoiceStartingNumberController,
+                labelText: l10n.onboardingInvoiceStartingNumberLabel,
+                prefixIcon: const Icon(Icons.looks_one_outlined),
+                helperText: l10n.invoiceSettingsStartingNumberHelper,
                 keyboardType: TextInputType.number,
                 maxLength: 8,
-                decoration: _fieldDecorationV2(context,
-                    label: l10n.onboardingInvoiceStartingNumberLabel,
-                    prefixIcon: const Icon(Icons.looks_one_outlined),
-                    helperText: l10n.invoiceSettingsStartingNumberHelper),
+                filled: true,
               )
             : Container(
                 padding:
@@ -652,54 +653,50 @@ class _InvoiceSettingsScreenV2State
           value: _showTimeInPdf,
           onChanged: (val) => setState(() => _showTimeInPdf = val),
         ),
-        TextField(
+        AppTextField(
           controller: quantityLabelController,
+          labelText: l10n.invoiceSettingsQuantityColumnLabel,
+          hintText: l10n.invoiceSettingsQuantityColumnHint,
+          helperText: l10n.invoiceSettingsQuantityColumnHelper,
+          prefixIcon: const Icon(Icons.tag),
           maxLength: 30,
-          decoration: _fieldDecorationV2(context,
-              label: l10n.invoiceSettingsQuantityColumnLabel,
-              hint: l10n.invoiceSettingsQuantityColumnHint,
-              helperText: l10n.invoiceSettingsQuantityColumnHelper,
-              prefixIcon: const Icon(Icons.tag)),
+          filled: true,
         ),
       ],
       [
-        TextField(
+        AppTextField(
           controller: additionalInfoController,
+          labelText: l10n.invoiceSettingsAdditionalInfoLabel,
+          prefixIcon: const Icon(Icons.info_outline),
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.open_in_full, size: 18),
+            tooltip: l10n.tooltipEditInLargerView,
+            onPressed: () => _editLongTextDialogV2(
+              title: l10n.invoiceSettingsAdditionalInfoLabel,
+              controller: additionalInfoController,
+              maxLength: DefaultValues.additionalNotesLength,
+            ),
+          ),
           maxLength: DefaultValues.additionalNotesLength,
           maxLines: 3,
-          decoration: _fieldDecorationV2(context,
-                  label: l10n.invoiceSettingsAdditionalInfoLabel,
-                  prefixIcon: const Icon(Icons.info_outline))
-              .copyWith(
-                  alignLabelWithHint: true,
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.open_in_full, size: 18),
-                    tooltip: l10n.tooltipEditInLargerView,
-                    onPressed: () => _editLongTextDialogV2(
-                      title: l10n.invoiceSettingsAdditionalInfoLabel,
-                      controller: additionalInfoController,
-                      maxLength: DefaultValues.additionalNotesLength,
-                    ),
-                  )),
+          filled: true,
         ),
-        TextField(
+        AppTextField(
           controller: thankYouController,
+          labelText: l10n.invoiceSettingsThankYouNoteLabel,
+          prefixIcon: const Icon(Icons.favorite_outline),
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.open_in_full, size: 18),
+            tooltip: l10n.tooltipEditInLargerView,
+            onPressed: () => _editLongTextDialogV2(
+              title: l10n.invoiceSettingsThankYouNoteLabel,
+              controller: thankYouController,
+              maxLength: 300,
+            ),
+          ),
           maxLength: 300,
           maxLines: 3,
-          decoration: _fieldDecorationV2(context,
-                  label: l10n.invoiceSettingsThankYouNoteLabel,
-                  prefixIcon: const Icon(Icons.favorite_outline))
-              .copyWith(
-                  alignLabelWithHint: true,
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.open_in_full, size: 18),
-                    tooltip: l10n.tooltipEditInLargerView,
-                    onPressed: () => _editLongTextDialogV2(
-                      title: l10n.invoiceSettingsThankYouNoteLabel,
-                      controller: thankYouController,
-                      maxLength: 300,
-                    ),
-                  )),
+          filled: true,
         ),
         _toggleCardV2(
           title: l10n.invoiceSettingsHideInvoiceNumberLabel,
@@ -716,15 +713,15 @@ class _InvoiceSettingsScreenV2State
     final l10n = AppLocalizations.of(context)!;
     return _fieldWrapV2(
       [
-        TextField(
+        AppTextField(
           controller: defaultTaxRateController,
+          labelText: l10n.onboardingDefaultTaxRateLabel,
+          hintText: l10n.invoiceSettingsTaxRateHint,
+          helperText: l10n.invoiceSettingsTaxRateHelper,
+          prefixIcon: const Icon(Icons.percent),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           maxLength: 5,
-          decoration: _fieldDecorationV2(context,
-              label: l10n.onboardingDefaultTaxRateLabel,
-              hint: l10n.invoiceSettingsTaxRateHint,
-              helperText: l10n.invoiceSettingsTaxRateHelper,
-              prefixIcon: const Icon(Icons.percent)),
+          filled: true,
         ),
       ],
       [
@@ -1342,7 +1339,7 @@ class _InvoiceSettingsScreenV2State
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
+            child: AppSecondaryButton(
               onPressed: widget.onNavigateToCustomization,
               icon: const Icon(Icons.arrow_forward_rounded, size: 14),
               label: Text(
@@ -1350,15 +1347,6 @@ class _InvoiceSettingsScreenV2State
                   style: const TextStyle(
                       fontSize: AppFontSize.xsmall,
                       fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: primaryColor,
-                side: BorderSide(color: primaryColor.withValues(alpha: 0.5)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppBorderRadius.small)),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
             ),
           ),
         ],
@@ -1367,28 +1355,14 @@ class _InvoiceSettingsScreenV2State
   }
 
   Widget _saveButtonV2() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: _isSaving ? null : _saveSettings,
-        icon: _isSaving
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white))
-            : const Icon(Icons.save_rounded),
-        label: Text(_isSaving
-            ? AppLocalizations.of(context)!.createInvoiceSavingEllipsisLabel
-            : AppLocalizations.of(context)!.actionSave),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Theme.of(context).primaryColor,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.small)),
-        ),
-      ),
+    return AppPrimaryButton(
+      onPressed: _isSaving ? null : _saveSettings,
+      icon: const Icon(Icons.save_rounded),
+      label: Text(_isSaving
+          ? AppLocalizations.of(context)!.createInvoiceSavingEllipsisLabel
+          : AppLocalizations.of(context)!.actionSave),
+      expanded: true,
+      loading: _isSaving,
     );
   }
 
@@ -1508,41 +1482,34 @@ class _InvoiceSettingsScreenV2State
   }
 
   Widget _sectionCardV2() {
-    return Card(
-      elevation: 4,
-      color: Theme.of(context).colorScheme.surfaceContainer,
-      shadowColor: Colors.black.withValues(alpha: 0.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        // Compact phones: tighter card padding so form fields get the width.
-        padding: context.isCompact
-            ? const EdgeInsets.fromLTRB(16, 18, 16, 20)
-            : const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+    return AppCard(
+      padding: context.isCompact
+          ? const EdgeInsets.fromLTRB(16, 18, 16, 20)
+          : const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  _navSectionLabelV2(context, _selectedSectionV2),
-                  style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            _sectionContentV2(_selectedSectionV2),
-          ],
-        ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                _navSectionLabelV2(context, _selectedSectionV2),
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          _sectionContentV2(_selectedSectionV2),
+        ],
       ),
     );
   }
@@ -1560,7 +1527,7 @@ class _InvoiceSettingsScreenV2State
           foregroundColor: Colors.white,
           centerTitle: false,
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const AppLoadingState(),
       );
     }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/common/supported_currencies.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 /// Step 2 of the onboarding wizard: currency, date format and invoice
 /// numbering. All values live in [OnboardingScreen]'s state.
@@ -60,15 +61,12 @@ class OnboardingStepInvoice extends StatelessWidget {
             },
           ),
           const SizedBox(height: 16),
-          TextField(
+          AppTextField(
             controller: startingNumberController,
+            labelText: l10n.onboardingInvoiceStartingNumberLabel,
+            prefixIcon: const Icon(Icons.looks_one_outlined),
             keyboardType: TextInputType.number,
             maxLength: 8,
-            decoration: InputDecoration(
-              labelText: l10n.onboardingInvoiceStartingNumberLabel,
-              prefixIcon: const Icon(Icons.looks_one_outlined),
-              border: const OutlineInputBorder(),
-            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -100,14 +98,11 @@ class OnboardingStepInvoice extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          TextField(
+          AppTextField(
             controller: taxRateController,
+            labelText: l10n.onboardingDefaultTaxRateLabel,
+            prefixIcon: const Icon(Icons.percent_rounded),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: l10n.onboardingDefaultTaxRateLabel,
-              prefixIcon: const Icon(Icons.percent_rounded),
-              border: const OutlineInputBorder(),
-            ),
           ),
         ],
       ),

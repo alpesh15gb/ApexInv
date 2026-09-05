@@ -11,6 +11,7 @@ import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/purchase_bill.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/utils/gstin_validator.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 /// Inward supplies (purchase bills) — feeds ITC reporting and GSTR-2.
 class PurchaseBillScreen extends ConsumerStatefulWidget {
@@ -187,8 +188,7 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
     final theme = Theme.of(context);
     final isCompact = context.isCompact;
     return Scaffold(
-      backgroundColor:
-          theme.brightness == Brightness.dark ? null : Colors.grey[50],
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: const Text('Purchase Bills'),
         backgroundColor:
@@ -227,24 +227,15 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
           ),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingState()
                 : _filtered.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.receipt_long_outlined,
-                                size: 64,
-                                color: theme.colorScheme.outlineVariant),
-                            const SizedBox(height: 12),
-                            const Text(
-                                'No purchase bills yet.\nRecord inward supplies to track ITC.',
-                                textAlign: TextAlign.center),
-                          ],
-                        ),
+                    ? const AppEmptyState(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'No purchase bills yet.',
+                        subtitle: 'Record inward supplies to track ITC.',
                       )
                     : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 90),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
                         itemCount: _filtered.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 2),
                         itemBuilder: (context, i) =>
@@ -259,15 +250,9 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
   Widget _billCard(PurchaseBill bill, bool isCompact) {
     final theme = Theme.of(context);
     final df = DateFormat('dd MMM yyyy');
-    return Card(
-      elevation: 1,
-      margin: const EdgeInsets.symmetric(vertical: 5),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: AppCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -335,8 +320,9 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
                         style: TextStyle(
                             fontSize: 11,
                             color: theme.colorScheme.onSurfaceVariant)),
-                    Text(
-                      '${bill.currencySymbol} ${bill.totalAmount.toStringAsFixed(2)}',
+                    AppMoney(
+                      bill.totalAmount,
+                      currencySymbol: bill.currencySymbol,
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,

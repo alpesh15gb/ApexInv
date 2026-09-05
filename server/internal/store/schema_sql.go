@@ -64,4 +64,15 @@ CREATE TABLE IF NOT EXISTS heartbeat_daily (
 );
 CREATE INDEX IF NOT EXISTS idx_heartbeat_day
   ON heartbeat_daily (day);
+
+CREATE TABLE IF NOT EXISTS license_issuances (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email      TEXT NOT NULL,
+  plan       TEXT NOT NULL,
+  seats      INTEGER NOT NULL DEFAULT 1,
+  key_prefix TEXT NOT NULL,
+  issued_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_license_issuances_email
+  ON license_issuances (email);
 `

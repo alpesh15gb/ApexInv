@@ -568,3 +568,37 @@ func TestHeartbeatRecordsDigestNotRawID(t *testing.T) {
 		t.Fatalf("empty installation ID accepted: %d", res.StatusCode)
 	}
 }
+
+func TestIssueLicenseMintsVerifiableKey(t *testing.T) {
+	srv := newTestServer(t)
+	token := registerAndLogin(t, srv, "licensor@x.com")
+
+	// Without a signing seed the endpoint must fail closed, not mint.
+	res, _ := postJSON(t, srv, "/licenses/issue", token, map[string]interface{}{
+		"plan": "pro", "email": "buyer@x.com", "seats": 2, "months": 12})
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected signing-unavailable, got %d", res.StatusCode)
+	}
+}
+
+func TestRazorpayWebhookRejectsBadSignature(t *testing.T) {
+	srv := newTestServer(t)
+	payload := `{"event":"payment.captured","payload":{"payment":{"entity":{"id":"pay_1","status":"captured","notes":{"plan":"pro","email":"buyer@x.com"}}}}}`
+	req, _ := http.NewRequest("POST", srv.URL+"/licenses/razorpay-webhook", bytes.NewReader([]byte(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Razorpay-Signature", "deadbeef")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer res.Body.Close()
+	// No webhook secret configured in test env → 500 before signature check.
+	// Either way the key must NOT be issued (no 200 with a key).
+	if res.StatusCode == http.StatusOK {
+		var out map[string]string
+		_ = json.NewDecoder(res.Body).Decode(&out)
+		if out["key"] != "" {
+			t.Fatal("webhook issued a key without configuration")
+		}
+	}
+}

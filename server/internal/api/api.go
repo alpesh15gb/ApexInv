@@ -62,6 +62,11 @@ func (s *Server) Routes() http.Handler {
 	// installs). Payload is installation UUID + platform + version only.
 	mux.HandleFunc("POST /api/heartbeat", s.handleHeartbeat)
 
+	// License issuance: manual/distributor (authenticated) and automatic
+	// via Razorpay webhook (HMAC-verified, no auth header by design).
+	mux.Handle("POST /licenses/issue", s.requireAuth(http.HandlerFunc(s.handleIssueLicense)))
+	mux.HandleFunc("POST /licenses/razorpay-webhook", s.handleRazorpayWebhook)
+
 	// Authenticated.
 	mux.Handle("POST /companies", s.requireAuth(http.HandlerFunc(s.handleCreateCompany)))
 	mux.Handle("GET /companies", s.requireAuth(http.HandlerFunc(s.handleListCompanies)))

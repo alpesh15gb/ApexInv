@@ -180,12 +180,22 @@ func (s *Store) RecordHeartbeat(ctx context.Context, installationHash, platform,
 // and returns the number removed. Enforces the 90-day retention policy.
 func (s *Store) PruneHeartbeats(ctx context.Context, olderThanDays int) (int64, error) {
 	res, err := s.pool.Exec(ctx,
-		`DELETE FROM heartbeat_daily WHERE day < CURRENT_DATE - ($1 || ' days')::interval`,
+		`DELETE FROM heartbeat_daily WHERE day < CURRENT_DATE - ($1::int * INTERVAL '1 day')`,
 		olderThanDays)
 	if err != nil {
 		return 0, err
 	}
 	return res.RowsAffected(), nil
+}
+
+// RecordLicenseIssuance logs a minted key (prefix only, never the full key)
+// for support reconciliation ("which key did we issue to X").
+func (s *Store) RecordLicenseIssuance(ctx context.Context, email, plan string, seats int, keyPrefix string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO license_issuances (email, plan, seats, key_prefix)
+		VALUES ($1, $2, $3, $4)`,
+		email, plan, seats, keyPrefix)
+	return err
 }
 
 // UserCompanies lists (company_id, name) pairs the user belongs to.

@@ -2,10 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:apexbooks/licensing/license_service.dart';
 
-// Test vector minted with the real license private key (payload:
-// {"email":"test@example.com","exp":0,"iat":1756684800,"plan":"pro",
-//  "seats":2,"v":1}).
+// Test vector minted with the ROTATED license private key (key-2026-09,
+// payload: {"email":"test@example.com","exp":0,"iat":1756684800,"plan":"pro",
+//  "seats":2,"v":1}). The private seed lives only in the server environment
+// (LICENSE_PRIVATE_KEY) — this file holds public signed keys only.
 const _validKey =
+    'AB1.eyJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJleHAiOjAsImlhdCI6MTc1NjY4NDgwMCwicGxhbiI6InBybyIsInNlYXRzIjoyLCJ2IjoxfQ.RY5eTTG3bOmNLim1jzbF4rKKxCtdA5wT5rBaAQbKrCoZcIy7Tc18jPKyFqbr147iGAEVTm8hlv7N2PbaqbsQBA';
+
+// Key signed by the RETIRED (pre-rotation) seed for the same payload.
+// Must REJECT after rotation: the old seed is treated as exposed.
+const _retiredKey =
     'AB1.eyJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJleHAiOjAsImlhdCI6MTc1NjY4NDgwMCwicGxhbiI6InBybyIsInNlYXRzIjoyLCJ2IjoxfQ.a9muJ6mjuV3Z0DQHEbtAUoiP6ZiAcJ8CY0f0fYs3_XOcA3M71PGG-QfxAvcoERhX0nHi1BYYnzhrPChXAhtRAg';
 
 void main() {
@@ -16,6 +22,19 @@ void main() {
     expect(info.email, 'test@example.com');
     expect(info.seats, 2);
     expect(info.expiresAt, isNull);
+  });
+
+  test('rejects keys signed by the retired (exposed) seed', () async {
+    expect(await LicenseService.verifyLicenseKey(_retiredKey), isNull);
+    final status = await LicenseService.getStatus(
+      now: DateTime.utc(2028, 1, 1),
+      licenseKey: _retiredKey,
+      lastSeenIso: null,
+    );
+    // A retired key must not license: far past the trial it reads as
+    // read-only rather than licensed.
+    expect(status.isLicensed, isFalse);
+    expect(status.isReadOnly, isTrue);
   });
 
   test('rejects tampered, malformed, and foreign keys', () async {

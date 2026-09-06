@@ -222,6 +222,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         );
       case 4:
         return InvoiceSettingsScreenV2(
+          currentUser: widget.currentUser,
           onNavigateToCustomization: () {
             setState(() {
               _selectedIndex = customizeIndex;

@@ -36,6 +36,7 @@ import 'package:apexbooks/widgets/app/app.dart';
 import 'package:apexbooks/models/user.dart';
 // import 'package:apexbooks/screens/customer_management_screen.dart';
 import 'package:apexbooks/screens/customer_management_screen_v2.dart';
+import 'package:apexbooks/database/audit_log_service.dart';
 import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/database/report_service.dart';
 import 'package:apexbooks/database/accounting_service.dart';
@@ -126,6 +127,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void initState() {
     super.initState();
     _currentUser = widget.loggedInUser;
+    AuditActor.setCurrent(_currentUser.username);
     SessionManager.initialize(_logoutAndResetSession);
     _loadCreateInvoiceLayout();
     // Anonymous usage heartbeat: at most one ping per day, only with
@@ -266,6 +268,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   void _logoutAndResetSession() async {
     // Forget the persisted auto-login user, then drop to the login screen.
+    AuditActor.clear();
     await ref
         .read(settingsRepositoryProvider)
         .setSetting(SettingKey.currentUserId, '');
@@ -282,6 +285,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         await ref.read(authRepositoryProvider).getUserById(_currentUser.id);
     if (fresh != null && mounted) {
       setState(() => _currentUser = fresh);
+      AuditActor.setCurrent(fresh.username);
     }
   }
 

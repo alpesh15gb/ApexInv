@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 
 import 'package:apexbooks/backup/backup_manager.dart';
 import 'package:apexbooks/database/database_helper.dart';
+import 'package:apexbooks/screens/settings/sync_conflicts_screen.dart';
+import 'package:apexbooks/sync/sync_conflicts.dart';
 import 'package:apexbooks/sync/sync_controller.dart';
 import 'package:apexbooks/sync/sync_engine.dart';
 import 'package:apexbooks/sync/sync_account.dart';
@@ -325,6 +327,8 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
                     onSyncNow: _syncNow,
                     onUnlink: _unlink,
                   ),
+                  const SizedBox(height: 12),
+                  const _ConflictReviewEntry(),
                 ] else if (_needsCompany) ...[
                   Text('Step 2 — Link this device',
                       style: theme.textTheme.titleSmall),
@@ -483,6 +487,88 @@ class _StatusCard extends StatelessWidget {
           ],
         ),
       );
+}
+
+// ── Linked: sync-conflict review entry ────────────────────────────────
+
+/// Entry point to the conflict review log. Shows the unreviewed count and
+/// opens [SyncConflictsScreen]; refreshes the count when returning.
+class _ConflictReviewEntry extends StatefulWidget {
+  const _ConflictReviewEntry();
+
+  @override
+  State<_ConflictReviewEntry> createState() => _ConflictReviewEntryState();
+}
+
+class _ConflictReviewEntryState extends State<_ConflictReviewEntry> {
+  static const _repo = SyncConflictsRepository();
+  Future<int>? _count;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  void _reload() {
+    setState(() {
+      _count = DatabaseHelper().database.then(_repo.unreviewedCount);
+    });
+  }
+
+  Future<void> _open() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SyncConflictsScreen()),
+    );
+    if (mounted) _reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: FutureBuilder<int>(
+        future: _count,
+        builder: (context, snapshot) {
+          final count = snapshot.data ?? 0;
+          return Row(
+            children: [
+              Icon(
+                count == 0
+                    ? Icons.check_circle_outline
+                    : Icons.warning_amber_outlined,
+                color: count == 0 ? Colors.green : theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Sync conflicts', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      count == 0
+                          ? 'No edits were overwritten by another device.'
+                          : '$count overwritten edit${count == 1 ? '' : 's'} '
+                              'need${count == 1 ? 's' : ''} review.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: _open,
+                child: Text(count == 0 ? 'Review log' : 'Review now'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _DataRemovalCard extends StatelessWidget {

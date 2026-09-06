@@ -2,12 +2,16 @@ import 'package:apexbooks/models/purchase_order.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import 'database_helper.dart';
+import 'period_lock_service.dart';
 
 class PurchaseOrderService {
   static final dbHelper = DatabaseHelper();
 
   static Future<void> insertPurchaseOrder(
       PurchaseOrder po, List<PurchaseOrderItem> items) async {
+    // Period lock: backdated orders into a closed period are refused.
+    await PeriodLockService.assertDateUnlocked(po.date,
+        entity: 'Purchase order');
     final db = await dbHelper.database;
     await db.transaction((txn) async {
       await txn.insert('purchase_orders', po.toMap());
@@ -21,6 +25,11 @@ class PurchaseOrderService {
   static Future<void> updatePurchaseOrder(PurchaseOrder po,
       {List<PurchaseOrderItem>? items}) async {
     final db = await dbHelper.database;
+    // Period lock: refuse edits whose stored order OR new date is closed.
+    await PeriodLockService.assertDateUnlocked(po.date,
+        entity: 'Purchase order');
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'purchase_orders', id: po.id, entity: 'Purchase order');
     await db.transaction((txn) async {
       final oldRows = await txn.query('purchase_orders',
           columns: ['status', 'amount_paid'],
@@ -162,6 +171,9 @@ class PurchaseOrderService {
       return;
     }
     final db = await dbHelper.database;
+    // Period lock: status changes rewrite the order.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'purchase_orders', id: id, entity: 'Purchase order');
     await db.transaction((txn) async {
       final rows = await txn.query('purchase_orders',
           columns: ['status'], where: 'id = ?', whereArgs: [id], limit: 1);
@@ -186,6 +198,9 @@ class PurchaseOrderService {
   /// can never leak phantom stock. No-op when already cancelled.
   static Future<void> cancelPurchaseOrder(String id) async {
     final db = await dbHelper.database;
+    // Period lock: cancelling restamps (and possibly de-stocks) the order.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'purchase_orders', id: id, entity: 'Purchase order');
     await db.transaction((txn) async {
       final rows = await txn.query('purchase_orders',
           columns: ['status'], where: 'id = ?', whereArgs: [id], limit: 1);
@@ -253,6 +268,9 @@ class PurchaseOrderService {
   /// linkage, not to this path — each path is individually single-counting.
   static Future<bool> markAsReceived(String id) async {
     final db = await dbHelper.database;
+    // Period lock: receiving books stock against the order date.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'purchase_orders', id: id, entity: 'Purchase order');
     var applied = false;
     await db.transaction((txn) async {
       final orders = await txn.query('purchase_orders',
@@ -291,6 +309,9 @@ class PurchaseOrderService {
 
   static Future<void> deletePurchaseOrder(String id) async {
     final db = await dbHelper.database;
+    // Period lock: a closed-period order cannot be removed.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'purchase_orders', id: id, entity: 'Purchase order');
     await db.transaction((txn) async {
       // A received order still holds its lines in on-hand stock: reverse
       // them (negative delta) in the same txn that removes the order, so a

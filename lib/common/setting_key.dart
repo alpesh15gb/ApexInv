@@ -88,6 +88,7 @@ enum SettingKey {
   analyticsLastSent, // UTC yyyy-MM-dd of the last successful heartbeat; enforces max one ping per day
   licenseKey, // activated license key (AB1.<payload>.<sig>); '' = none, trial rules apply
   licenseLastSeen, // UTC ISO timestamp of the last license check; clock-rollback guard
+  lockedBeforeDate, // financial period lock cutoff (ISO yyyy-MM-dd); postings dated on/before are refused. Absent/empty = unlocked.
 }
 
 extension SettingKeyExtension on SettingKey {
@@ -271,6 +272,8 @@ extension SettingKeyExtension on SettingKey {
         return 'license_key';
       case SettingKey.licenseLastSeen:
         return 'license_last_seen';
+      case SettingKey.lockedBeforeDate:
+        return 'locked_before_date';
     }
   }
 }

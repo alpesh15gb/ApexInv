@@ -2,7 +2,7 @@ import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/database/accounting_service.dart';
-import 'package:apexbooks/database/invoice_service.dart';
+import 'package:apexbooks/database/ledger_service.dart';
 import 'package:apexbooks/services/backend_services.dart';
 import 'package:apexbooks/services/pdf/pdf_report_header.dart';
 import 'package:apexbooks/common/common.dart';
@@ -1307,55 +1307,32 @@ class ReportService {
   /// `expenses` includes operating expenses plus loan interest/fees (6100/6110).
   /// `collected` (invoice receipts incl. note-linked payments) and `paid`
   /// (purchase-bill payments) are cash memo fields, excluded from profit.
+  ///
+  /// The accrual legs (revenue/purchases/expenses/roundOff) are read from
+  /// the persisted journal's trial balance — the same rows that back the
+  /// ledger's trial balance and balance sheet — so P&L and the ledger share
+  /// one posting engine by construction instead of by parallel queries.
   static Future<PnlSummary> getPnl(DateTime from, DateTime to,
       {String? currencyCode}) async {
     final db = await _db.database;
-    // Revenue: same domain calculator as the ledger (InvoiceService), so
-    // accrual revenue here always agrees with ledger Sales.
-    final allInvoices = await InvoiceService.getAllInvoices();
+    final tb = await LedgerService.getTrialBalance(
+        from: from, to: to, currencyCode: currencyCode);
     double revenue = 0;
-    double roundOff = 0;
-    for (final inv in allInvoices) {
-      if (inv.date.isBefore(from) || inv.date.isAfter(to)) continue;
-      if (currencyCode != null && inv.currencyCode != currencyCode) continue;
-      final net = inv.total - inv.tax;
-      if (inv.type == 'Invoice' || inv.type == 'Debit Note') {
-        revenue += net;
-        roundOff += inv.roundOffAmount;
-      } else if (inv.type == 'Credit Note') {
-        revenue -= net;
-        roundOff -= inv.roundOffAmount;
-      }
-    }
-    final expRes = await db.rawQuery(
-      "SELECT COALESCE(SUM(e.amount), 0) AS v FROM expenses e "
-      "LEFT JOIN financial_accounts a ON a.id = e.account_id "
-      "WHERE e.date >= ? AND e.date <= ? "
-      "${currencyCode == null ? '' : 'AND COALESCE(a.currency_code, \'INR\') = ?'}",
-      [
-        from.toIso8601String(),
-        to.toIso8601String(),
-        if (currencyCode != null) currencyCode
-      ],
-    );
-    // Purchases accrual mirrors the ledger ITC rules: eligible (incl. RC)
-    // contributes net, ineligible contributes the full total.
-    final billRows = await db.rawQuery(
-      "SELECT total_amount, total_tax, itc_eligible, reverse_charge, currency_code "
-      "FROM purchase_bills WHERE date >= ? AND date <= ? "
-      "${currencyCode == null ? '' : 'AND currency_code = ?'}",
-      [
-        from.toIso8601String(),
-        to.toIso8601String(),
-        if (currencyCode != null) currencyCode
-      ],
-    );
     double purchases = 0;
-    for (final b in billRows) {
-      final total = (b['total_amount'] as num?)?.toDouble() ?? 0;
-      final tax = (b['total_tax'] as num?)?.toDouble() ?? 0;
-      final eligible = (b['itc_eligible'] as int? ?? 1) == 1;
-      purchases += eligible ? total - tax : total;
+    double expenses = 0;
+    double roundOff = 0;
+    for (final r in tb.rows) {
+      if (r.account == LedgerService.accSales) {
+        revenue += r.credit - r.debit;
+      } else if (r.account == LedgerService.accPurchases) {
+        purchases += r.debit - r.credit;
+      } else if (r.account.startsWith(LedgerService.accExpenses) ||
+          r.account == LedgerService.accInterestExpense ||
+          r.account == LedgerService.accBankFees) {
+        expenses += r.debit - r.credit;
+      } else if (r.account == LedgerService.accRoundOff) {
+        roundOff += r.credit - r.debit;
+      }
     }
     final pbRes = await db.rawQuery(
       "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM purchase_bill_payments p "
@@ -1383,22 +1360,6 @@ class ReportService {
         if (currencyCode != null) currencyCode
       ],
     );
-    // Loan borrowing costs (interest + bank/loan fees) are P&L expenses,
-    // matching the ledger's 6100/6110 postings so profit == netProfit.
-    final loanRes = await db.rawQuery(
-      "SELECT COALESCE(SUM(m.interest_amount + m.fee_amount), 0) AS v "
-      "FROM loan_movements m "
-      "JOIN loan_accounts l ON l.id = m.loan_id "
-      "WHERE m.voided_at IS NULL AND m.date >= ? AND m.date <= ? "
-      "${currencyCode == null ? '' : 'AND l.currency_code = ?'}",
-      [
-        from.toIso8601String(),
-        to.toIso8601String(),
-        if (currencyCode != null) currencyCode
-      ],
-    );
-    final expenses = ((expRes.first['v'] as num?)?.toDouble() ?? 0) +
-        ((loanRes.first['v'] as num?)?.toDouble() ?? 0);
     final paid = (pbRes.first['v'] as num?)?.toDouble() ?? 0;
     final collected = (collectedRes.first['v'] as num?)?.toDouble() ?? 0;
     return PnlSummary(

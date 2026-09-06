@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:apexbooks/common/common.dart';
 import '../common/supported_currencies.dart';
+import '../utils/app_date.dart';
 import 'database_helper.dart';
 
 class SettingsService {
@@ -542,5 +543,26 @@ class SettingsService {
 
   static Future<void> setAllowDuplicateInvoiceItems(bool allow) async {
     await setSetting(SettingKey.allowDuplicateInvoiceItems, allow.toString());
+  }
+
+  /// Financial period lock cutoff, date-only. Null (absent/empty/unparseable)
+  /// means unlocked, so pre-lock databases behave exactly as before.
+  static Future<DateTime?> getLockedBeforeDate() async {
+    final raw = await getSetting(SettingKey.lockedBeforeDate);
+    if (raw == null || raw.trim().isEmpty) return null;
+    final parsed = DateTime.tryParse(raw.trim());
+    if (parsed == null) return null;
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  /// Persists [date] (time-of-day is dropped) or clears the lock when null.
+  /// Prefer [PeriodLockService.setLockedBeforeDate], which audit-logs the
+  /// change; this raw setter exists for symmetry with the other settings.
+  static Future<void> setLockedBeforeDate(DateTime? date) async {
+    if (date == null) {
+      await deleteSetting(SettingKey.lockedBeforeDate);
+    } else {
+      await setSetting(SettingKey.lockedBeforeDate, AppDate.dateKey(date));
+    }
   }
 }

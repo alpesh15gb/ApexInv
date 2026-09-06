@@ -98,3 +98,7 @@ vyapar_backup_report/
 android/key.properties
 android/app/*.jks
 android/app/*.keystore
+
+# Secrets — never commit
+server/.env
+server/LICENSE_ROTATION.md

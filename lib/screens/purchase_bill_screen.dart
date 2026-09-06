@@ -347,16 +347,10 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
           paymentMethod: method,
           notes: notesController.text.trim().isEmpty
               ? null
-              : notesController.text.trim());
+              : notesController.text.trim(),
+          actor: widget.user.username);
       controller.dispose();
       notesController.dispose();
-      await AuditLogService.log(
-        action: 'purchase_payment',
-        username: widget.user.username,
-        entity: 'purchase_bills',
-        entityId: bill.id,
-        details: 'Paid ${amount.toStringAsFixed(2)} to ${bill.supplierName}',
-      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
@@ -961,14 +955,8 @@ class _PurchaseBillScreenState extends ConsumerState<PurchaseBillScreen> {
   }
 
   Future<void> _deleteBill(PurchaseBill bill) async {
-    await PurchaseBillService.softDeleteBill(bill.id);
-    await AuditLogService.log(
-      action: 'purchase_bill_delete',
-      username: widget.user.username,
-      entity: 'purchase_bills',
-      entityId: bill.id,
-      details: bill.supplierName,
-    );
+    await PurchaseBillService.softDeleteBill(bill.id,
+        actor: widget.user.username);
     _load();
   }
 
@@ -1438,19 +1426,11 @@ class _PurchaseBillFormScreenState
         items: computed,
       );
       if (_isEdit) {
-        await PurchaseBillService.updateBill(bill);
+        await PurchaseBillService.updateBill(bill, actor: widget.user.username);
       } else {
-        await PurchaseBillService.insertBill(bill);
+        await PurchaseBillService.insertBill(bill, actor: widget.user.username);
       }
       if (!_isEdit) _billId = const Uuid().v4();
-      await AuditLogService.log(
-        action: _isEdit ? 'purchase_bill_update' : 'purchase_bill_create',
-        username: widget.user.username,
-        entity: 'purchase_bills',
-        entityId: id,
-        details:
-            '${bill.supplierName} · ${bill.totalAmount.toStringAsFixed(2)}',
-      );
       if (!mounted) return;
       if (mounted) setState(() => _isSaving = false);
       Navigator.pop(context, true);

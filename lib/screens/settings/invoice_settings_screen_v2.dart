@@ -8,15 +8,21 @@ import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/supported_currencies.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/screens/settings/financial_period_lock_section.dart';
 import 'package:apexbooks/widgets/adaptive/sticky_action_bar.dart';
 import 'package:apexbooks/widgets/app/app.dart';
 
 class InvoiceSettingsScreenV2 extends ConsumerStatefulWidget {
   final VoidCallback? onNavigateToCustomization;
+  // Admin gate for the Period lock section: SettingsScreen always passes its
+  // currentUser; null keeps the legacy behavior (section visible).
+  final User? currentUser;
 
-  const InvoiceSettingsScreenV2({super.key, this.onNavigateToCustomization});
+  const InvoiceSettingsScreenV2(
+      {super.key, this.onNavigateToCustomization, this.currentUser});
 
   @override
   ConsumerState<InvoiceSettingsScreenV2> createState() =>
@@ -370,6 +376,7 @@ class _InvoiceSettingsScreenV2State
     Icons.percent_rounded,
     Icons.view_list_rounded,
     Icons.person_outline,
+    Icons.lock_outline_rounded,
   ];
 
   String _navSectionLabelV2(BuildContext context, int index) {
@@ -379,7 +386,8 @@ class _InvoiceSettingsScreenV2State
       1 => l10n.invoiceSettingsSectionBranding,
       2 => l10n.invoiceSettingsSectionTax,
       3 => l10n.invoiceSettingsSectionItems,
-      _ => l10n.invoiceSettingsSectionCustomer,
+      4 => l10n.invoiceSettingsSectionCustomer,
+      _ => 'Period lock',
     };
   }
 
@@ -1273,6 +1281,11 @@ class _InvoiceSettingsScreenV2State
         return _sectionItemsV2();
       case 4:
         return _sectionCustomerV2();
+      case 5:
+        return FinancialPeriodLockSection(
+          isAdmin: widget.currentUser?.isAdmin() ?? true,
+          username: widget.currentUser?.username,
+        );
       default:
         return _sectionLanguageV2();
     }

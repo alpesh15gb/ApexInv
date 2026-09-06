@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:apexbooks/utils/app_logger.dart';
 import 'package:apexbooks/utils/password_utils.dart';
+import 'journal_store.dart';
 import 'sync_schema.dart';
 
 const _tag = 'DatabaseHelper';
@@ -18,7 +19,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 54;
+  final dbVersion = 56;
 
   /// Emits when the sync engine finishes applying pulled remote rows, so the
   /// UI layer can refresh its lists. Write-side signaling needs no stream:
@@ -506,6 +507,10 @@ class DatabaseHelper {
         'CREATE INDEX IF NOT EXISTS idx_purchase_bill_payments_bill ON purchase_bill_payments(purchase_bill_id)');
 
     await _createAccountingSchema(db);
+    // Persisted double-entry journal (v56 upgrade parity): fresh installs
+    // must get the journal tables too, otherwise every posting write fails
+    // with "no such table: journal_entries". Idempotent (IF NOT EXISTS).
+    await JournalStore.createSchema(db);
 
     // ── Phase 7: Sync foundation (dbplan.md §3.2) ──
     // Columns + change-capture triggers so every write path (current and
@@ -1634,6 +1639,7 @@ class DatabaseHelper {
     if (oldVersion < 48) {
       await _runMigrationStep(db, 48, 'create_accounting_foundation', () async {
         await _createAccountingSchema(db);
+        await JournalStore.createSchema(db);
       });
       await _runMigrationStep(db, 48, 'link_operational_payments', () async {
         for (final stmt in [
@@ -1857,6 +1863,28 @@ class DatabaseHelper {
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_number_unique ON invoices(invoice_number) WHERE invoice_number IS NOT NULL');
       });
     }
+    if (oldVersion < 55) {
+      // Sync conflict review log (silent-overwrite visibility). Purely
+      // additive: one local-only table, no triggers, no sync traffic. Fresh
+      // installs get it via installSyncCapture; this step covers upgrades.
+      await _runMigrationStep(db, 55, 'create_sync_conflicts', () async {
+        await createSyncConflictsTable(db);
+      });
+    }
+    if (oldVersion < 56) {
+      // Persisted double-entry journal. Purely additive: two new tables, no
+      // existing table touched, no data deleted. The backfill derives one
+      // balanced entry per existing posting source with the same builders
+      // the live write paths and the projection use; any unbalanced entry
+      // aborts this step loudly (logged + rethrown) instead of writing drift.
+      await _runMigrationStep(db, 56, 'create_journal_tables', () async {
+        await JournalStore.createSchema(db);
+      });
+      await _runMigrationStep(db, 56, 'backfill_journal', () async {
+        final count = await JournalStore.backfill(db);
+        AppLogger.d(_tag, 'Backfilled $count journal entries');
+      });
+    }
   }
 
   Future<void> _runMigrationStep(
@@ -1913,6 +1941,13 @@ class DatabaseHelper {
     await db.delete('customers');
     await db.delete('products');
     await db.delete('users');
+    // Keep the persisted journal coherent with its sources: without source
+    // rows the projection fallback is empty, so stale entries would surface
+    // as phantom balances. Debug-only helper; production wipes drop the file.
+    if (await JournalStore.hasTables(db)) {
+      await db.delete('journal_lines');
+      await db.delete('journal_entries');
+    }
   }
 
   Future<void> close() async {

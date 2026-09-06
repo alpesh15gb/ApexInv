@@ -10,6 +10,8 @@ import 'package:apexbooks/models/invoice_payment.dart';
 import 'accounting_service.dart';
 import 'database_helper.dart';
 import 'invoice_service.dart';
+import 'journal_store.dart';
+import 'ledger_service.dart';
 
 class PosTender {
   final String method;
@@ -154,6 +156,19 @@ class PosService {
       }
 
       var previouslyPaid = 0.0;
+      // Persisted sale posting for the POS invoice, same transaction.
+      final posSale = LedgerPostings.saleEntry(
+        date: invoice.date,
+        type: 'Invoice',
+        customerName: customer.name,
+        currencySymbol: currencySymbol,
+        currencyCode: currencyCode,
+        total: invoice.total,
+        payable: invoice.payableTotal,
+        tax: invoice.tax,
+        sourceId: invoice.id,
+      );
+      if (posSale != null) await JournalStore.postBuilt(txn, posSale);
       for (var index = 0; index < tenders.length; index++) {
         final tender = tenders[index];
         final paymentId = _uuid.v4();
@@ -226,6 +241,34 @@ class PosService {
           chequeStatus: isCheque ? 'pending' : 'none',
         );
         await txn.insert('invoice_payments', payment.toMap());
+        // Persisted receipt posting per tender, same transaction. Cheque
+        // tenders sit in Cheques In Hand until the cheque clears.
+        final String tenderAccount;
+        if (isCheque) {
+          tenderAccount = LedgerService.accChequesInHand;
+        } else {
+          final accRows = await txn.query('financial_accounts',
+              columns: ['type', 'name'],
+              where: 'id = ?',
+              whereArgs: [accountId],
+              limit: 1);
+          tenderAccount = JournalStore.accountDisplay(
+              accRows.isEmpty ? null : accRows.first,
+              fallback: tender.method == 'Cash'
+                  ? LedgerService.accCash
+                  : LedgerService.accBank);
+        }
+        await JournalStore.postBuilt(
+            txn,
+            LedgerPostings.receiptEntry(
+              date: invoice.date,
+              customerName: customer.name,
+              method: tender.method,
+              amount: tender.amount,
+              account: tenderAccount,
+              currencyCode: currencyCode,
+              sourceId: paymentId,
+            ));
         payments.add(payment);
         previouslyPaid += tender.amount;
       }

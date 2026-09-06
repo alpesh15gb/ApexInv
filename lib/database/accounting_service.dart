@@ -2,7 +2,11 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:apexbooks/models/accounting.dart';
+import 'audit_log_service.dart';
 import 'database_helper.dart';
+import 'journal_store.dart';
+import 'ledger_service.dart';
+import 'period_lock_service.dart';
 
 /// Cash/bank, cheque and loan posting service.
 ///
@@ -47,8 +51,38 @@ class AccountingService {
       throw ArgumentError('Account type must be cash or bank');
     }
     final db = await _dbHelper.database;
-    await db.insert('financial_accounts', account.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.transaction((txn) async {
+      final old = await txn.query('financial_accounts',
+          where: 'id = ?', whereArgs: [account.id], limit: 1);
+      await txn.insert('financial_accounts', account.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      // Persisted opening-balance posting in the same transaction: mirror
+      // any previous opening, then book the new one. Zero openings post
+      // nothing, matching the projection's skip.
+      final oldOpening = old.isEmpty
+          ? 0.0
+          : (old.first['opening_balance'] as num?)?.toDouble() ?? 0.0;
+      if (oldOpening.abs() > 0.000001 ||
+          account.openingBalance.abs() > 0.000001) {
+        await JournalStore.reverseSource(txn,
+            sourceType: JournalStore.srcAccountOpening, sourceId: account.id);
+      }
+      if (account.openingBalance.abs() > 0.000001) {
+        final prefix = account.type == 'bank'
+            ? LedgerService.accBank
+            : LedgerService.accCash;
+        await JournalStore.postBuilt(
+            txn,
+            LedgerPostings.accountOpeningEntry(
+              date: account.openingDate,
+              accountName: account.name,
+              opening: account.openingBalance,
+              account: '$prefix: ${account.name}',
+              currencyCode: account.currencyCode,
+              sourceId: account.id,
+            ));
+      }
+    });
   }
 
   static Future<void> setAccountActive(String id, bool active) async {
@@ -220,11 +254,14 @@ class AccountingService {
     required DateTime date,
     String reference = '',
     String notes = '',
+    String? actor,
   }) async {
     if (fromAccountId == toAccountId) {
       throw ArgumentError('Transfer accounts must be different');
     }
     if (amount <= 0) throw ArgumentError('Transfer amount must be positive');
+    // Period lock: no money may move with a closed-period value date.
+    await PeriodLockService.assertDateUnlocked(date, entity: 'Transfer');
     final db = await _dbHelper.database;
     final groupId = _uuid.v4();
     await db.transaction((txn) async {
@@ -257,6 +294,40 @@ class AccountingService {
           sourceId: groupId,
           reference: reference,
           notes: notes);
+      // Persisted transfer posting (one entry, both legs) in the same txn.
+      final registerById = {for (final a in accounts) a['id'] as String: a};
+      await JournalStore.postBuilt(
+          txn,
+          LedgerPostings.transferEntry(
+            date: date,
+            legs: [
+              (
+                account: JournalStore.accountDisplay(
+                    registerById[fromAccountId],
+                    fallback: LedgerService.accCash),
+                amount: -amount,
+              ),
+              (
+                account: JournalStore.accountDisplay(registerById[toAccountId],
+                    fallback: LedgerService.accCash),
+                amount: amount,
+              ),
+            ],
+            currencyCode:
+                registerById[fromAccountId]?['currency_code'] as String? ??
+                    'INR',
+            sourceId: groupId,
+          ));
+      final resolved = AuditActor.resolve(actor);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.transfer,
+        username: resolved,
+        entity: 'transfers',
+        entityId: groupId,
+        details:
+            '$fromAccountId → $toAccountId · amount: ${amount.toStringAsFixed(2)}${reference.trim().isEmpty ? '' : ' · $reference'}',
+      );
     });
   }
 
@@ -265,19 +336,53 @@ class AccountingService {
     required double amount,
     required DateTime date,
     required String reason,
+    String? actor,
   }) async {
     if (reason.trim().isEmpty) {
       throw ArgumentError('An adjustment reason is required');
     }
+    // Period lock: manual balance adjustments cannot rewrite closed books.
+    await PeriodLockService.assertDateUnlocked(date, entity: 'Adjustment');
     final db = await _dbHelper.database;
-    await db.transaction((txn) => insertMovement(txn,
-        accountId: accountId,
-        kind: 'adjustment',
-        amount: amount,
-        date: date,
-        sourceType: 'adjustment',
-        sourceId: _uuid.v4(),
-        notes: reason));
+    await db.transaction((txn) async {
+      final movement = await insertMovement(txn,
+          accountId: accountId,
+          kind: 'adjustment',
+          amount: amount,
+          date: date,
+          sourceType: 'adjustment',
+          sourceId: _uuid.v4(),
+          notes: reason);
+      // Persisted adjustment posting in the same txn, keyed by the movement
+      // so the read union matches it to the projected adjustment row.
+      final accRows = await txn.query('financial_accounts',
+          columns: ['type', 'name', 'currency_code'],
+          where: 'id = ?',
+          whereArgs: [accountId],
+          limit: 1);
+      final acc = accRows.isEmpty ? null : accRows.first;
+      await JournalStore.postBuilt(
+          txn,
+          LedgerPostings.adjustmentEntry(
+            date: date,
+            notes: reason,
+            amount: amount,
+            account: JournalStore.accountDisplay(acc,
+                fallback: LedgerService.accCash),
+            currencyCode: acc?['currency_code'] as String? ?? 'INR',
+            sourceId: movement.id,
+          ));
+      final resolved = AuditActor.resolve(actor);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.adjustment,
+        username: resolved,
+        entity: 'adjustments',
+        entityId: movement.id,
+        details:
+            'account: $accountId · amount: ${amount.toStringAsFixed(2)} · reason: ${reason.trim()}',
+      );
+    });
   }
 
   static Future<void> reverseSource({
@@ -349,12 +454,33 @@ class AccountingService {
     if (status == 'cleared') {
       await reverseSourceInTransaction(executor,
           sourceType: 'cheque', sourceId: chequeId, reason: reason);
+      // Mirror the persisted cheque-clear posting; the bounced cheque leaves
+      // the projection, and so does its linked payment (cheque_status filter).
+      await JournalStore.reverseSource(executor,
+          sourceType: JournalStore.srcChequeClear, sourceId: chequeId);
+      await _mirrorLinkedPaymentJournal(executor, rows.first);
       await executor.update('cheques', {'status': 'bounced', 'notes': reason},
           where: 'id = ?', whereArgs: [chequeId]);
     } else {
+      // A cancelled pending/deposited cheque drops its linked payment from
+      // the projection (cheque_status filter) — mirror that receipt leg.
+      await _mirrorLinkedPaymentJournal(executor, rows.first);
       await executor.update('cheques', {'status': 'cancelled', 'notes': reason},
           where: 'id = ?', whereArgs: [chequeId]);
     }
+  }
+
+  /// Mirrors the persisted receipt/purchase-payment posting linked to a
+  /// cheque row (no-op for manual cheques and for already-mirrored legs).
+  static Future<void> _mirrorLinkedPaymentJournal(
+      DatabaseExecutor executor, Map<String, dynamic> chequeRow) async {
+    final sourceType = JournalStore.paymentSourceForCheque(
+        chequeRow['source_type'] as String? ?? '');
+    if (sourceType == null) return;
+    final paymentId = chequeRow['source_id'] as String?;
+    if (paymentId == null || paymentId.isEmpty) return;
+    await JournalStore.reverseSource(executor,
+        sourceType: sourceType, sourceId: paymentId);
   }
 
   static Future<String> createCheque(
@@ -411,17 +537,35 @@ class AccountingService {
     required String chequeNumber,
     required DateTime chequeDate,
     String notes = '',
+    String? actor,
   }) async {
+    // Period lock: cheques dated in a closed period cannot be registered.
+    await PeriodLockService.assertDateUnlocked(chequeDate,
+        entity: 'Cheque $chequeNumber');
     final db = await _dbHelper.database;
-    return db.transaction((txn) => createCheque(txn,
-        direction: direction,
-        partyName: partyName,
-        amount: amount,
-        chequeNumber: chequeNumber,
-        chequeDate: chequeDate,
-        sourceType: 'manual_cheque',
-        sourceId: _uuid.v4(),
-        notes: notes));
+    late String chequeId;
+    await db.transaction((txn) async {
+      chequeId = await createCheque(txn,
+          direction: direction,
+          partyName: partyName,
+          amount: amount,
+          chequeNumber: chequeNumber,
+          chequeDate: chequeDate,
+          sourceType: 'manual_cheque',
+          sourceId: _uuid.v4(),
+          notes: notes);
+      final resolved = AuditActor.resolve(actor);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.chequeCreate,
+        username: resolved,
+        entity: 'cheques',
+        entityId: chequeId,
+        details:
+            '$direction · $partyName · amount: ${amount.toStringAsFixed(2)} · no: ${chequeNumber.trim()}',
+      );
+    });
+    return chequeId;
   }
 
   static const _chequeTransitions = <String, Set<String>>{
@@ -437,8 +581,28 @@ class AccountingService {
     required String status,
     String? bankAccountId,
     String notes = '',
+    String? actor,
   }) async {
     final db = await _dbHelper.database;
+    // Period lock: transitions move value for the cheque's period. Refuse
+    // when the cheque itself is dated in a closed period, or when the
+    // transition (posted today) would land in one.
+    final chequeRows = await db.query('cheques',
+        columns: ['cheque_number', 'cheque_date'],
+        where: 'id = ?',
+        whereArgs: [chequeId],
+        limit: 1);
+    if (chequeRows.isNotEmpty) {
+      final chequeDate =
+          DateTime.tryParse(chequeRows.first['cheque_date'] as String? ?? '');
+      if (chequeDate != null) {
+        await PeriodLockService.assertDateUnlocked(chequeDate,
+            entity:
+                'Cheque ${chequeRows.first['cheque_number'] as String? ?? chequeId}');
+      }
+    }
+    await PeriodLockService.assertDateUnlocked(DateTime.now(),
+        entity: 'Cheque transition');
     await db.transaction((txn) async {
       final rows = await txn.query('cheques',
           where: 'id = ?', whereArgs: [chequeId], limit: 1);
@@ -460,6 +624,9 @@ class AccountingService {
         if (bankRows.isEmpty) throw StateError('Bank account not found');
       }
 
+      // One timestamp for the transition so the register movement, the
+      // cheque row, and the persisted journal posting share one date.
+      final now = DateTime.now();
       if (status == 'cleared') {
         await insertMovement(txn,
             accountId: resolvedBank!,
@@ -468,11 +635,30 @@ class AccountingService {
                 : 'cheque_payment',
             amount:
                 cheque.direction == 'received' ? cheque.amount : -cheque.amount,
-            date: DateTime.now(),
+            date: now,
             sourceType: 'cheque',
             sourceId: cheque.id,
             reference: cheque.chequeNumber,
             notes: notes);
+        // Persisted cheque-clear posting in the same transaction.
+        final bankRows = await txn.query('financial_accounts',
+            columns: ['type', 'name'],
+            where: 'id = ?',
+            whereArgs: [resolvedBank],
+            limit: 1);
+        await JournalStore.postBuilt(
+            txn,
+            LedgerPostings.chequeClearEntry(
+              date: now,
+              chequeNumber: cheque.chequeNumber,
+              amount: cheque.amount,
+              bankAccount: JournalStore.accountDisplay(
+                  bankRows.isEmpty ? null : bankRows.first,
+                  fallback: LedgerService.accBank),
+              received: cheque.direction == 'received',
+              currencyCode: cheque.currencyCode,
+              sourceId: cheque.id,
+            ));
       } else if (status == 'bounced' && cheque.status == 'cleared') {
         final clearRows = await txn.query('financial_transactions',
             where: 'source_type = ? AND source_id = ? AND reversal_of IS NULL',
@@ -482,13 +668,22 @@ class AccountingService {
               accountId: movement['account_id'] as String,
               kind: 'cheque_bounce',
               amount: -((movement['amount'] as num).toDouble()),
-              date: DateTime.now(),
+              date: now,
               sourceType: 'cheque',
               sourceId: cheque.id,
               reference: cheque.chequeNumber,
               notes: notes,
               reversalOf: movement['id'] as String);
         }
+        // The bounced cheque (and its linked payment, via the cheque_status
+        // filter) leaves the projection — mirror both persisted legs.
+        await JournalStore.reverseSource(txn,
+            sourceType: JournalStore.srcChequeClear, sourceId: cheque.id);
+        await _mirrorLinkedPaymentJournal(txn, rows.first);
+      } else if (status == 'bounced' || status == 'cancelled') {
+        // A pending/deposited cheque that never clears drops its linked
+        // payment from the projection — mirror that receipt leg.
+        await _mirrorLinkedPaymentJournal(txn, rows.first);
       }
 
       await txn.update(
@@ -496,10 +691,8 @@ class AccountingService {
           {
             'status': status,
             'bank_account_id': resolvedBank,
-            if (status == 'deposited')
-              'deposited_at': DateTime.now().toIso8601String(),
-            if (status == 'cleared')
-              'cleared_at': DateTime.now().toIso8601String(),
+            if (status == 'deposited') 'deposited_at': now.toIso8601String(),
+            if (status == 'cleared') 'cleared_at': now.toIso8601String(),
             if (notes.trim().isNotEmpty) 'notes': notes.trim(),
           },
           where: 'id = ?',
@@ -538,6 +731,17 @@ class AccountingService {
           }
         }
       }
+      final from = cheque.status;
+      final resolved = AuditActor.resolve(actor);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.chequeTransition,
+        username: resolved,
+        entity: 'cheques',
+        entityId: cheque.id,
+        details:
+            'status: $from → $status · amount: ${cheque.amount.toStringAsFixed(2)} · no: ${cheque.chequeNumber} · ${cheque.partyName}',
+      );
     });
   }
 
@@ -572,13 +776,16 @@ class AccountingService {
         .toDouble();
   }
 
-  static Future<void> createLoan(LoanAccount loan) async {
+  static Future<void> createLoan(LoanAccount loan, {String? actor}) async {
     if (loan.originalPrincipal <= 0) {
       throw ArgumentError('Loan principal must be positive');
     }
     if (loan.disbursementAccountId == null) {
       throw ArgumentError('A disbursement account is required');
     }
+    // Period lock: loans drawn in a closed period cannot be (re)booked.
+    await PeriodLockService.assertDateUnlocked(loan.startDate,
+        entity: 'Loan ${loan.name}');
     final db = await _dbHelper.database;
     await db.transaction((txn) async {
       await txn.insert('loan_accounts', loan.toMap());
@@ -604,6 +811,34 @@ class AccountingService {
           sourceId: movementId,
           reference: loan.name,
           notes: loan.notes);
+      // Persisted drawdown posting in the same transaction.
+      final disbRows = await txn.query('financial_accounts',
+          columns: ['type', 'name'],
+          where: 'id = ?',
+          whereArgs: [loan.disbursementAccountId],
+          limit: 1);
+      await JournalStore.postBuilt(
+          txn,
+          LedgerPostings.loanDrawdownEntry(
+            date: loan.startDate,
+            loanName: loan.name,
+            principal: loan.originalPrincipal,
+            account: JournalStore.accountDisplay(
+                disbRows.isEmpty ? null : disbRows.first,
+                fallback: LedgerService.accCash),
+            currencyCode: loan.currencyCode,
+            sourceId: movementId,
+          ));
+      final resolved = AuditActor.resolve(actor);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.loanCreate,
+        username: resolved,
+        entity: 'loan_accounts',
+        entityId: loan.id,
+        details:
+            '${loan.name} · ${loan.lender} · principal: ${loan.originalPrincipal.toStringAsFixed(2)}',
+      );
     });
   }
 
@@ -616,12 +851,15 @@ class AccountingService {
     required DateTime date,
     String reference = '',
     String notes = '',
+    String? actor,
   }) async {
     if (principal < 0 || interest < 0 || fees < 0) {
       throw ArgumentError('Repayment parts cannot be negative');
     }
     final total = principal + interest + fees;
     if (total <= 0) throw ArgumentError('Repayment amount is required');
+    // Period lock: repayments cannot be posted into a closed period.
+    await PeriodLockService.assertDateUnlocked(date, entity: 'Loan repayment');
     final outstanding = await getLoanOutstanding(loanId);
     if (principal > outstanding + 0.005) {
       throw StateError('Principal exceeds the outstanding loan balance');
@@ -650,10 +888,51 @@ class AccountingService {
           sourceId: movementId,
           reference: reference,
           notes: notes);
+      // Persisted repayment posting (principal + interest + fees split) in
+      // the same transaction.
+      final loanRows = await txn.query('loan_accounts',
+          columns: ['name', 'currency_code'],
+          where: 'id = ?',
+          whereArgs: [loanId],
+          limit: 1);
+      final payRows = await txn.query('financial_accounts',
+          columns: ['type', 'name'],
+          where: 'id = ?',
+          whereArgs: [accountId],
+          limit: 1);
+      await JournalStore.postBuilt(
+          txn,
+          LedgerPostings.loanRepaymentEntry(
+            date: date,
+            loanName: loanRows.isEmpty
+                ? ''
+                : (loanRows.first['name'] as String? ?? ''),
+            principal: principal,
+            interest: interest,
+            fees: fees,
+            account: JournalStore.accountDisplay(
+                payRows.isEmpty ? null : payRows.first,
+                fallback: LedgerService.accCash),
+            currencyCode: loanRows.isEmpty
+                ? 'INR'
+                : (loanRows.first['currency_code'] as String? ?? 'INR'),
+            sourceId: movementId,
+          ));
       if ((outstanding - principal).abs() <= 0.005) {
         await txn.update('loan_accounts', {'status': 'closed'},
             where: 'id = ?', whereArgs: [loanId]);
       }
+      final after = (outstanding - principal).clamp(0, double.infinity);
+      final resolved = AuditActor.resolve(actor);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.loanRepay,
+        username: resolved,
+        entity: 'loan_movements',
+        entityId: movementId,
+        details:
+            'loan: $loanId · principal: ${principal.toStringAsFixed(2)} + interest: ${interest.toStringAsFixed(2)} + fees: ${fees.toStringAsFixed(2)} · outstanding: ${outstanding.toStringAsFixed(2)} → ${after.toStringAsFixed(2)}',
+      );
     });
   }
 }

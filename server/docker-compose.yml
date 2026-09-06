@@ -23,6 +23,11 @@ services:
     environment:
       DATABASE_URL: postgres://apexbooks:${POSTGRES_PASSWORD}@postgres:5432/apexbooks?sslmode=disable
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      LICENSE_PRIVATE_KEY: ${LICENSE_PRIVATE_KEY:?set LICENSE_PRIVATE_KEY in .env}
+      LICENSE_ISSUER_ALLOWLIST: ${LICENSE_ISSUER_ALLOWLIST:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:?set RAZORPAY_WEBHOOK_SECRET in .env}
       PORT: "8080"
     ports:
       - "127.0.0.1:8080:8080"   # host-level nginx proxies to this

@@ -6,6 +6,8 @@ import 'package:uuid/uuid.dart';
 import 'package:apexbooks/models/sale_order.dart';
 import 'database_helper.dart';
 import 'invoice_service.dart';
+import 'journal_store.dart';
+import 'ledger_service.dart';
 import 'settings_service.dart';
 
 class SaleOrderService {
@@ -308,6 +310,16 @@ class SaleOrderService {
       await txn.update(
           'sale_orders', {'status': fulfilled ? 'fulfilled' : 'partial'},
           where: 'id = ?', whereArgs: [order.id]);
+      // Persisted sale posting for the converted invoice, same transaction.
+      final invHeader = await txn.query('invoices',
+          where: 'id = ?', whereArgs: [invoiceId], limit: 1);
+      if (invHeader.isNotEmpty) {
+        final invItems = await txn.query('invoice_items',
+            where: 'invoice_id = ?', whereArgs: [invoiceId]);
+        final posting =
+            LedgerPostings.saleEntryFromMaps(invHeader.first, invItems);
+        if (posting != null) await JournalStore.postBuilt(txn, posting);
+      }
     });
     return invoiceId;
   }

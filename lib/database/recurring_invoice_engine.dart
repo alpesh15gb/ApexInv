@@ -3,6 +3,8 @@ import 'package:uuid/uuid.dart';
 
 import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/database/invoice_service.dart';
+import 'package:apexbooks/database/journal_store.dart';
+import 'package:apexbooks/database/ledger_service.dart';
 import 'package:apexbooks/utils/app_logger.dart';
 
 const _tag = 'RecurringInvoiceEngine';
@@ -140,6 +142,10 @@ class RecurringInvoiceEngine {
         for (final item in pendingItems[i]) {
           await txn.insert('invoice_items', item);
         }
+        // Persisted sale posting for the generated instance, same txn.
+        final posting =
+            LedgerPostings.saleEntryFromMaps(pending[i], pendingItems[i]);
+        if (posting != null) await JournalStore.postBuilt(txn, posting);
       }
       await txn.update(
         'invoices',

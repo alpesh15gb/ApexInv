@@ -198,6 +198,67 @@ func (s *Store) RecordLicenseIssuance(ctx context.Context, email, plan string, s
 	return err
 }
 
+// ── License payments: webhook idempotency + key delivery ────────────────
+
+// RazorpayEventSeen reports whether eventID was already processed.
+func (s *Store) RazorpayEventSeen(ctx context.Context, eventID string) (bool, error) {
+	var ok bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM razorpay_events WHERE event_id = $1)`,
+		eventID).Scan(&ok)
+	return ok, err
+}
+
+// RecordRazorpayEvent marks eventID as processed. Duplicate inserts are a
+// no-op (ON CONFLICT DO NOTHING) so concurrent redeliveries stay safe.
+func (s *Store) RecordRazorpayEvent(ctx context.Context, eventID, paymentID, email, keyPrefix string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO razorpay_events (event_id, payment_id, email, key_prefix)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (event_id) DO NOTHING`,
+		eventID, paymentID, email, keyPrefix)
+	return err
+}
+
+// LicenseDelivery is one issued key retrievable post-payment.
+type LicenseDelivery struct {
+	PaymentID      string
+	Email          string
+	InstallationID string
+	Plan           string
+	Seats          int
+	Key            string
+}
+
+// DeliveryByPayment fetches the delivery for paymentID (exact match).
+// found=false when no such payment was ever fulfilled.
+func (s *Store) DeliveryByPayment(ctx context.Context, paymentID string) (d LicenseDelivery, found bool, err error) {
+	err = s.pool.QueryRow(ctx, `
+		SELECT payment_id, email, installation_id, plan, seats, license_key
+		FROM license_deliveries WHERE payment_id = $1`, paymentID).
+		Scan(&d.PaymentID, &d.Email, &d.InstallationID, &d.Plan, &d.Seats, &d.Key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return LicenseDelivery{}, false, nil
+	}
+	if err != nil {
+		return LicenseDelivery{}, false, err
+	}
+	return d, true, nil
+}
+
+// RecordDelivery stores the issued key for paymentID. First issuance wins
+// (ON CONFLICT DO NOTHING): a retried webhook for the same payment must
+// return the ORIGINAL key, never mint a second one.
+func (s *Store) RecordDelivery(ctx context.Context, d LicenseDelivery) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO license_deliveries
+		  (payment_id, email, installation_id, plan, seats, license_key)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (payment_id) DO NOTHING`,
+		d.PaymentID, d.Email, d.InstallationID, d.Plan, d.Seats, d.Key)
+	return err
+}
+
 // UserCompanies lists (company_id, name) pairs the user belongs to.
 func (s *Store) UserCompanies(ctx context.Context, userID string) ([]Company, error) {
 	rows, err := s.pool.Query(ctx, `

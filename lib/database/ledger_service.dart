@@ -1,5 +1,9 @@
 import '../database/database_helper.dart';
+import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/models/additional_cost.dart';
 import 'invoice_service.dart';
+import 'journal_store.dart';
 
 /// Double-entry ledger engine (v47 reports): derives a general journal from
 /// the operational tables and serves trial balance + balance sheet.
@@ -56,7 +60,39 @@ class LedgerService {
   }
 
   /// Full journal for the given range (or everything when null).
+  ///
+  /// Persisted-first: entries posted at transaction time ([JournalStore])
+  /// win; sources without persisted rows (raw seeds, sync pull-apply, bulk
+  /// imports, pre-backfill data) fall back to the deterministic projection
+  /// for those sources only. Both sides share the [LedgerPostings] builders,
+  /// so figures are identical either way.
   static Future<List<JournalEntry>> getJournal({
+    DateTime? from,
+    DateTime? to,
+    String? currencyCode,
+  }) async {
+    final projected =
+        await getProjectedJournal(from: from, to: to, currencyCode: currencyCode);
+    final db = await _db.database;
+    if (!await JournalStore.hasTables(db)) return projected;
+    final persisted = await JournalStore.readEntries(db,
+        from: from, to: to, currencyCode: currencyCode);
+    if (persisted.isEmpty) return projected;
+    final keys = <String>{
+      for (final e in persisted) '${e.sourceType}\x00${e.sourceId}'
+    };
+    final merged = [
+      ...persisted,
+      for (final e in projected)
+        if (!keys.contains('${e.sourceType}\x00${e.sourceId}')) e,
+    ]..sort((a, b) => a.date.compareTo(b.date));
+    return merged;
+  }
+
+  /// Deterministic live projection of the journal from the source tables.
+  /// This is the fallback for unposted sources and the oracle for the
+  /// parity test; every persisted posting replicates one of these entries.
+  static Future<List<JournalEntry>> getProjectedJournal({
     DateTime? from,
     DateTime? to,
     String? currencyCode,
@@ -110,52 +146,24 @@ class LedgerService {
       // AR settles at the payable total (rounded when the invoice opts in);
       // Sales and GST stay exact and the paise difference posts explicitly
       // to Round Off so the trial balance still proves out.
-      final total = inv.total;
-      final payable = inv.payableTotal;
-      final tax = inv.tax;
-      final net = total - tax;
-      final roundOff = payable - total;
-      LedgerLine? roundOffLine;
-      if (roundOff.abs() >= 0.005) {
-        roundOffLine = roundOff > 0
-            ? LedgerLine(account: accRoundOff, debit: 0, credit: roundOff)
-            : LedgerLine(account: accRoundOff, debit: -roundOff, credit: 0);
-      }
-      if (inv.type == 'Credit Note') {
-        entries.add(JournalEntry(
-          date: inv.date,
-          description:
-              'Credit Note — ${inv.customer.name} (${inv.currencySymbol}${payable.toStringAsFixed(2)})',
-          lines: [
-            LedgerLine(account: accSales, debit: net, credit: 0),
-            LedgerLine(account: accGstOutput, debit: tax, credit: 0),
-            if (roundOffLine != null)
-              LedgerLine(
-                  account: roundOffLine.account,
-                  debit: roundOffLine.credit,
-                  credit: roundOffLine.debit),
-            LedgerLine(account: accReceivable, debit: 0, credit: payable),
-          ],
-        ));
-      } else {
-        entries.add(JournalEntry(
-          date: inv.date,
-          description:
-              '${inv.type == 'Debit Note' ? 'Debit Note' : 'Sale'} — ${inv.customer.name} (${inv.currencySymbol}${payable.toStringAsFixed(2)})',
-          lines: [
-            LedgerLine(account: accReceivable, debit: payable, credit: 0),
-            LedgerLine(account: accSales, debit: 0, credit: net),
-            LedgerLine(account: accGstOutput, debit: 0, credit: tax),
-            if (roundOffLine != null) roundOffLine,
-          ],
-        ));
-      }
+      final salePosting = LedgerPostings.saleEntry(
+        date: inv.date,
+        type: inv.type,
+        customerName: inv.customer.name,
+        currencySymbol: inv.currencySymbol,
+        currencyCode: inv.currencyCode,
+        total: inv.total,
+        payable: inv.payableTotal,
+        tax: inv.tax,
+        sourceId: inv.id,
+      );
+      if (salePosting != null) entries.add(salePosting);
     }
 
     // 2. Receipts → Cash/Bank / AR
     final payments = await db.rawQuery('''
-      SELECT p.date_paid AS d, p.amount_paid, p.payment_method,
-             p.account_id, p.cheque_status, i.customer_name
+      SELECT p.id, p.date_paid AS d, p.amount_paid, p.payment_method,
+             p.account_id, p.cheque_status, i.customer_name, i.currency_code
       FROM invoice_payments p
       JOIN invoices i ON i.id = p.invoice_id
       WHERE i.deleted_at IS NULL AND i.type IN ('Invoice', 'Credit Note', 'Debit Note')
@@ -170,27 +178,22 @@ class LedgerService {
           ? accChequesInHand
           : accountName(p['account_id'] as String?,
               fallback: method == 'Cash' ? accCash : accBank);
-      entries.add(JournalEntry(
+      entries.add(LedgerPostings.receiptEntry(
         date: DateTime.tryParse(p['d'] as String? ?? '') ?? DateTime.now(),
-        description: 'Receipt — ${p['customer_name'] ?? ''} ($method)',
-        lines: [
-          LedgerLine(
-              account: account,
-              debit: (p['amount_paid'] as num?)?.toDouble() ?? 0,
-              credit: 0),
-          LedgerLine(
-              account: accReceivable,
-              debit: 0,
-              credit: (p['amount_paid'] as num?)?.toDouble() ?? 0),
-        ],
+        customerName: p['customer_name'] as String? ?? '',
+        method: method,
+        amount: (p['amount_paid'] as num?)?.toDouble() ?? 0,
+        account: account,
+        currencyCode: p['currency_code'] as String? ?? 'INR',
+        sourceId: p['id'] as String,
       ));
     }
 
     // 3. Expenses → expense / Cash
     final expenses = await db.rawQuery('''
-      SELECT e.date, e.description, e.amount, e.account_id,
+      SELECT e.id, e.date, e.description, e.amount, e.account_id,
              c.name AS category
-              , a.currency_code
+              , a.currency_code, COALESCE(a.currency_code, 'INR') AS cur
       FROM expenses e
       LEFT JOIN expense_categories c ON c.id = e.category_id
       LEFT JOIN financial_accounts a ON a.id = e.account_id
@@ -200,17 +203,14 @@ class LedgerService {
     for (final e in expenses) {
       final category = e['category'] as String? ?? 'General';
       final amount = (e['amount'] as num?)?.toDouble() ?? 0;
-      entries.add(JournalEntry(
+      entries.add(LedgerPostings.expenseEntry(
         date: DateTime.tryParse(e['date'] as String? ?? '') ?? DateTime.now(),
-        description: 'Expense — ${e['description'] ?? category}',
-        lines: [
-          LedgerLine(
-              account: '$accExpenses: $category', debit: amount, credit: 0),
-          LedgerLine(
-              account: accountName(e['account_id'] as String?),
-              debit: 0,
-              credit: amount),
-        ],
+        description: e['description'] as String?,
+        category: category,
+        amount: amount,
+        account: accountName(e['account_id'] as String?),
+        currencyCode: e['cur'] as String? ?? 'INR',
+        sourceId: e['id'] as String,
       ));
     }
 
@@ -241,77 +241,32 @@ class LedgerService {
     for (final b in bills) {
       final total = (b['total_amount'] as num?)?.toDouble() ?? 0;
       final tax = (b['total_tax'] as num?)?.toDouble() ?? 0;
-      final net = total - tax;
       final isEligible = (b['itc_eligible'] as int? ?? 1) == 1;
-      final isRC = (b['reverse_charge'] as int? ?? 0) == 1 && isEligible;
       // Supplier payable: RC tax goes to the government, not the supplier.
-      final payableTotal = isRC ? net : total;
-      // P&L charge: ineligible bills expense the full total (tax included).
-      final purchaseDebit = isEligible ? net : total;
       // Pre-v47 bills stored only an aggregate paid amount. Preserve that
       // historical payment as a bill-date cash movement when no payment
       // records exist, while newer bills use the dated payment rows below.
       final recordedPaid = (b['recorded_paid'] as num?)?.toDouble() ?? 0;
-      final legacyPaid = recordedPaid <= 0
-          ? ((b['amount_paid'] as num?)?.toDouble() ?? 0)
-              .clamp(0, payableTotal)
-              .toDouble()
-          : 0.0;
       final date =
           DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime.now();
-      final tag = isRC ? ' [RC]' : (!isEligible ? ' [ITC ineligible]' : '');
-      if (!isEligible) {
-        entries.add(JournalEntry(
-          date: date,
-          description:
-              'Purchase — ${b['supplier_name'] ?? ''} (${b['currency_symbol'] ?? ''}${total.toStringAsFixed(2)})$tag',
-          lines: [
-            LedgerLine(account: accPurchases, debit: purchaseDebit, credit: 0),
-            if (legacyPaid > 0)
-              LedgerLine(account: accCash, debit: 0, credit: legacyPaid),
-            LedgerLine(
-                account: accPayable,
-                debit: 0,
-                credit: payableTotal - legacyPaid),
-          ],
-        ));
-      } else if (isRC) {
-        entries.add(JournalEntry(
-          date: date,
-          description:
-              'Purchase — ${b['supplier_name'] ?? ''} (${b['currency_symbol'] ?? ''}${total.toStringAsFixed(2)})$tag',
-          lines: [
-            LedgerLine(account: accPurchases, debit: net, credit: 0),
-            LedgerLine(account: accGstInput, debit: tax, credit: 0),
-            LedgerLine(account: accGstOutput, debit: 0, credit: tax),
-            if (legacyPaid > 0)
-              LedgerLine(account: accCash, debit: 0, credit: legacyPaid),
-            LedgerLine(
-                account: accPayable,
-                debit: 0,
-                credit: payableTotal - legacyPaid),
-          ],
-        ));
-      } else {
-        entries.add(JournalEntry(
-          date: date,
-          description:
-              'Purchase — ${b['supplier_name'] ?? ''} (${b['currency_symbol'] ?? ''}${total.toStringAsFixed(2)})',
-          lines: [
-            LedgerLine(account: accPurchases, debit: net, credit: 0),
-            LedgerLine(account: accGstInput, debit: tax, credit: 0),
-            if (legacyPaid > 0)
-              LedgerLine(account: accCash, debit: 0, credit: legacyPaid),
-            LedgerLine(
-                account: accPayable, debit: 0, credit: total - legacyPaid),
-          ],
-        ));
-      }
+      entries.add(LedgerPostings.purchaseEntry(
+        date: date,
+        supplierName: b['supplier_name'] as String? ?? '',
+        currencySymbol: b['currency_symbol'] as String? ?? '',
+        currencyCode: b['currency_code'] as String? ?? 'INR',
+        total: total,
+        tax: tax,
+        amountPaidColumn: (b['amount_paid'] as num?)?.toDouble() ?? 0,
+        recordedPaid: recordedPaid,
+        itcEligible: isEligible,
+        reverseCharge: (b['reverse_charge'] as int? ?? 0) == 1,
+        sourceId: b['id'] as String,
+      ));
     }
 
     // Purchase payments settle payables on their actual payment date.
     final purchasePayments = await db.rawQuery('''
-      SELECT p.date_paid AS d, p.amount_paid, p.payment_method,
+      SELECT p.id, p.date_paid AS d, p.amount_paid, p.payment_method,
              p.account_id, p.cheque_status,
              b.supplier_name, b.currency_code
       FROM purchase_bill_payments p
@@ -329,13 +284,13 @@ class LedgerService {
           ? accChequesIssued
           : accountName(p['account_id'] as String?,
               fallback: method == 'Cash' ? accCash : accBank);
-      entries.add(JournalEntry(
+      entries.add(LedgerPostings.purchasePaymentEntry(
         date: DateTime.tryParse(p['d'] as String? ?? '') ?? DateTime.now(),
-        description: 'Purchase payment — ${p['supplier_name'] ?? ''}',
-        lines: [
-          LedgerLine(account: accPayable, debit: amount, credit: 0),
-          LedgerLine(account: paymentAccount, debit: 0, credit: amount),
-        ],
+        supplierName: p['supplier_name'] as String? ?? '',
+        amount: amount,
+        account: paymentAccount,
+        currencyCode: p['currency_code'] as String? ?? 'INR',
+        sourceId: p['id'] as String,
       ));
     }
 
@@ -354,21 +309,16 @@ class LedgerService {
       final bank =
           accountName(cheque['bank_account_id'] as String?, fallback: accBank);
       final received = cheque['direction'] == 'received';
-      entries.add(JournalEntry(
-          date: DateTime.tryParse(cheque['cleared_at'] as String? ?? '') ??
-              DateTime.now(),
-          description: 'Cheque cleared — ${cheque['cheque_number']}',
-          lines: received
-              ? [
-                  LedgerLine(account: bank, debit: amount, credit: 0),
-                  LedgerLine(
-                      account: accChequesInHand, debit: 0, credit: amount),
-                ]
-              : [
-                  LedgerLine(
-                      account: accChequesIssued, debit: amount, credit: 0),
-                  LedgerLine(account: bank, debit: 0, credit: amount),
-                ]));
+      entries.add(LedgerPostings.chequeClearEntry(
+        date: DateTime.tryParse(cheque['cleared_at'] as String? ?? '') ??
+            DateTime.now(),
+        chequeNumber: cheque['cheque_number'] as String? ?? '',
+        amount: amount,
+        bankAccount: bank,
+        received: received,
+        currencyCode: cheque['currency_code'] as String? ?? 'INR',
+        sourceId: cheque['id'] as String,
+      ));
     }
 
     // 6. Cash/bank transfers and explicit balance adjustments.
@@ -384,41 +334,37 @@ class LedgerService {
     for (final row in registerRows) {
       if (row['source_type'] == 'adjustment') {
         final amount = (row['amount'] as num).toDouble();
-        entries.add(JournalEntry(
-            date: DateTime.parse(row['date'] as String),
-            description: 'Balance adjustment — ${row['notes'] ?? ''}',
-            lines: amount >= 0
-                ? [
-                    LedgerLine(
-                        account: accountName(row['account_id'] as String),
-                        debit: amount,
-                        credit: 0),
-                    LedgerLine(account: accCapital, debit: 0, credit: amount),
-                  ]
-                : [
-                    LedgerLine(account: accCapital, debit: -amount, credit: 0),
-                    LedgerLine(
-                        account: accountName(row['account_id'] as String),
-                        debit: 0,
-                        credit: -amount),
-                  ]));
+        final accountId = row['account_id'] as String;
+        entries.add(LedgerPostings.adjustmentEntry(
+          date: DateTime.parse(row['date'] as String),
+          notes: row['notes'] as String?,
+          amount: amount,
+          account: accountName(accountId),
+          currencyCode: accountById[accountId]?['currency_code'] as String? ??
+              'INR',
+          sourceId: row['id'] as String,
+        ));
       } else {
         transferGroups
             .putIfAbsent(row['source_id'] as String, () => [])
             .add(row);
       }
     }
-    for (final group in transferGroups.values) {
-      entries.add(JournalEntry(
-          date: DateTime.parse(group.first['date'] as String),
-          description: 'Account transfer',
-          lines: group.map((row) {
-            final amount = (row['amount'] as num).toDouble();
-            return LedgerLine(
-                account: accountName(row['account_id'] as String),
-                debit: amount > 0 ? amount : 0,
-                credit: amount < 0 ? -amount : 0);
-          }).toList()));
+    for (final group in transferGroups.entries) {
+      entries.add(LedgerPostings.transferEntry(
+        date: DateTime.parse(group.value.first['date'] as String),
+        legs: [
+          for (final row in group.value)
+            (
+              account: accountName(row['account_id'] as String),
+              amount: (row['amount'] as num).toDouble(),
+            ),
+        ],
+        currencyCode: accountById[group.value.first['account_id'] as String]
+                ?['currency_code'] as String? ??
+            'INR',
+        sourceId: group.key,
+      ));
     }
 
     // 7. Borrowed-loan principal and repayment splits.
@@ -436,35 +382,26 @@ class LedgerService {
       final fees = (movement['fee_amount'] as num?)?.toDouble() ?? 0;
       final account = accountName(movement['account_id'] as String?);
       final drawdown = movement['type'] == 'drawdown';
-      entries.add(JournalEntry(
-          date: DateTime.parse(movement['date'] as String),
-          description: '${drawdown ? 'Loan drawdown' : 'Loan repayment'} — '
-              '${movement['loan_name']}',
-          lines: drawdown
-              ? [
-                  LedgerLine(account: account, debit: principal, credit: 0),
-                  LedgerLine(
-                      account: '$accLoanLiability: ${movement['loan_name']}',
-                      debit: 0,
-                      credit: principal),
-                ]
-              : [
-                  LedgerLine(
-                      account: '$accLoanLiability: ${movement['loan_name']}',
-                      debit: principal,
-                      credit: 0),
-                  if (interest > 0)
-                    LedgerLine(
-                        account: accInterestExpense,
-                        debit: interest,
-                        credit: 0),
-                  if (fees > 0)
-                    LedgerLine(account: accBankFees, debit: fees, credit: 0),
-                  LedgerLine(
-                      account: account,
-                      debit: 0,
-                      credit: principal + interest + fees),
-                ]));
+      final loanName = movement['loan_name'] as String? ?? '';
+      entries.add(drawdown
+          ? LedgerPostings.loanDrawdownEntry(
+              date: DateTime.parse(movement['date'] as String),
+              loanName: loanName,
+              principal: principal,
+              account: account,
+              currencyCode: movement['currency_code'] as String? ?? 'INR',
+              sourceId: movement['id'] as String,
+            )
+          : LedgerPostings.loanRepaymentEntry(
+              date: DateTime.parse(movement['date'] as String),
+              loanName: loanName,
+              principal: principal,
+              interest: interest,
+              fees: fees,
+              account: account,
+              currencyCode: movement['currency_code'] as String? ?? 'INR',
+              sourceId: movement['id'] as String,
+            ));
     }
 
     // Account-level opening balances are equity-funded balance forwards, not
@@ -481,18 +418,14 @@ class LedgerService {
         continue;
       }
       final account = accountName(accountRow['id'] as String);
-      entries.add(JournalEntry(
-          date: openingDate,
-          description: 'Opening balance — ${accountRow['name']}',
-          lines: opening >= 0
-              ? [
-                  LedgerLine(account: account, debit: opening, credit: 0),
-                  LedgerLine(account: accCapital, debit: 0, credit: opening),
-                ]
-              : [
-                  LedgerLine(account: accCapital, debit: -opening, credit: 0),
-                  LedgerLine(account: account, debit: 0, credit: -opening),
-                ]));
+      entries.add(LedgerPostings.accountOpeningEntry(
+        date: openingDate,
+        accountName: accountRow['name'] as String? ?? '',
+        opening: opening,
+        account: account,
+        currencyCode: accountRow['currency_code'] as String? ?? 'INR',
+        sourceId: accountRow['id'] as String,
+      ));
     }
 
     // 8. Opening capital is a real opening entry, never omitted because other
@@ -512,6 +445,9 @@ class LedgerService {
           LedgerLine(account: accCash, debit: capital, credit: 0),
           LedgerLine(account: accCapital, debit: 0, credit: capital),
         ],
+        sourceType: LedgerPostings.srcOpeningCapital,
+        sourceId: LedgerPostings.srcOpeningCapital,
+        currencyCode: 'INR',
       ));
     }
 
@@ -630,10 +566,24 @@ class JournalEntry {
   final DateTime date;
   final String description;
   final List<LedgerLine> lines;
+
+  /// Persisted-journal identity: (sourceType, sourceId) keys the source
+  /// mutation that posted this entry, so reads can prefer persisted rows
+  /// over the projection fallback per source. [currencyCode] is the
+  /// entry's reporting currency; [reversalOf] links mirror entries.
+  final String sourceType;
+  final String sourceId;
+  final String currencyCode;
+  final String? reversalOf;
+
   const JournalEntry({
     required this.date,
     required this.description,
     required this.lines,
+    this.sourceType = '',
+    this.sourceId = '',
+    this.currencyCode = 'INR',
+    this.reversalOf,
   });
 
   double get total => lines.fold(0, (s, l) => s + l.debit);
@@ -708,4 +658,462 @@ class BalanceSheet {
   double get assets => cash + chequesInHand + receivable + gstInput;
   double get liabilitiesAndEquity =>
       payables + chequesIssued + loans + gstOutput + openingCapital + netProfit;
+}
+
+/// Pure posting-rule builders shared by the live projection
+/// ([LedgerService.getProjectedJournal]), the transaction-time writers, and
+/// the v56 backfill — one definition of every debit/credit so persisted
+/// rows and projected rows agree paise-for-paise. Builders never touch the
+/// database; callers supply already-loaded values.
+class LedgerPostings {
+  static const srcOpeningCapital = 'opening_capital';
+
+  static bool isPostingType(String type) =>
+      type == 'Invoice' || type == 'Credit Note' || type == 'Debit Note';
+
+  static LedgerLine? _roundOffLine(double roundOff) {
+    if (roundOff.abs() < 0.005) return null;
+    return roundOff > 0
+        ? LedgerLine(
+            account: LedgerService.accRoundOff, debit: 0, credit: roundOff)
+        : LedgerLine(
+            account: LedgerService.accRoundOff, debit: -roundOff, credit: 0);
+  }
+
+  /// Sale / credit-note / debit-note entry. Null unless [type] posts.
+  static JournalEntry? saleEntry({
+    required DateTime date,
+    required String type,
+    required String customerName,
+    required String currencySymbol,
+    required String currencyCode,
+    required double total,
+    required double payable,
+    required double tax,
+    required String sourceId,
+  }) {
+    if (!isPostingType(type)) return null;
+    final net = total - tax;
+    final roundOffLine = _roundOffLine(payable - total);
+    if (type == 'Credit Note') {
+      return JournalEntry(
+        date: date,
+        description:
+            'Credit Note — $customerName ($currencySymbol${payable.toStringAsFixed(2)})',
+        lines: [
+          LedgerLine(account: LedgerService.accSales, debit: net, credit: 0),
+          LedgerLine(
+              account: LedgerService.accGstOutput, debit: tax, credit: 0),
+          if (roundOffLine != null)
+            LedgerLine(
+                account: roundOffLine.account,
+                debit: roundOffLine.credit,
+                credit: roundOffLine.debit),
+          LedgerLine(
+              account: LedgerService.accReceivable, debit: 0, credit: payable),
+        ],
+        sourceType: JournalStore.srcInvoice,
+        sourceId: sourceId,
+        currencyCode: currencyCode,
+      );
+    }
+    return JournalEntry(
+      date: date,
+      description:
+          '${type == 'Debit Note' ? 'Debit Note' : 'Sale'} — $customerName ($currencySymbol${payable.toStringAsFixed(2)})',
+      lines: [
+        LedgerLine(
+            account: LedgerService.accReceivable, debit: payable, credit: 0),
+        LedgerLine(account: LedgerService.accSales, debit: 0, credit: net),
+        LedgerLine(
+            account: LedgerService.accGstOutput, debit: 0, credit: tax),
+        if (roundOffLine != null) roundOffLine,
+      ],
+      sourceType: JournalStore.srcInvoice,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  /// Sale entry from raw `invoices` + `invoice_items` row maps (restore,
+  /// backfill, sale-order conversion, recurring engine). Null unless the
+  /// header type posts to the ledger.
+  static JournalEntry? saleEntryFromMaps(
+    Map<String, dynamic> header,
+    List<Map<String, dynamic>> itemRows,
+  ) {
+    final type = header['type'] as String? ?? '';
+    if (!isPostingType(type)) return null;
+    final taxMode = TaxModeExtension.fromKey(header['tax_mode'] as String?);
+    final taxRate = (header['tax_rate'] as num?)?.toDouble() ?? 0.0;
+    final additional = AdditionalCost.listFromJson(
+            header['additional_costs'] as String?)
+        .fold(0.0, (sum, c) => sum + c.amount);
+    final totals = InvoiceTotalsCalculator.totals(
+      lines: itemRows.map((r) => InvoiceTotalsCalculator.lineFromDbRow(r,
+          taxMode: taxMode, globalTaxRatePercent: taxRate * 100)),
+      taxMode: taxMode,
+      globalTaxRate: taxRate,
+      globalTaxRateFormat: TaxRateFormat.fraction,
+      additionalCostsTotal: additional,
+      invoiceDiscountType: InvoiceDiscountTypeExtension.fromKey(
+          header['invoice_discount_type'] as String?),
+      invoiceDiscountValue:
+          (header['invoice_discount_value'] as num?)?.toDouble() ?? 0.0,
+    );
+    final payable = InvoiceTotalsCalculator.payableTotal(totals.total,
+        enabled: (header['round_off'] as int?) == 1);
+    return saleEntry(
+      date: DateTime.tryParse(header['date'] as String? ?? '') ?? DateTime.now(),
+      type: type,
+      customerName: header['customer_name'] as String? ?? '',
+      currencySymbol: header['currency_symbol'] as String? ?? '₹',
+      currencyCode: header['currency_code'] as String? ?? 'INR',
+      total: totals.total,
+      payable: payable,
+      tax: totals.tax,
+      sourceId: header['id'] as String,
+    );
+  }
+
+  static JournalEntry receiptEntry({
+    required DateTime date,
+    required String customerName,
+    required String method,
+    required double amount,
+    required String account,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Receipt — $customerName ($method)',
+      lines: [
+        LedgerLine(account: account, debit: amount, credit: 0),
+        LedgerLine(
+            account: LedgerService.accReceivable, debit: 0, credit: amount),
+      ],
+      sourceType: JournalStore.srcReceipt,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  static JournalEntry expenseEntry({
+    required DateTime date,
+    required String? description,
+    required String category,
+    required double amount,
+    required String account,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Expense — ${description ?? category}',
+      lines: [
+        LedgerLine(
+            account: '${LedgerService.accExpenses}: $category',
+            debit: amount,
+            credit: 0),
+        LedgerLine(account: account, debit: 0, credit: amount),
+      ],
+      sourceType: JournalStore.srcExpense,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  /// Purchase-bill entry honouring ITC eligibility and reverse charge.
+  /// [recordedPaid] is the live payment-rows sum (cheque-filtered);
+  /// [amountPaidColumn] the header aggregate kept for pre-v47 bills.
+  static JournalEntry purchaseEntry({
+    required DateTime date,
+    required String supplierName,
+    required String currencySymbol,
+    required String currencyCode,
+    required double total,
+    required double tax,
+    required double amountPaidColumn,
+    required double recordedPaid,
+    required bool itcEligible,
+    required bool reverseCharge,
+    required String sourceId,
+  }) {
+    final net = total - tax;
+    final isEligible = itcEligible;
+    final isRC = reverseCharge && isEligible;
+    final payableTotal = isRC ? net : total;
+    final purchaseDebit = isEligible ? net : total;
+    final legacyPaid = recordedPaid <= 0
+        ? amountPaidColumn.clamp(0, payableTotal).toDouble()
+        : 0.0;
+    final tag = isRC ? ' [RC]' : (!isEligible ? ' [ITC ineligible]' : '');
+    final description =
+        'Purchase — $supplierName ($currencySymbol${total.toStringAsFixed(2)})$tag';
+    final cashLeg = legacyPaid > 0
+        ? [
+            LedgerLine(
+                account: LedgerService.accCash, debit: 0, credit: legacyPaid)
+          ]
+        : <LedgerLine>[];
+    if (!isEligible) {
+      return JournalEntry(
+        date: date,
+        description: description,
+        lines: [
+          LedgerLine(
+              account: LedgerService.accPurchases,
+              debit: purchaseDebit,
+              credit: 0),
+          ...cashLeg,
+          LedgerLine(
+              account: LedgerService.accPayable,
+              debit: 0,
+              credit: payableTotal - legacyPaid),
+        ],
+        sourceType: JournalStore.srcPurchaseBill,
+        sourceId: sourceId,
+        currencyCode: currencyCode,
+      );
+    }
+    if (isRC) {
+      return JournalEntry(
+        date: date,
+        description: description,
+        lines: [
+          LedgerLine(
+              account: LedgerService.accPurchases, debit: net, credit: 0),
+          LedgerLine(
+              account: LedgerService.accGstInput, debit: tax, credit: 0),
+          LedgerLine(
+              account: LedgerService.accGstOutput, debit: 0, credit: tax),
+          ...cashLeg,
+          LedgerLine(
+              account: LedgerService.accPayable,
+              debit: 0,
+              credit: payableTotal - legacyPaid),
+        ],
+        sourceType: JournalStore.srcPurchaseBill,
+        sourceId: sourceId,
+        currencyCode: currencyCode,
+      );
+    }
+    return JournalEntry(
+      date: date,
+      description: description,
+      lines: [
+        LedgerLine(account: LedgerService.accPurchases, debit: net, credit: 0),
+        LedgerLine(account: LedgerService.accGstInput, debit: tax, credit: 0),
+        ...cashLeg,
+        LedgerLine(
+            account: LedgerService.accPayable,
+            debit: 0,
+            credit: total - legacyPaid),
+      ],
+      sourceType: JournalStore.srcPurchaseBill,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  static JournalEntry purchasePaymentEntry({
+    required DateTime date,
+    required String supplierName,
+    required double amount,
+    required String account,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Purchase payment — $supplierName',
+      lines: [
+        LedgerLine(
+            account: LedgerService.accPayable, debit: amount, credit: 0),
+        LedgerLine(account: account, debit: 0, credit: amount),
+      ],
+      sourceType: JournalStore.srcPurchasePayment,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  static JournalEntry chequeClearEntry({
+    required DateTime date,
+    required String chequeNumber,
+    required double amount,
+    required String bankAccount,
+    required bool received,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Cheque cleared — $chequeNumber',
+      lines: received
+          ? [
+              LedgerLine(account: bankAccount, debit: amount, credit: 0),
+              LedgerLine(
+                  account: LedgerService.accChequesInHand,
+                  debit: 0,
+                  credit: amount),
+            ]
+          : [
+              LedgerLine(
+                  account: LedgerService.accChequesIssued,
+                  debit: amount,
+                  credit: 0),
+              LedgerLine(account: bankAccount, debit: 0, credit: amount),
+            ],
+      sourceType: JournalStore.srcChequeClear,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  static JournalEntry transferEntry({
+    required DateTime date,
+    required List<({String account, double amount})> legs,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Account transfer',
+      lines: [
+        for (final leg in legs)
+          LedgerLine(
+              account: leg.account,
+              debit: leg.amount > 0 ? leg.amount : 0,
+              credit: leg.amount < 0 ? -leg.amount : 0),
+      ],
+      sourceType: JournalStore.srcTransfer,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  static JournalEntry adjustmentEntry({
+    required DateTime date,
+    required String? notes,
+    required double amount,
+    required String account,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Balance adjustment — ${notes ?? ''}',
+      lines: amount >= 0
+          ? [
+              LedgerLine(account: account, debit: amount, credit: 0),
+              LedgerLine(
+                  account: LedgerService.accCapital, debit: 0, credit: amount),
+            ]
+          : [
+              LedgerLine(
+                  account: LedgerService.accCapital,
+                  debit: -amount,
+                  credit: 0),
+              LedgerLine(account: account, debit: 0, credit: -amount),
+            ],
+      sourceType: JournalStore.srcAdjustment,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  static JournalEntry loanDrawdownEntry({
+    required DateTime date,
+    required String loanName,
+    required double principal,
+    required String account,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Loan drawdown — $loanName',
+      lines: [
+        LedgerLine(account: account, debit: principal, credit: 0),
+        LedgerLine(
+            account: '${LedgerService.accLoanLiability}: $loanName',
+            debit: 0,
+            credit: principal),
+      ],
+      sourceType: JournalStore.srcLoanMovement,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  static JournalEntry loanRepaymentEntry({
+    required DateTime date,
+    required String loanName,
+    required double principal,
+    required double interest,
+    required double fees,
+    required String account,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Loan repayment — $loanName',
+      lines: [
+        LedgerLine(
+            account: '${LedgerService.accLoanLiability}: $loanName',
+            debit: principal,
+            credit: 0),
+        if (interest > 0)
+          LedgerLine(
+              account: LedgerService.accInterestExpense,
+              debit: interest,
+              credit: 0),
+        if (fees > 0)
+          LedgerLine(
+              account: LedgerService.accBankFees, debit: fees, credit: 0),
+        LedgerLine(
+            account: account,
+            debit: 0,
+            credit: principal + interest + fees),
+      ],
+      sourceType: JournalStore.srcLoanMovement,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  static JournalEntry accountOpeningEntry({
+    required DateTime date,
+    required String accountName,
+    required double opening,
+    required String account,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Opening balance — $accountName',
+      lines: opening >= 0
+          ? [
+              LedgerLine(account: account, debit: opening, credit: 0),
+              LedgerLine(
+                  account: LedgerService.accCapital,
+                  debit: 0,
+                  credit: opening),
+            ]
+          : [
+              LedgerLine(
+                  account: LedgerService.accCapital,
+                  debit: -opening,
+                  credit: 0),
+              LedgerLine(account: account, debit: 0, credit: -opening),
+            ],
+      sourceType: JournalStore.srcAccountOpening,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
 }

@@ -8,7 +8,11 @@ import 'package:apexbooks/models/invoice_payment.dart';
 import 'package:apexbooks/utils/app_date.dart';
 import 'package:apexbooks/utils/app_logger.dart';
 import 'accounting_service.dart';
+import 'audit_log_service.dart';
 import 'database_helper.dart';
+import 'journal_store.dart';
+import 'ledger_service.dart';
+import 'period_lock_service.dart';
 
 const _tag = 'PaymentService';
 
@@ -26,6 +30,45 @@ class PaymentService {
         msg.contains('receipt_number');
   }
 
+  /// Posts the persisted receipt entry for one invoice payment, resolving
+  /// the same cash/bank display account the projection derives. Cheque
+  /// tenders post to Cheques In Hand until the cheque clears.
+  static Future<void> _postReceiptJournal(
+    DatabaseExecutor txn, {
+    required Invoice invoice,
+    required String paymentId,
+    required double amountPaid,
+    required DateTime datePaid,
+    String? paymentMethod,
+    String? accountId,
+  }) async {
+    final method = paymentMethod ?? 'Cash';
+    final String account;
+    if (paymentMethod == 'Check') {
+      account = LedgerService.accChequesInHand;
+    } else {
+      final rows = await txn.query('financial_accounts',
+          columns: ['type', 'name'],
+          where: 'id = ?',
+          whereArgs: [accountId],
+          limit: 1);
+      account = JournalStore.accountDisplay(rows.isEmpty ? null : rows.first,
+          fallback:
+              method == 'Cash' ? LedgerService.accCash : LedgerService.accBank);
+    }
+    await JournalStore.postBuilt(
+        txn,
+        LedgerPostings.receiptEntry(
+          date: datePaid,
+          customerName: invoice.customer.name,
+          method: method,
+          amount: amountPaid,
+          account: account,
+          currencyCode: invoice.currencyCode,
+          sourceId: paymentId,
+        ));
+  }
+
   // ─────────────────────────────────────────────
   // Add a payment — all snapshot fields computed inside a transaction.
   // Returns the fully populated InvoicePayment that was persisted.
@@ -38,10 +81,13 @@ class PaymentService {
     String? chequeNumber,
     DateTime? chequeDate,
     String? accountId,
+    String? actor,
   }) async {
     if (!amountPaid.isFinite) {
       throw ArgumentError('Payment amount must be a finite number');
     }
+    // Period lock: no receipts may be posted into a closed period.
+    await PeriodLockService.assertDateUnlocked(datePaid, entity: 'Payment');
     final db = await _dbHelper.database;
     // Retry on receipt-number UNIQUE conflicts: two concurrent txns can read
     // the same MAX suffix and pick the same next number; the loser re-reads
@@ -152,6 +198,22 @@ class PaymentService {
           );
 
           await txn.insert('invoice_payments', saved.toMap());
+          await _postReceiptJournal(txn,
+              invoice: invoice,
+              paymentId: paymentId,
+              amountPaid: amountPaid,
+              datePaid: datePaid,
+              paymentMethod: paymentMethod,
+              accountId: resolvedAccountId);
+          await AuditLogService.logInTxn(
+            txn,
+            action: AuditActions.paymentAdd,
+            username: AuditActor.resolve(actor),
+            entity: 'invoice_payments',
+            entityId: paymentId,
+            details:
+                'invoice: ${invoice.invoiceNumber ?? invoice.id} · amount: ${amountPaid.toStringAsFixed(2)} · paid: ${previouslyPaid.toStringAsFixed(2)} → ${(previouslyPaid + amountPaid).toStringAsFixed(2)} · balance: ${balanceAfter.toStringAsFixed(2)}',
+          );
           AppLogger.d(
               _tag, 'Payment added: ${saved.receiptNumber} — ₹$amountPaid');
         });
@@ -172,10 +234,13 @@ class PaymentService {
     String? paymentMethod,
     String? notes,
     String? accountId,
+    String? actor,
   }) async {
     if (paymentMethod == 'Check') {
       throw StateError('Record cheque payments individually');
     }
+    // Period lock: the whole batch posts on [datePaid].
+    await PeriodLockService.assertDateUnlocked(datePaid, entity: 'Payment');
     final db = await _dbHelper.database;
     for (var attempt = 0;; attempt++) {
       try {
@@ -235,6 +300,22 @@ class PaymentService {
                 sourceId: payment.id,
                 reference: receiptNumber,
                 notes: notes ?? '');
+            await _postReceiptJournal(txn,
+                invoice: invoice,
+                paymentId: payment.id,
+                amountPaid: amountPaid,
+                datePaid: datePaid,
+                paymentMethod: paymentMethod,
+                accountId: payment.accountId);
+            await AuditLogService.logInTxn(
+              txn,
+              action: AuditActions.paymentAdd,
+              username: AuditActor.resolve(actor),
+              entity: 'invoice_payments',
+              entityId: payment.id,
+              details:
+                  'invoice: ${invoice.invoiceNumber ?? invoice.id} · amount: ${amountPaid.toStringAsFixed(2)} · paid: ${previouslyPaid.toStringAsFixed(2)} → ${(previouslyPaid + amountPaid).toStringAsFixed(2)}',
+            );
             count++;
           }
         });
@@ -258,10 +339,13 @@ class PaymentService {
     String? paymentMethod,
     String? notes,
     String? accountId,
+    String? actor,
   }) async {
     if (paymentMethod == 'Check') {
       throw StateError('Record cheque payments individually');
     }
+    // Period lock: every allocation posts on [datePaid].
+    await PeriodLockService.assertDateUnlocked(datePaid, entity: 'Payment');
     final db = await _dbHelper.database;
     for (var attempt = 0;; attempt++) {
       try {
@@ -335,6 +419,22 @@ class PaymentService {
                 sourceId: payment.id,
                 reference: receiptNumber,
                 notes: notes ?? '');
+            await _postReceiptJournal(txn,
+                invoice: invoice,
+                paymentId: payment.id,
+                amountPaid: amountPaid,
+                datePaid: datePaid,
+                paymentMethod: paymentMethod,
+                accountId: payment.accountId);
+            await AuditLogService.logInTxn(
+              txn,
+              action: AuditActions.paymentAdd,
+              username: AuditActor.resolve(actor),
+              entity: 'invoice_payments',
+              entityId: payment.id,
+              details:
+                  'invoice: ${invoice.invoiceNumber ?? invoice.id} · amount: ${amountPaid.toStringAsFixed(2)} · paid: ${previouslyPaid.toStringAsFixed(2)} → ${(previouslyPaid + amountPaid).toStringAsFixed(2)} · balance: ${balanceAfter.toStringAsFixed(2)}',
+            );
             saved.add(payment);
           }
         });
@@ -400,15 +500,22 @@ class PaymentService {
   // cash movements. Bounced/cancelled cheques are terminal in the state
   // machine, so their delete skips the cheque transition (safe no-op) and
   // only reverses the cash leg once + deletes the row.
-  static Future<void> deletePayment(String paymentId) async {
+  static Future<void> deletePayment(String paymentId, {String? actor}) async {
     final db = await _dbHelper.database;
+    // Period lock: a closed-period receipt cannot be removed.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'invoice_payments',
+        id: paymentId,
+        dateColumn: 'date_paid',
+        entity: 'Payment');
     await db.transaction((txn) async {
       final rows = await txn.query('invoice_payments',
-          columns: ['cheque_id', 'cheque_status'],
-          where: 'id = ?',
-          whereArgs: [paymentId],
-          limit: 1);
+          where: 'id = ?', whereArgs: [paymentId], limit: 1);
       if (rows.isEmpty) return;
+      final beforeAmount = (rows.first['amount_paid'] as num?)?.toDouble() ?? 0;
+      final beforeInvoice = rows.first['invoice_id'] as String? ?? '';
+      final beforeReceipt =
+          rows.first['receipt_number'] as String? ?? paymentId;
       final chequeId = rows.first['cheque_id'] as String?;
       final chequeStatus = (rows.first['cheque_status'] as String?) ?? 'none';
       if (chequeId != null && chequeId.isNotEmpty) {
@@ -434,8 +541,27 @@ class PaymentService {
             sourceId: paymentId,
             reason: 'Payment removed by administrator');
       }
+      // Mirror the persisted receipt posting (and the cheque-clear posting
+      // when a cheque was involved); the deleted row leaves the projection,
+      // so both sides net to zero. Idempotent — already-mirrored entries
+      // are skipped.
+      await JournalStore.reverseSource(txn,
+          sourceType: JournalStore.srcReceipt, sourceId: paymentId);
+      if (chequeId != null && chequeId.isNotEmpty) {
+        await JournalStore.reverseSource(txn,
+            sourceType: JournalStore.srcChequeClear, sourceId: chequeId);
+      }
       await txn
           .delete('invoice_payments', where: 'id = ?', whereArgs: [paymentId]);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.paymentDelete,
+        username: AuditActor.resolve(actor),
+        entity: 'invoice_payments',
+        entityId: paymentId,
+        details:
+            'invoice: $beforeInvoice · receipt: $beforeReceipt · amount: ${beforeAmount.toStringAsFixed(2)} → —',
+      );
     });
     AppLogger.d(_tag, 'Payment deleted: $paymentId');
   }

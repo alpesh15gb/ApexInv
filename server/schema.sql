@@ -92,3 +92,34 @@ CREATE TABLE IF NOT EXISTS license_issuances (
 );
 CREATE INDEX IF NOT EXISTS idx_license_issuances_email
   ON license_issuances (email);
+
+-- ── License payments (Razorpay) ───────────────────────────────────────
+-- Webhook idempotency: one row per processed Razorpay event. Razorpay
+-- retries deliveries with the same event id; the handler skips already-seen
+-- ids (UNIQUE + skip-if-seen) so a double delivery never mints twice.
+CREATE TABLE IF NOT EXISTS razorpay_events (
+  event_id   TEXT PRIMARY KEY,
+  payment_id TEXT NOT NULL,
+  email      TEXT NOT NULL,
+  key_prefix TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_razorpay_events_payment
+  ON razorpay_events (payment_id);
+
+-- Key delivery: the FULL key per paid payment so buyers can fetch it
+-- post-payment ("I already paid" flow: GET/POST /licenses/retrieve with
+-- email + payment_id). The issuance log above keeps prefix-only rows for
+-- support; this table is the delivery mechanism and is read only by exact
+-- (payment_id, email) match (404 otherwise, no enumeration).
+CREATE TABLE IF NOT EXISTS license_deliveries (
+  payment_id      TEXT PRIMARY KEY,
+  email           TEXT NOT NULL,
+  installation_id TEXT NOT NULL DEFAULT '',
+  plan            TEXT NOT NULL,
+  seats           INTEGER NOT NULL DEFAULT 1,
+  license_key     TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_license_deliveries_email
+  ON license_deliveries (email);

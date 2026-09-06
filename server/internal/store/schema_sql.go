@@ -75,4 +75,26 @@ CREATE TABLE IF NOT EXISTS license_issuances (
 );
 CREATE INDEX IF NOT EXISTS idx_license_issuances_email
   ON license_issuances (email);
+
+CREATE TABLE IF NOT EXISTS razorpay_events (
+  event_id   TEXT PRIMARY KEY,
+  payment_id TEXT NOT NULL,
+  email      TEXT NOT NULL,
+  key_prefix TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_razorpay_events_payment
+  ON razorpay_events (payment_id);
+
+CREATE TABLE IF NOT EXISTS license_deliveries (
+  payment_id      TEXT PRIMARY KEY,
+  email           TEXT NOT NULL,
+  installation_id TEXT NOT NULL DEFAULT '',
+  plan            TEXT NOT NULL,
+  seats           INTEGER NOT NULL DEFAULT 1,
+  license_key     TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_license_deliveries_email
+  ON license_deliveries (email);
 `

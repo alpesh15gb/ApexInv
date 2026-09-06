@@ -1,12 +1,13 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 import 'accounting_service.dart';
+import 'audit_log_service.dart';
+import 'journal_store.dart';
+import 'ledger_service.dart';
+import 'period_lock_service.dart';
 
 import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/models/purchase_bill.dart';
-import 'package:apexbooks/utils/app_logger.dart';
-
-const _tag = 'PurchaseBillService';
 
 /// CRUD for purchase bills (inward supplies). Change-capture triggers on
 /// purchase_bills/purchase_bill_items feed the sync outbox automatically —
@@ -14,7 +15,78 @@ const _tag = 'PurchaseBillService';
 class PurchaseBillService {
   static final dbHelper = DatabaseHelper();
 
-  static Future<void> insertBill(PurchaseBill bill) async {
+  /// Live payment-rows sum with the ledger's cheque filter (bounced /
+  /// cancelled never count). Matches the projection's `recorded_paid`.
+  static Future<double> _recordedPaid(
+      DatabaseExecutor txn, String billId) async {
+    final rows = await txn.rawQuery(
+        "SELECT COALESCE(SUM(CASE WHEN COALESCE(cheque_status, 'none') NOT IN ('bounced', 'cancelled') THEN amount_paid ELSE 0 END), 0) AS v FROM purchase_bill_payments WHERE purchase_bill_id = ?",
+        [billId]);
+    return (rows.first['v'] as num?)?.toDouble() ?? 0;
+  }
+
+  /// Persisted purchase-bill posting for [bill] in the caller's transaction.
+  static Future<void> _postBillJournal(
+      DatabaseExecutor txn, PurchaseBill bill, double amountPaidColumn) async {
+    final recorded = await _recordedPaid(txn, bill.id);
+    await JournalStore.postBuilt(
+        txn,
+        LedgerPostings.purchaseEntry(
+          date: bill.date,
+          supplierName: bill.supplierName,
+          currencySymbol: bill.currencySymbol,
+          currencyCode: bill.currencyCode,
+          total: bill.totalAmount,
+          tax: bill.totalTax,
+          amountPaidColumn: amountPaidColumn,
+          recordedPaid: recorded,
+          itcEligible: bill.itcEligible,
+          reverseCharge: bill.reverseCharge,
+          sourceId: bill.id,
+        ));
+  }
+
+  /// Persisted purchase-payment posting for one payment row.
+  static Future<void> _postPaymentJournal(
+    DatabaseExecutor txn, {
+    required String supplierName,
+    required String currencyCode,
+    required String paymentId,
+    required double amount,
+    required DateTime datePaid,
+    String? paymentMethod,
+    String? accountId,
+  }) async {
+    final method = paymentMethod ?? 'Cash';
+    final String account;
+    if (paymentMethod == 'Check') {
+      account = LedgerService.accChequesIssued;
+    } else {
+      final rows = await txn.query('financial_accounts',
+          columns: ['type', 'name'],
+          where: 'id = ?',
+          whereArgs: [accountId],
+          limit: 1);
+      account = JournalStore.accountDisplay(rows.isEmpty ? null : rows.first,
+          fallback:
+              method == 'Cash' ? LedgerService.accCash : LedgerService.accBank);
+    }
+    await JournalStore.postBuilt(
+        txn,
+        LedgerPostings.purchasePaymentEntry(
+          date: datePaid,
+          supplierName: supplierName,
+          amount: amount,
+          account: account,
+          currencyCode: currencyCode,
+          sourceId: paymentId,
+        ));
+  }
+
+  static Future<void> insertBill(PurchaseBill bill, {String? actor}) async {
+    // Period lock: backdated bills into a closed period are refused.
+    await PeriodLockService.assertDateUnlocked(bill.date,
+        entity: 'Purchase bill');
     final db = await dbHelper.database;
     await db.transaction((txn) async {
       await txn.insert('purchase_bills', _headerMap(bill));
@@ -26,12 +98,36 @@ class PurchaseBillService {
       // goods would double-add — that residual risk is documented at the PO
       // Mark Received path rather than solved with schema.
       await _adjustStockInTxn(txn, _qtyByProduct(bill.items));
+      // Persisted double-entry posting in the same transaction.
+      await _postBillJournal(txn, bill, bill.amountPaid);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.purchaseBillCreate,
+        username: AuditActor.resolve(actor),
+        entity: 'purchase_bills',
+        entityId: bill.id,
+        details:
+            '${bill.supplierName} · total: ${bill.totalAmount.toStringAsFixed(2)}',
+      );
     });
   }
 
-  static Future<void> updateBill(PurchaseBill bill) async {
+  static Future<void> updateBill(PurchaseBill bill, {String? actor}) async {
     final db = await dbHelper.database;
+    // Period lock: refuse edits whose stored bill OR new date is closed.
+    await PeriodLockService.assertDateUnlocked(bill.date,
+        entity: 'Purchase bill');
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'purchase_bills', id: bill.id, entity: 'Purchase bill');
     await db.transaction((txn) async {
+      final beforeRows = await txn.query('purchase_bills',
+          where: 'id = ?', whereArgs: [bill.id], limit: 1);
+      final beforeSupplier = beforeRows.isEmpty
+          ? null
+          : beforeRows.first['supplier_name'] as String?;
+      final beforeTotal = beforeRows.isEmpty
+          ? null
+          : (beforeRows.first['total_amount'] as num?)?.toDouble();
       // Overpay guard (mirrors the sales-side updateInvoice check): the
       // header's amount_paid may be stale, so recompute what the supplier
       // already received from live payment rows and refuse to shrink the
@@ -65,6 +161,21 @@ class PurchaseBillService {
             (((old['quantity'] as num?)?.toDouble() ?? 0));
       }
       await _adjustStockInTxn(txn, delta);
+      // Mirror the previous posting, then book the edited bill — same txn.
+      await JournalStore.reverseSource(txn,
+          sourceType: JournalStore.srcPurchaseBill, sourceId: bill.id);
+      await _postBillJournal(txn, bill, livePaid);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.purchaseBillUpdate,
+        username: AuditActor.resolve(actor),
+        entity: 'purchase_bills',
+        entityId: bill.id,
+        details: AuditLogService.diff({
+          'total': (beforeTotal, bill.totalAmount),
+          'supplier': (beforeSupplier, bill.supplierName),
+        }),
+      );
     });
   }
 
@@ -123,7 +234,7 @@ class PurchaseBillService {
         'currency_symbol': bill.currencySymbol,
       };
 
-  static Future<void> softDeleteBill(String id) async {
+  static Future<void> softDeleteBill(String id, {String? actor}) async {
     // purchase_bills has no deleted_at column; a remove is a hard delete and
     // the DELETE trigger tombstones it for sync.
     // Everything below commits in ONE transaction: each payment's cash
@@ -132,7 +243,18 @@ class PurchaseBillService {
     // rows are deleted, stocked quantities are given back, then items + bill
     // are deleted — leaving no orphan payments or financial_transactions.
     final db = await dbHelper.database;
+    // Period lock: a closed-period bill cannot be removed.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'purchase_bills', id: id, entity: 'Purchase bill');
     await db.transaction((txn) async {
+      final billRows = await txn.query('purchase_bills',
+          where: 'id = ?', whereArgs: [id], limit: 1);
+      final beforeSupplier = billRows.isEmpty
+          ? ''
+          : billRows.first['supplier_name'] as String? ?? '';
+      final beforeTotal = billRows.isEmpty
+          ? 0.0
+          : (billRows.first['total_amount'] as num?)?.toDouble() ?? 0.0;
       final payments = await txn.query('purchase_bill_payments',
           where: 'purchase_bill_id = ?', whereArgs: [id]);
       for (final p in payments) {
@@ -140,13 +262,23 @@ class PurchaseBillService {
         if (chequeId != null && chequeId.isNotEmpty) {
           await AccountingService.cancelChequeInTransaction(txn, chequeId,
               reason: 'Purchase bill deleted');
+          // The cheque transition mirrors the cheque-clear posting; mirror
+          // the payment leg here too (idempotent).
+          await JournalStore.reverseSource(txn,
+              sourceType: JournalStore.srcChequeClear, sourceId: chequeId);
         } else {
           await AccountingService.reverseSourceInTransaction(txn,
               sourceType: 'purchase_bill_payment',
               sourceId: p['id'] as String,
               reason: 'Purchase bill deleted');
         }
+        await JournalStore.reverseSource(txn,
+            sourceType: JournalStore.srcPurchasePayment,
+            sourceId: p['id'] as String);
       }
+      // The bill itself leaves the ledger: mirror its posting.
+      await JournalStore.reverseSource(txn,
+          sourceType: JournalStore.srcPurchaseBill, sourceId: id);
       final groupIds = payments
           .map((p) => p['payment_group_id'] as String?)
           .where((g) => g != null && g.isNotEmpty)
@@ -180,6 +312,15 @@ class PurchaseBillService {
       await txn.delete('purchase_bill_items',
           where: 'purchase_bill_id = ?', whereArgs: [id]);
       await txn.delete('purchase_bills', where: 'id = ?', whereArgs: [id]);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.purchaseBillDelete,
+        username: AuditActor.resolve(actor),
+        entity: 'purchase_bills',
+        entityId: id,
+        details:
+            '$beforeSupplier · total: ${beforeTotal.toStringAsFixed(2)} → —',
+      );
     });
   }
 
@@ -235,10 +376,14 @@ class PurchaseBillService {
     String? chequeNumber,
     DateTime? chequeDate,
     String? paymentGroupId,
+    String? actor,
   }) async {
     if (!amount.isFinite) {
       throw ArgumentError('Payment amount must be a finite number');
     }
+    // Period lock: no supplier payments may be posted into a closed period.
+    await PeriodLockService.assertDateUnlocked(datePaid,
+        entity: 'Purchase payment');
     final db = await dbHelper.database;
     final bill = await getBill(id);
     if (bill == null) throw StateError('Purchase bill not found: $id');
@@ -336,6 +481,25 @@ class PurchaseBillService {
       await txn.insert('purchase_bill_payments', storedPayment.toMap());
       await txn.update('purchase_bills', {'amount_paid': previous + amount},
           where: 'id = ?', whereArgs: [id]);
+      // Persisted purchase-payment posting in the same transaction. Cheque
+      // tenders post to Cheques Issued until the cheque clears.
+      await _postPaymentJournal(txn,
+          supplierName: bill.supplierName,
+          currencyCode: bill.currencyCode,
+          paymentId: paymentId,
+          amount: amount,
+          datePaid: datePaid,
+          paymentMethod: paymentMethod,
+          accountId: resolvedAccountId);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.purchasePaymentAdd,
+        username: AuditActor.resolve(actor),
+        entity: 'purchase_bill_payments',
+        entityId: paymentId,
+        details:
+            'bill: $id · amount: ${amount.toStringAsFixed(2)} · paid: ${previous.toStringAsFixed(2)} → ${(previous + amount).toStringAsFixed(2)}',
+      );
     });
     final rows = await db.query('purchase_bill_payments',
         where: 'id = ?', whereArgs: [paymentId], limit: 1);
@@ -360,6 +524,7 @@ class PurchaseBillService {
     required String paymentMethod,
     String? accountId,
     String? notes,
+    String? actor,
   }) async {
     if (allocations.any((a) => !a.amount.isFinite)) {
       throw ArgumentError('Allocation amounts must be finite numbers');
@@ -380,6 +545,9 @@ class PurchaseBillService {
             'Allocation exceeds ${a.bill.billNumber ?? a.bill.id}');
       }
     }
+    // Period lock: the whole batch posts on [datePaid].
+    await PeriodLockService.assertDateUnlocked(datePaid,
+        entity: 'Purchase payment');
 
     final db = await dbHelper.database;
     final groupId = const Uuid().v4();
@@ -442,22 +610,49 @@ class PurchaseBillService {
         await txn.update(
             'purchase_bills', {'amount_paid': previous + allocation.amount},
             where: 'id = ?', whereArgs: [allocation.bill.id]);
+        // One persisted posting per allocated row (the projection books one
+        // entry per payment row, not per group movement).
+        await _postPaymentJournal(txn,
+            supplierName: allocation.bill.supplierName,
+            currencyCode: allocation.bill.currencyCode,
+            paymentId: payment.id,
+            amount: allocation.amount,
+            datePaid: datePaid,
+            paymentMethod: paymentMethod,
+            accountId: resolved);
+        await AuditLogService.logInTxn(
+          txn,
+          action: AuditActions.purchasePaymentAdd,
+          username: AuditActor.resolve(actor),
+          entity: 'purchase_bill_payments',
+          entityId: payment.id,
+          details:
+              'bill: ${allocation.bill.id} · amount: ${allocation.amount.toStringAsFixed(2)} · paid: ${previous.toStringAsFixed(2)} → ${(previous + allocation.amount).toStringAsFixed(2)}',
+        );
         saved.add(payment);
       }
     });
     return saved;
   }
 
-  static Future<void> deletePayment(PurchaseBillPayment payment) async {
+  static Future<void> deletePayment(PurchaseBillPayment payment,
+      {String? actor}) async {
     // Single transaction throughout: reversal + row delete + amount_paid
     // recalc commit together, so cash can never drift from the register.
     final db = await dbHelper.database;
+    // Period lock: a closed-period supplier payment cannot be removed.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'purchase_bill_payments',
+        id: payment.id,
+        dateColumn: 'date_paid',
+        entity: 'Purchase payment');
     await db.transaction((txn) async {
       final rows = await txn.query('purchase_bill_payments',
           where: 'id = ?', whereArgs: [payment.id], limit: 1);
       if (rows.isEmpty) return;
       final row = rows.first;
       final billId = row['purchase_bill_id'] as String;
+      final beforeAmount = (row['amount_paid'] as num?)?.toDouble() ?? 0;
       final groupId = row['payment_group_id'] as String?;
       final chequeId = row['cheque_id'] as String?;
       if (chequeId != null && chequeId.isNotEmpty) {
@@ -497,6 +692,25 @@ class PurchaseBillService {
             AND cheque_status NOT IN ('bounced', 'cancelled')
         ), 0) WHERE id = ?
       ''', [billId, billId]);
+      // Mirror the persisted purchase-payment posting (and the cheque-clear
+      // posting when a cheque was involved — the cancel path above already
+      // mirrors the clear leg; this is idempotent). The deleted row leaves
+      // the projection, so both sides net to zero.
+      await JournalStore.reverseSource(txn,
+          sourceType: JournalStore.srcPurchasePayment, sourceId: payment.id);
+      if (chequeId != null && chequeId.isNotEmpty) {
+        await JournalStore.reverseSource(txn,
+            sourceType: JournalStore.srcChequeClear, sourceId: chequeId);
+      }
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.purchasePaymentDelete,
+        username: AuditActor.resolve(actor),
+        entity: 'purchase_bill_payments',
+        entityId: payment.id,
+        details:
+            'bill: $billId · amount: ${beforeAmount.toStringAsFixed(2)} → —',
+      );
     });
   }
 
@@ -566,39 +780,5 @@ class PurchaseBillService {
       currencySymbol: header['currency_symbol'] as String? ?? '₹',
       items: itemMaps.map(PurchaseBillItem.fromMap).toList(),
     );
-  }
-}
-
-/// Audit-trail writer. Fire-and-forget — audit failures must never break a
-/// business write.
-class AuditLogService {
-  static final dbHelper = DatabaseHelper();
-
-  static Future<void> log({
-    required String action,
-    String? username,
-    String? entity,
-    String? entityId,
-    String? details,
-  }) async {
-    try {
-      final db = await dbHelper.database;
-      await db.insert('audit_log', {
-        'id': const Uuid().v4(),
-        'username': username ?? 'system',
-        'action': action,
-        'entity': entity,
-        'entity_id': entityId,
-        'details': details,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      AppLogger.e(_tag, 'audit log failed', e);
-    }
-  }
-
-  static Future<List<Map<String, dynamic>>> recent({int limit = 500}) async {
-    final db = await dbHelper.database;
-    return db.query('audit_log', orderBy: 'created_at DESC', limit: limit);
   }
 }

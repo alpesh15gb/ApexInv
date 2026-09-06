@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
@@ -162,8 +163,12 @@ class SyncEngine {
     var pushed = 0;
     var pulled = 0;
 
-    // 1. PUSH collapsed outbox.
-    pushed = await _pushOutbox(db, companyId);
+    // 1. PUSH collapsed outbox. The pushed (table, row) keys travel into the
+    // pull phase so conflict logging can tell a concurrent local edit (just
+    // pushed, still newer than the last pull) apart from a clean row that
+    // simply adopts the remote state.
+    final pushResult = await _pushOutbox(db, companyId);
+    pushed = pushResult.pushed;
 
     // One-time cursor heal: cursors written against the pre-keyset server
     // were bare timestamps that could sit mid-batch (a whole push batch
@@ -187,7 +192,7 @@ class SyncEngine {
     // 2. PULL per table (only after baseline exists, see _ensureBaseline).
     final baselineDone = await _getState(db, _keyBaselineDone) == '1';
     if (baselineDone) {
-      pulled = await _pullAll(db, companyId);
+      pulled = await _pullAll(db, companyId, pushResult.ops);
     }
 
     await _outbox(db).prunePushed();
@@ -202,8 +207,14 @@ class SyncEngine {
   /// AUTOINCREMENT id. The wire format is always a string.
   static String _pkToString(dynamic id) => id is String ? id : id.toString();
 
-  Future<int> _pushOutbox(Database db, String companyId) async {
+  /// Pushes the collapsed outbox and reports both the op count and, per
+  /// row, the last op sent (`'$table|$rowPk' → op`). The map is the pull
+  /// phase's "locally dirty" signal: anything pushed in this cycle was edited
+  /// concurrently with whatever the pull is about to return.
+  Future<({int pushed, Map<String, String> ops})> _pushOutbox(
+      Database db, String companyId) async {
     final outbox = _outbox(db);
+    final pushedOps = <String, String>{};
     var totalPushed = 0;
 
     while (true) {
@@ -212,6 +223,7 @@ class SyncEngine {
 
       final ops = <SyncOp>[];
       for (final e in entries) {
+        pushedOps['${e.tableName}|${e.rowPk}'] = e.op;
         if (e.op == SyncOpTypes.delete) {
           ops.add(SyncOp(
             tableName: e.tableName,
@@ -274,7 +286,7 @@ class SyncEngine {
 
       if (ops.length < 500) break; // drained
     }
-    return totalPushed;
+    return (pushed: totalPushed, ops: pushedOps);
   }
 
   /// Server-corrected business numbers (dbplan §3.1 invoice-number
@@ -288,15 +300,17 @@ class SyncEngine {
     }
   }
 
-  Future<int> _pullAll(Database db, String companyId) async {
+  Future<int> _pullAll(Database db, String companyId,
+      [Map<String, String> pushedOps = const {}]) async {
     var total = 0;
     for (final table in syncTableOrder) {
-      total += await _pullTable(db, companyId, table);
+      total += await _pullTable(db, companyId, table, pushedOps);
     }
     return total;
   }
 
-  Future<int> _pullTable(Database db, String companyId, String table) async {
+  Future<int> _pullTable(Database db, String companyId, String table,
+      [Map<String, String> pushedOps = const {}]) async {
     var applied = 0;
     var cursor = await _getState(db, '$_keyLastPulledPrefix$table') ?? '';
 
@@ -311,7 +325,7 @@ class SyncEngine {
             conflictAlgorithm: ConflictAlgorithm.replace);
         try {
           for (final op in page.ops) {
-            await _applyRemoteOp(txn, op);
+            await _applyRemoteOp(txn, op, pushedOps);
           }
           // Cursor advances only inside the same transaction — a crash
           // mid-apply re-pulls the page (apply is idempotent via LWW).
@@ -340,7 +354,17 @@ class SyncEngine {
   /// sees every remote delete as "older" and silently keeps deleted rows.
   /// Deletes compare the same way, so "both a remote delete and a local
   /// edit" keeps whichever happened later.
-  Future<void> _applyRemoteOp(DatabaseExecutor txn, SyncOp op) async {
+  ///
+  /// LWW outcomes here are the contract (tests pin them); conflict logging
+  /// is purely additive. Whenever a remote op contends with a locally-
+  /// modified row — update-over-update, update-over-delete, delete-over-
+  /// update, in tie or local-newer cases as well as when a dirty local row
+  /// loses — both snapshots are recorded to `sync_conflicts` BEFORE the
+  /// overwrite, in this same pull transaction, with the kept side as winner.
+  /// Logging is best-effort: any failure is swallowed so a broken log can
+  /// never abort the pull (the cursor must keep advancing).
+  Future<void> _applyRemoteOp(DatabaseExecutor txn, SyncOp op,
+      [Map<String, String> pushedOps = const {}]) async {
     // company_info's local pk is INTEGER; everything else is TEXT.
     final local = op.tableName == 'company_info'
         ? await txn.query(op.tableName,
@@ -359,12 +383,38 @@ class SyncEngine {
       final localUpdated =
           DateTime.tryParse(local.first['updated_at'] as String? ?? '') ??
               DateTime.fromMillisecondsSinceEpoch(0);
-      if (!localUpdated.isBefore(remoteStamp)) return; // local edit wins
+      if (!localUpdated.isBefore(remoteStamp)) {
+        // Local edit wins — the remote delete is silently dropped. Log the
+        // contention (delete-over-update, tie or local-newer) before
+        // returning; the row itself is untouched.
+        await _tryLogConflict(txn,
+            tableName: op.tableName,
+            rowPk: op.rowPk,
+            localSnapshot: Map<String, dynamic>.from(local.first),
+            remoteSnapshot: null,
+            winner: 'local');
+        return;
+      }
+      // Remote delete wins. Log only when the deleted row carries local
+      // modifications (pushed this cycle or still pending); a clean older
+      // row adopting a tombstone is ordinary propagation, not a conflict.
+      final dirty =
+          await _isLocallyDirty(txn, op.tableName, op.rowPk, pushedOps);
+      Map<String, dynamic>? localSnapshot;
+      if (dirty) localSnapshot = Map<String, dynamic>.from(local.first);
       if (op.tableName == 'company_info') {
         await txn.delete(op.tableName,
             where: 'id = ?', whereArgs: [int.tryParse(op.rowPk) ?? -1]);
       } else {
         await txn.delete(op.tableName, where: 'id = ?', whereArgs: [op.rowPk]);
+      }
+      if (dirty) {
+        await _tryLogConflict(txn,
+            tableName: op.tableName,
+            rowPk: op.rowPk,
+            localSnapshot: localSnapshot,
+            remoteSnapshot: null,
+            winner: 'remote');
       }
       return;
     }
@@ -380,20 +430,148 @@ class SyncEngine {
     // app's column cannot abort the whole pull txn (cursor included).
     final stripped = await _stripUnknownPullColumns(txn, op.tableName, payload);
 
-    final localUpdated = local.isEmpty
-        ? null
-        : DateTime.tryParse(local.first['updated_at'] as String? ?? '') ??
+    if (local.isEmpty) {
+      // No local row. A remote upsert only contends when the row is missing
+      // because WE deleted it (update-over-delete): the apply below
+      // resurrects it, discarding our delete.
+      final localDelete =
+          await _latestPendingOp(txn, op.tableName, op.rowPk) == 'delete' ||
+              pushedOps['${op.tableName}|${op.rowPk}'] == 'delete';
+      await txn.insert(op.tableName, stripped,
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      if (localDelete) {
+        await _tryLogConflict(txn,
+            tableName: op.tableName,
+            rowPk: op.rowPk,
+            localSnapshot: null,
+            remoteSnapshot: stripped,
+            winner: 'remote');
+      }
+      return;
+    }
+
+    final localUpdated =
+        DateTime.tryParse(local.first['updated_at'] as String? ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0);
-    if (localUpdated != null && !localUpdated.isBefore(remoteStamp)) {
+    if (!localUpdated.isBefore(remoteStamp)) {
+      // Local row is same-or-newer → local wins and the remote payload is
+      // silently dropped. Log the contention (update-over-update, tie or
+      // local-newer) unless the payload is identical to what we hold (a
+      // push echo of our own row coming back through the pull cursor).
+      if (_remotePayloadDiffers(stripped, local.first)) {
+        await _tryLogConflict(txn,
+            tableName: op.tableName,
+            rowPk: op.rowPk,
+            localSnapshot: Map<String, dynamic>.from(local.first),
+            remoteSnapshot: stripped,
+            winner: 'local');
+      }
       return; // local row is same-or-newer → local wins
     }
 
-    if (local.isEmpty) {
-      await txn.insert(op.tableName, stripped,
-          conflictAlgorithm: ConflictAlgorithm.replace);
-    } else {
-      await txn.update(op.tableName, stripped,
-          where: 'id = ?', whereArgs: [op.rowPk]);
+    // Remote is strictly newer and overwrites. Log only when the overwritten
+    // row carries local modifications (pushed this cycle or still pending);
+    // a clean older row adopting the newer state is ordinary propagation.
+    // The echo check doubles as a guard: an identical payload is never a
+    // conflict even if bookkeeping looks dirty.
+    final dirty = _remotePayloadDiffers(stripped, local.first) &&
+        await _isLocallyDirty(txn, op.tableName, op.rowPk, pushedOps);
+    Map<String, dynamic>? localSnapshot;
+    if (dirty) localSnapshot = Map<String, dynamic>.from(local.first);
+    await txn
+        .update(op.tableName, stripped, where: 'id = ?', whereArgs: [op.rowPk]);
+    if (dirty) {
+      await _tryLogConflict(txn,
+          tableName: op.tableName,
+          rowPk: op.rowPk,
+          localSnapshot: localSnapshot,
+          remoteSnapshot: stripped,
+          winner: 'remote');
+    }
+  }
+
+  /// True when the local row was modified concurrently with the incoming
+  /// pull: pushed to the server earlier in this same cycle, or still sitting
+  /// unpushed in the outbox (written during the push, or pulled before any
+  /// push ran — e.g. first-link merge). Read-only; any failure degrades to
+  /// "clean" so detection itself can never break the pull.
+  Future<bool> _isLocallyDirty(DatabaseExecutor txn, String table, String rowPk,
+      Map<String, String> pushedOps) async {
+    try {
+      if (pushedOps.containsKey('$table|$rowPk')) return true;
+      return await _latestPendingOp(txn, table, rowPk) != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Latest still-unpushed op for a row, or null when the row is clean.
+
+  Future<String?> _latestPendingOp(
+      DatabaseExecutor txn, String table, String rowPk) async {
+    try {
+      final rows = await txn.query('_sync_outbox',
+          columns: ['op'],
+          where: 'table_name = ? AND row_pk = ? AND pushed_at IS NULL',
+          whereArgs: [table, rowPk],
+          orderBy: 'seq DESC',
+          limit: 1);
+      return rows.isEmpty ? null : rows.first['op'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// True when the incoming payload actually differs from the held row on at
+  /// least one business column. Sync bookkeeping (`company_id`, `cloud_id`,
+  /// `updated_at`) and the key itself are excluded — they always differ on
+  /// echoes of our own just-pushed rows.
+  bool _remotePayloadDiffers(
+      Map<String, dynamic> stripped, Map<String, dynamic> local) {
+    for (final entry in stripped.entries) {
+      if (entry.key == 'id' ||
+          entry.key == 'company_id' ||
+          entry.key == 'cloud_id' ||
+          entry.key == 'updated_at' ||
+          entry.key == 'rowid') {
+        continue;
+      }
+      if (!_conflictValuesEqual(entry.value, local[entry.key])) return true;
+    }
+    return false;
+  }
+
+  bool _conflictValuesEqual(Object? a, Object? b) {
+    if (a == b) return true;
+    if (a is num && b is num) return a.toDouble() == b.toDouble();
+    return false;
+  }
+
+  /// Best-effort conflict insert inside the caller's pull transaction. NEVER
+  /// throws: a logging failure is recorded to the app log and the pull
+  /// (apply + cursor) commits without the conflict row.
+  Future<void> _tryLogConflict(
+    DatabaseExecutor txn, {
+    required String tableName,
+    required String rowPk,
+    required Map<String, dynamic>? localSnapshot,
+    required Map<String, dynamic>? remoteSnapshot,
+    required String winner,
+  }) async {
+    try {
+      await txn.insert('sync_conflicts', {
+        'table_name': tableName,
+        'row_pk': rowPk,
+        'local_snapshot':
+            localSnapshot == null ? null : jsonEncode(localSnapshot),
+        'remote_snapshot':
+            remoteSnapshot == null ? null : jsonEncode(remoteSnapshot),
+        'winner': winner,
+        'occurred_at': DateTime.now().toUtc().toIso8601String(),
+        'reviewed': 0,
+      });
+    } catch (e) {
+      AppLogger.w(_tag, 'sync_conflicts log failed (pull continues): $e');
     }
   }
 

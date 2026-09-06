@@ -17,7 +17,59 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
   List<Map<String, dynamic>> _entries = [];
   bool _isLoading = true;
   String _search = '';
+  String _eventFilter = 'all';
   final _searchController = TextEditingController();
+
+  static const _filters = <String, String>{
+    'all': 'All events',
+    'invoice': 'Invoices',
+    'payment': 'Sales payments',
+    'purchase_bill': 'Purchase bills',
+    'purchase_payment': 'Purchase payments',
+    'expense': 'Expenses',
+    'cheque': 'Cheques',
+    'loan': 'Loans',
+    'transfer': 'Transfers',
+    'adjustment': 'Adjustments',
+    'period': 'Period locks',
+    'license': 'Licenses',
+  };
+
+  bool _matchesFilter(Map<String, dynamic> e) {
+    if (_eventFilter == 'all') return true;
+    final action = (e['action'] as String? ?? '').toLowerCase();
+    final entity = (e['entity'] as String? ?? '').toLowerCase();
+    switch (_eventFilter) {
+      case 'invoice':
+        return action.startsWith('invoice_');
+      case 'payment':
+        return action == 'payment_add' || action == 'payment_delete';
+      case 'purchase_bill':
+        return action == 'purchase_bill_create' ||
+            action == 'purchase_bill_update' ||
+            action == 'purchase_bill_delete';
+      case 'purchase_payment':
+        return action == 'purchase_payment_add' ||
+            action == 'purchase_payment_delete' ||
+            action == 'purchase_payment';
+      case 'expense':
+        return action.startsWith('expense_');
+      case 'cheque':
+        return action.startsWith('cheque_');
+      case 'loan':
+        return action.startsWith('loan_');
+      case 'transfer':
+        return action == 'transfer' || entity == 'transfers';
+      case 'adjustment':
+        return action == 'adjustment' || entity == 'adjustments';
+      case 'period':
+        return action.startsWith('period_');
+      case 'license':
+        return action.startsWith('license_');
+      default:
+        return true;
+    }
+  }
 
   @override
   void dispose() {
@@ -51,11 +103,13 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
     final theme = Theme.of(context);
     final df = DateFormat('dd MMM yyyy, HH:mm');
     final q = _search.trim().toLowerCase();
+    final byFilter = _entries.where(_matchesFilter).toList();
     final filtered = q.isEmpty
-        ? _entries
-        : _entries.where((e) {
+        ? byFilter
+        : byFilter.where((e) {
             return (e['username'] as String? ?? '').toLowerCase().contains(q) ||
                 (e['action'] as String? ?? '').toLowerCase().contains(q) ||
+                (e['entity'] as String? ?? '').toLowerCase().contains(q) ||
                 (e['details'] as String? ?? '').toLowerCase().contains(q);
           }).toList();
 
@@ -89,10 +143,26 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
             ]),
           ),
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: DropdownButtonFormField<String>(
+              value: _eventFilter,
+              decoration: const InputDecoration(
+                labelText: 'Event type',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              items: _filters.entries
+                  .map((e) =>
+                      DropdownMenuItem(value: e.key, child: Text(e.value)))
+                  .toList(),
+              onChanged: (v) => setState(() => _eventFilter = v ?? 'all'),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.all(16),
             child: AppSearchField(
               controller: _searchController,
-              hintText: 'Search user / action / details',
+              hintText: 'Search user / action / entity / details',
               onChanged: (v) => setState(() => _search = v),
               onClear: () => setState(() {
                 _searchController.clear();
@@ -136,7 +206,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                                   style: const TextStyle(fontSize: 13.5),
                                 ),
                                 subtitle: Text(
-                                  '${e['username'] ?? 'system'} · ${df.format(created)}',
+                                  '${e['username'] ?? 'system'} · ${e['entity'] ?? ''}${(e['entity_id'] as String?)?.isNotEmpty ?? false ? ' ${e['entity_id']}' : ''} · ${df.format(created)}',
                                   style: TextStyle(
                                       fontSize: 12,
                                       color:
@@ -145,7 +215,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
                                 onLongPress: () {
                                   Clipboard.setData(ClipboardData(
                                       text:
-                                          '${e['action']} | ${e['username']} | ${e['details']} | ${df.format(created)}'));
+                                          '${e['action']} | ${e['username']} | ${e['entity']} ${e['entity_id']} | ${e['details']} | ${df.format(created)}'));
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                         content: Text('Copied to clipboard')),
@@ -168,6 +238,13 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
     if (action.contains('update')) return Icons.edit_outlined;
     if (action.contains('payment')) return Icons.payments_outlined;
     if (action.contains('restore')) return Icons.restore_outlined;
+    if (action.contains('transfer')) return Icons.swap_horiz_outlined;
+    if (action.contains('adjustment')) return Icons.tune_outlined;
+    if (action.contains('cheque')) return Icons.receipt_long_outlined;
+    if (action.contains('loan')) return Icons.account_balance_outlined;
+    if (action.contains('expense')) return Icons.shopping_bag_outlined;
+    if (action.contains('period')) return Icons.lock_outline;
+    if (action.contains('license')) return Icons.verified_outlined;
     return Icons.history;
   }
 

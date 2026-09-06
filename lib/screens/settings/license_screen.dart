@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:apexbooks/common/app_config.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/common/setting_key.dart';
+import 'package:apexbooks/database/audit_log_service.dart';
+import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/database/settings_service.dart';
+import 'package:apexbooks/licensing/license_api.dart';
 import 'package:apexbooks/licensing/license_gate.dart';
 import 'package:apexbooks/licensing/license_service.dart';
+import 'package:apexbooks/services/backend_services.dart';
 import 'package:apexbooks/widgets/app/app.dart';
 
 /// License & trial status. Paste a purchased key to activate; verification
 /// is fully offline. Buying happens in the browser (hosted Razorpay
-/// checkout) and the key is delivered on screen and by email.
+/// checkout at [AppConfig.licenseBuyUrl]) and the key is retrieved in-app
+/// via "I already paid" ([LicenseApi.retrieveKey]) or delivered by email.
 class LicenseScreen extends ConsumerStatefulWidget {
   const LicenseScreen({super.key});
 
@@ -22,9 +28,12 @@ class LicenseScreen extends ConsumerStatefulWidget {
 
 class _LicenseScreenState extends ConsumerState<LicenseScreen> {
   final _keyController = TextEditingController();
+  final _retrieveEmailController = TextEditingController();
+  final _retrievePaymentController = TextEditingController();
   LicenseStatus? _status;
   bool _loading = true;
   bool _activating = false;
+  bool _retrieving = false;
 
   @override
   void initState() {
@@ -35,6 +44,8 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
   @override
   void dispose() {
     _keyController.dispose();
+    _retrieveEmailController.dispose();
+    _retrievePaymentController.dispose();
     super.dispose();
   }
 
@@ -71,12 +82,83 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
       );
       return;
     }
-    await SettingsService.setSetting(SettingKey.licenseKey, key);
+    // Persist the key and its audit row atomically: a crash between them
+    // must not leave a license without a log entry or vice versa.
+    final db = await DatabaseHelper().database;
+    await db.transaction((txn) async {
+      await txn.insert(
+        'settings',
+        {
+          'key': SettingKey.licenseKey.key,
+          'value': key,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.licenseActivate,
+        username: AuditActor.current ?? 'system',
+        entity: 'licenses',
+        entityId: info.email.isEmpty ? info.plan : info.email,
+        details:
+            'plan: ${info.plan} · email: ${info.email.isEmpty ? '—' : info.email} · seats: ${info.seats}',
+      );
+    });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('License activated')),
     );
     await _reload();
+  }
+
+  /// Opens the hosted Razorpay checkout in the external browser.
+  /// The purchase completes outside the app (plain Payment Link — no SDK);
+  /// the buyer returns here manually and uses "I already paid" below.
+  Future<void> _openCheckout() async {
+    final uri = Uri.parse(AppConfig.licenseBuyUrl);
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Complete the payment in the browser, then return here and tap "I already paid".'
+              : 'Could not open the checkout page. Copy this link into a browser: ${AppConfig.licenseBuyUrl}',
+        ),
+      ),
+    );
+  }
+
+  /// "I already paid" flow: fetches the issued key from the server using
+  /// the purchase email + Razorpay payment id, fills the key field, and
+  /// activates it via the normal offline verification path.
+  Future<void> _retrieve() async {
+    setState(() => _retrieving = true);
+    try {
+      String installationId = '';
+      try {
+        installationId =
+            await BackendServices.installation.getOrCreateInstallationId();
+      } catch (_) {}
+      final key = await LicenseApi.retrieveKey(
+        email: _retrieveEmailController.text,
+        paymentId: _retrievePaymentController.text,
+        installationId: installationId.isEmpty ? null : installationId,
+      );
+      if (!mounted) return;
+      setState(() => _keyController.text = key);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Key retrieved — activating…')),
+      );
+      await _activate();
+    } on LicenseRetrieveException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _retrieving = false);
+    }
   }
 
   @override
@@ -121,12 +203,48 @@ class _LicenseScreenState extends ConsumerState<LicenseScreen> {
                       ),
                       const SizedBox(height: AppPadding.small),
                       AppSecondaryButton(
-                        onPressed: () => launchUrl(
-                          Uri.parse(AppConfig.licenseBuyUrl),
-                          mode: LaunchMode.externalApplication,
-                        ),
+                        onPressed: _openCheckout,
                         label: const Text('Buy / renew license'),
                         icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppPadding.xlarge),
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('I already paid — retrieve key',
+                          style: TextStyle(
+                              fontSize: AppFontSize.large,
+                              fontWeight: FontWeight.w700)),
+                      const SizedBox(height: AppPadding.small),
+                      const Text(
+                        'Enter the purchase email and the Razorpay payment id '
+                        '(receipt, e.g. pay_…). The server returns the key '
+                        'issued for that payment.',
+                        style: TextStyle(fontSize: AppFontSize.small),
+                      ),
+                      const SizedBox(height: AppPadding.medium),
+                      AppTextField(
+                        controller: _retrieveEmailController,
+                        labelText: 'Purchase email',
+                        hintText: 'you@example.com',
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: AppPadding.small),
+                      AppTextField(
+                        controller: _retrievePaymentController,
+                        labelText: 'Razorpay payment id',
+                        hintText: 'pay_…',
+                      ),
+                      const SizedBox(height: AppPadding.medium),
+                      AppSecondaryButton(
+                        onPressed: _retrieving ? null : _retrieve,
+                        label: const Text('Retrieve my key'),
+                        icon:
+                            const Icon(Icons.cloud_download_outlined, size: 18),
                       ),
                     ],
                   ),

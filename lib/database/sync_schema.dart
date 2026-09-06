@@ -115,6 +115,11 @@ Future<void> addSyncColumns(Database db, String table,
 /// Installs outbox + state tables and change-capture triggers. Idempotent.
 /// Only installs capture triggers for tables that exist — a later migration
 /// re-runs this to pick up newly created tables.
+///
+/// Also installs the `sync_conflicts` review log (see
+/// [createSyncConflictsTable]). It is deliberately NOT in [syncTableOrder]:
+/// no capture trigger watches it, so conflict reviews never enter the outbox
+/// and never travel to the server.
 Future<void> installSyncCapture(Database db) async {
   await db.execute('''
     CREATE TABLE IF NOT EXISTS _sync_outbox (
@@ -138,6 +143,10 @@ Future<void> installSyncCapture(Database db) async {
     )
   ''');
 
+  // Conflict review log: written by the pull-apply path when a remote op
+  // contends with a locally-modified row (sync_engine._applyRemoteOp).
+  await createSyncConflictsTable(db);
+
   for (final table in syncTableOrder) {
     final exists = Sqflite.firstIntValue(await db.rawQuery(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
@@ -153,6 +162,41 @@ Future<void> installSyncCapture(Database db) async {
         withDeletedAt: table == 'customers' || table == 'products');
     await _installTableTriggers(db, table);
   }
+}
+
+/// Creates the `sync_conflicts` review log (idempotent). Called from
+/// [installSyncCapture] (fresh installs + trigger re-installs) and from the
+/// v55 upgrade migration (existing databases).
+///
+/// One row per contended pull-apply: the local row snapshot and the incoming
+/// remote snapshot as JSON, captured BEFORE the overwrite, plus which side
+/// LWW kept ([winner] is 'local' or 'remote') and a device-local [reviewed]
+/// flag (0/1).
+///
+/// The `reviewed` flag is intentionally LOCAL-ONLY (never synced):
+///  - a conflict row is a per-device observation ("this device overwrote or
+///    discarded something"), not shared business truth — other devices made
+///    their own arbitration and log their own rows;
+///  - review workflow state ("I have looked at this") belongs to the human
+///    holding this device; merging it across devices would need server-side
+///    schema plus its own conflict semantics for zero product value;
+///  - keeping the table out of [syncTableOrder] guarantees no capture
+///    trigger, no outbox entry, and no baseline/pull traffic for it.
+Future<void> createSyncConflictsTable(DatabaseExecutor db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS sync_conflicts (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name      TEXT NOT NULL,
+      row_pk          TEXT NOT NULL,
+      local_snapshot  TEXT,
+      remote_snapshot TEXT,
+      winner          TEXT NOT NULL,
+      occurred_at     TEXT NOT NULL,
+      reviewed        INTEGER NOT NULL DEFAULT 0
+    )
+  ''');
+  await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sync_conflicts_reviewed ON sync_conflicts(reviewed, occurred_at)');
 }
 
 Future<void> _installTableTriggers(Database db, String table) async {

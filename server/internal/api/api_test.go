@@ -13,6 +13,9 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -49,7 +52,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 		st.Close()
 		// Wipe the test database between suites.
 		_, _ = st.Pool().Exec(context.Background(),
-			`TRUNCATE users, companies, memberships, records, tombstones CASCADE`)
+			`TRUNCATE users, companies, memberships, records, tombstones, license_issuances, razorpay_events, license_deliveries CASCADE`)
 	})
 	return srv
 }
@@ -569,15 +572,48 @@ func TestHeartbeatRecordsDigestNotRawID(t *testing.T) {
 	}
 }
 
-func TestIssueLicenseMintsVerifiableKey(t *testing.T) {
+func TestIssueLicenseDeniesByDefault(t *testing.T) {
 	srv := newTestServer(t)
 	token := registerAndLogin(t, srv, "licensor@x.com")
 
-	// Without a signing seed the endpoint must fail closed, not mint.
+	// Deny by default: no LICENSE_ISSUER_ALLOWLIST in the test env, so
+	// even a valid authenticated user must get 403, never a key.
+	t.Setenv("LICENSE_ISSUER_ALLOWLIST", "")
 	res, _ := postJSON(t, srv, "/licenses/issue", token, map[string]interface{}{
 		"plan": "pro", "email": "buyer@x.com", "seats": 2, "months": 12})
-	if res.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected signing-unavailable, got %d", res.StatusCode)
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 deny-by-default, got %d", res.StatusCode)
+	}
+
+	// Unauthenticated callers still get 401 from the auth middleware.
+	res, _ = postJSON(t, srv, "/licenses/issue", "", map[string]interface{}{
+		"plan": "pro", "email": "buyer@x.com", "seats": 2, "months": 12})
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without token, got %d", res.StatusCode)
+	}
+}
+
+func TestIssueLicenseAllowlistedMintsWhenSeedSet(t *testing.T) {
+	srv := newTestServer(t)
+	token := registerAndLogin(t, srv, "distributor@x.com")
+	t.Setenv("LICENSE_ISSUER_ALLOWLIST", "distributor@x.com")
+	// Deterministic 32-byte test seed (server-side only, never the app key).
+	t.Setenv("LICENSE_PRIVATE_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+
+	// Bad input is still 400 for allowlisted callers.
+	res, _ := postJSON(t, srv, "/licenses/issue", token, map[string]interface{}{
+		"plan": "", "email": "buyer@x.com", "seats": 0, "months": -1})
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for bad input, got %d", res.StatusCode)
+	}
+
+	res, body := postJSON(t, srv, "/licenses/issue", token, map[string]interface{}{
+		"plan": "pro", "email": "buyer@x.com", "seats": 2, "months": 12})
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("allowlisted issue failed: %d %v", res.StatusCode, body)
+	}
+	if key, _ := body["key"].(string); len(key) < 16 || key[:4] != "AB1." {
+		t.Fatalf("bad issued key: %v", body)
 	}
 }
 
@@ -600,5 +636,130 @@ func TestRazorpayWebhookRejectsBadSignature(t *testing.T) {
 		if out["key"] != "" {
 			t.Fatal("webhook issued a key without configuration")
 		}
+	}
+}
+
+// TestRazorpayWebhookRejectsInvalidHMAC runs WITHOUT a database: with a
+// webhook secret configured, a wrong HMAC must 401 before any store access.
+func TestRazorpayWebhookRejectsInvalidHMAC(t *testing.T) {
+	t.Setenv("RAZORPAY_WEBHOOK_SECRET", "test-webhook-secret")
+	mux := (&api.Server{}).Routes()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	payload := `{"event":"payment.captured","payload":{"payment":{"entity":{"id":"pay_hmac","status":"captured","notes":{"plan":"pro","email":"buyer@x.com"}}}}}`
+	req, _ := http.NewRequest("POST", srv.URL+"/licenses/razorpay-webhook", bytes.NewReader([]byte(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Razorpay-Signature", "deadbeef")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for invalid HMAC, got %d", res.StatusCode)
+	}
+}
+
+func webhookSig(t *testing.T, secret, body string) string {
+	t.Helper()
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func postWebhook(t *testing.T, srv *httptest.Server, secret, body, eventID string) (*http.Response, map[string]interface{}) {
+	t.Helper()
+	req, _ := http.NewRequest("POST", srv.URL+"/licenses/razorpay-webhook", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Razorpay-Signature", webhookSig(t, secret, body))
+	if eventID != "" {
+		req.Header.Set("X-Razorpay-Event-Id", eventID)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("webhook request failed: %v", err)
+	}
+	defer res.Body.Close()
+	var out map[string]interface{}
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	return res, out
+}
+
+func TestRazorpayWebhookIdempotentDoubleDelivery(t *testing.T) {
+	srv := newTestServer(t)
+	t.Setenv("RAZORPAY_WEBHOOK_SECRET", "test-webhook-secret")
+	t.Setenv("LICENSE_PRIVATE_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+	payload := `{"event":"payment.captured","payload":{"payment":{"entity":{"id":"pay_dupe_1","status":"captured","notes":{"plan":"pro","email":"dupe@x.com","seats":"1","months":"12"}}}}}`
+
+	res, first := postWebhook(t, srv, "test-webhook-secret", payload, "evt_dupe_1")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("first delivery failed: %d %v", res.StatusCode, first)
+	}
+	key1, _ := first["key"].(string)
+	if key1 == "" {
+		t.Fatalf("first delivery returned no key: %v", first)
+	}
+
+	// Exact redelivery (same event id) returns the ORIGINAL key.
+	res, second := postWebhook(t, srv, "test-webhook-secret", payload, "evt_dupe_1")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("redelivery failed: %d %v", res.StatusCode, second)
+	}
+	if key2, _ := second["key"].(string); key2 != key1 {
+		t.Fatalf("redelivery minted a new key: %q vs %q", key2, key1)
+	}
+	if second["duplicate"] != true {
+		t.Fatalf("redelivery must flag duplicate:true, got %v", second)
+	}
+
+	// Same payment retried under a NEW event id still returns the original.
+	res, third := postWebhook(t, srv, "test-webhook-secret", payload, "evt_dupe_2")
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("retry with new event id failed: %d %v", res.StatusCode, third)
+	}
+	if key3, _ := third["key"].(string); key3 != key1 {
+		t.Fatalf("retry minted a new key for the same payment: %q vs %q", key3, key1)
+	}
+}
+
+func TestRetrieveLicenseRoundTrip(t *testing.T) {
+	srv := newTestServer(t)
+	t.Setenv("RAZORPAY_WEBHOOK_SECRET", "test-webhook-secret")
+	t.Setenv("LICENSE_PRIVATE_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+	payload := `{"event":"payment.captured","payload":{"payment":{"entity":{"id":"pay_ret_1","status":"captured","notes":{"plan":"pro","email":"retrieve@x.com"}}}}}`
+	if res, out := postWebhook(t, srv, "test-webhook-secret", payload, "evt_ret_1"); res.StatusCode != http.StatusOK || out["key"] == "" {
+		t.Fatalf("webhook fulfill failed: %d %v", res.StatusCode, out)
+	} else {
+		// Exact pair retrieves the same key (GET).
+		req, _ := http.NewRequest("GET", srv.URL+"/licenses/retrieve?email=retrieve@x.com&payment_id=pay_ret_1", nil)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("retrieve failed: %v", err)
+		}
+		defer res.Body.Close()
+		var got map[string]string
+		_ = json.NewDecoder(res.Body).Decode(&got)
+		if res.StatusCode != http.StatusOK || got["key"] != out["key"] {
+			t.Fatalf("retrieve mismatch: %d %v vs %v", res.StatusCode, got, out)
+		}
+	}
+
+	// Wrong email for a real payment id → 404 (no oracle).
+	req, _ := http.NewRequest("GET", srv.URL+"/licenses/retrieve?email=someone-else@x.com&payment_id=pay_ret_1", nil)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("retrieve failed: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for wrong email, got %d", res.StatusCode)
+	}
+
+	// Unknown payment id → 404.
+	res2, _ := postJSON(t, srv, "/licenses/retrieve", "", map[string]string{
+		"email": "retrieve@x.com", "payment_id": "pay_nope"})
+	if res2.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for unknown payment, got %d", res2.StatusCode)
 	}
 }

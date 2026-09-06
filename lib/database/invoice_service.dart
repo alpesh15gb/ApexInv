@@ -13,9 +13,13 @@ import 'package:apexbooks/utils/app_date.dart';
 import 'package:apexbooks/utils/app_logger.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
+import 'audit_log_service.dart';
 import 'database_helper.dart';
+import 'journal_store.dart';
+import 'ledger_service.dart';
 import 'payment_service.dart';
 import 'accounting_service.dart';
+import 'period_lock_service.dart';
 
 const _tag = 'InvoiceService';
 
@@ -48,12 +52,17 @@ class InvoiceService {
   // partial UNIQUE index makes the loser fail inside its insert txn; we
   // catch that conflict, take the next number, and retry (max 5). Display
   // format (8-digit zero-padded) is preserved by generateNextInvoiceNumber.
-  static Future<void> insertInvoice(Invoice invoice) async {
+  static Future<void> insertInvoice(Invoice invoice, {String? actor}) async {
     _rejectExcessiveFlatDiscount(invoice);
+    // Period lock: backdated documents into a closed/filed period are
+    // refused before any write (covers Invoice, Quotation, Credit/Debit
+    // Note and every other invoice type — they share this path).
+    await PeriodLockService.assertDateUnlocked(invoice.date,
+        entity: invoice.type);
     const maxAttempts = 5;
     for (var attempt = 0;; attempt++) {
       try {
-        await _insertInvoiceOnce(invoice);
+        await _insertInvoiceOnce(invoice, actor: actor);
         return;
       } on DatabaseException catch (e) {
         if (!_isInvoiceNumberConflict(e) || attempt + 1 >= maxAttempts) {
@@ -77,7 +86,8 @@ class InvoiceService {
         msg.contains('idx_invoices_number_unique');
   }
 
-  static Future<void> _insertInvoiceOnce(Invoice invoice) async {
+  static Future<void> _insertInvoiceOnce(Invoice invoice,
+      {String? actor}) async {
     final db = await dbHelper.database;
     await db.transaction((txn) async {
       await txn.insert('invoices', {
@@ -164,23 +174,91 @@ class InvoiceService {
               where: 'id = ?', whereArgs: [item.product.id]);
         }
       }
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.invoiceCreate,
+        username: AuditActor.resolve(actor),
+        entity: 'invoices',
+        entityId: invoice.id,
+        details:
+            '${invoice.invoiceNumber ?? invoice.id} · ${invoice.customer.name} · total: ${invoice.payableTotal.toStringAsFixed(2)} · type: ${invoice.type}',
+      );
+      // Persisted double-entry sale posting in the same transaction.
+      // Non-posting types (Quotation, etc.) yield no entry, matching the
+      // projection which only books Invoice / Credit Note / Debit Note.
+      final salePosting = LedgerPostings.saleEntry(
+        date: invoice.date,
+        type: invoice.type,
+        customerName: invoice.customer.name,
+        currencySymbol: invoice.currencySymbol,
+        currencyCode: invoice.currencyCode,
+        total: invoice.total,
+        payable: invoice.payableTotal,
+        tax: invoice.tax,
+        sourceId: invoice.id,
+      );
+      if (salePosting != null) await JournalStore.postBuilt(txn, salePosting);
     });
   }
 
-  static Future<void> updateInvoice(Invoice invoice) async {
+  static double _payableForDbSnapshot(
+    Map<String, dynamic> header,
+    List<Map<String, dynamic>> itemRows,
+  ) {
+    try {
+      final taxMode = TaxModeExtension.fromKey(header['tax_mode'] as String?);
+      final taxRate = (header['tax_rate'] as num?)?.toDouble() ?? 0.0;
+      final additional =
+          AdditionalCost.listFromJson(header['additional_costs'] as String?)
+              .fold(0.0, (sum, c) => sum + c.amount);
+      final totals = InvoiceTotalsCalculator.totals(
+        lines: itemRows.map((r) => InvoiceTotalsCalculator.lineFromDbRow(r,
+            taxMode: taxMode, globalTaxRatePercent: taxRate * 100)),
+        taxMode: taxMode,
+        globalTaxRate: taxRate,
+        globalTaxRateFormat: TaxRateFormat.fraction,
+        additionalCostsTotal: additional,
+        invoiceDiscountType: InvoiceDiscountTypeExtension.fromKey(
+            header['invoice_discount_type'] as String?),
+        invoiceDiscountValue:
+            (header['invoice_discount_value'] as num?)?.toDouble() ?? 0.0,
+      );
+      return InvoiceTotalsCalculator.payableTotal(totals.total,
+          enabled: (header['round_off'] as int?) == 1);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static Future<void> updateInvoice(Invoice invoice, {String? actor}) async {
     _rejectExcessiveFlatDiscount(invoice);
     final db = await dbHelper.database;
 
-    // Fetch existing items before transaction (to restore stock)
+    // Period lock: refuse edits whose stored document OR new date falls in
+    // a closed period (moving a document across the cutoff either way).
+    await PeriodLockService.assertDateUnlocked(invoice.date,
+        entity: invoice.type);
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'invoices', id: invoice.id, entity: invoice.type);
+
+    // Fetch existing items before transaction (to restore stock + audit diff)
     final oldItems = await db.query(
       'invoice_items',
       where: 'invoice_id = ?',
       whereArgs: [invoice.id],
     );
-    final oldHeader = await db.query('invoices',
-        columns: ['type'], where: 'id = ?', whereArgs: [invoice.id], limit: 1);
-    final oldType =
-        oldHeader.isEmpty ? invoice.type : oldHeader.first['type'] as String;
+    final oldHeaderFull = await db.query('invoices',
+        where: 'id = ?', whereArgs: [invoice.id], limit: 1);
+    final oldType = oldHeaderFull.isEmpty
+        ? invoice.type
+        : oldHeaderFull.first['type'] as String;
+    final oldCustomer = oldHeaderFull.isEmpty
+        ? null
+        : oldHeaderFull.first['customer_name'] as String?;
+    final oldPayable = oldHeaderFull.isEmpty
+        ? null
+        : _payableForDbSnapshot(oldHeaderFull.first, oldItems);
+    final oldItemCount = oldItems.length;
 
     await db.transaction((txn) async {
       // Overpayment guard: refuse to shrink the total below what the
@@ -305,6 +383,37 @@ class InvoiceService {
         }
         await txn.update('products', {'stock': next},
             where: 'id = ?', whereArgs: [entry.key]);
+      }
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.invoiceUpdate,
+        username: AuditActor.resolve(actor),
+        entity: 'invoices',
+        entityId: invoice.id,
+        details: AuditLogService.diff({
+          'total': (oldPayable, invoice.payableTotal),
+          'customer': (oldCustomer, invoice.customer.name),
+          'type': (oldType, invoice.type),
+          'items': (oldItemCount, invoice.items.length),
+        }),
+      );
+      // Mirror the previous posting, then book the edited document — same
+      // txn, so the journal can never drift from the invoice rows.
+      await JournalStore.reverseSource(txn,
+          sourceType: JournalStore.srcInvoice, sourceId: invoice.id);
+      final updatedPosting = LedgerPostings.saleEntry(
+        date: invoice.date,
+        type: invoice.type,
+        customerName: invoice.customer.name,
+        currencySymbol: invoice.currencySymbol,
+        currencyCode: invoice.currencyCode,
+        total: invoice.total,
+        payable: invoice.payableTotal,
+        tax: invoice.tax,
+        sourceId: invoice.id,
+      );
+      if (updatedPosting != null) {
+        await JournalStore.postBuilt(txn, updatedPosting);
       }
     });
   }
@@ -775,12 +884,17 @@ class InvoiceService {
 
   // ─────────────────────────────────────────────
   // Soft Delete
-  static Future<void> softDeleteInvoice(String id) async {
+  static Future<void> softDeleteInvoice(String id, {String? actor}) async {
     final db = await dbHelper.database;
+    // Period lock: a closed-period document cannot leave the books.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'invoices', id: id);
     await db.transaction((txn) async {
       final rows = await txn.query('invoices',
           where: 'id = ?', whereArgs: [id], limit: 1);
       if (rows.isEmpty || rows.first['deleted_at'] != null) return;
+      final customer = rows.first['customer_name'] as String? ?? '';
+      final number = (rows.first['invoice_number'] as String?) ?? id;
       // A trashed invoice leaves the books but its payments/movements stay
       // posted — that would strand cash against a receivables account that no
       // longer lists the invoice. Block the move while live (non-bounced /
@@ -802,15 +916,32 @@ class InvoiceService {
       );
       // Invoice left the books — give the reserved stock back, atomically.
       await _adjustStockInTxn(txn, id, 1);
+      // The trashed document leaves the ledger: mirror its posting so every
+      // read nets it to zero, exactly as the projection (deleted_at filter).
+      await JournalStore.reverseSource(txn,
+          sourceType: JournalStore.srcInvoice, sourceId: id);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.invoiceDelete,
+        username: AuditActor.resolve(actor),
+        entity: 'invoices',
+        entityId: id,
+        details: '$number · $customer · status: active → trashed',
+      );
     });
   }
 
-  static Future<void> restoreInvoice(String id) async {
+  static Future<void> restoreInvoice(String id, {String? actor}) async {
     final db = await dbHelper.database;
+    // Period lock: re-activating a closed-period document rewrites it.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'invoices', id: id);
     await db.transaction((txn) async {
       final rows = await txn.query('invoices',
           where: 'id = ?', whereArgs: [id], limit: 1);
       if (rows.isEmpty || rows.first['deleted_at'] == null) return;
+      final customer = rows.first['customer_name'] as String? ?? '';
+      final number = (rows.first['invoice_number'] as String?) ?? id;
       await txn.update(
         'invoices',
         {'deleted_at': null},
@@ -819,11 +950,33 @@ class InvoiceService {
       );
       // Invoice is active again — reserve the stock once more, atomically.
       await _adjustStockInTxn(txn, id, -1);
+      // The restored document re-enters the books: re-post its sale entry
+      // from the live rows in this same transaction.
+      final restoredItems = await txn
+          .query('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
+      final restoredHeader = await txn.query('invoices',
+          where: 'id = ?', whereArgs: [id], limit: 1);
+      if (restoredHeader.isNotEmpty) {
+        final repost = LedgerPostings.saleEntryFromMaps(
+            restoredHeader.first, restoredItems);
+        if (repost != null) await JournalStore.postBuilt(txn, repost);
+      }
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.invoiceRestore,
+        username: AuditActor.resolve(actor),
+        entity: 'invoices',
+        entityId: id,
+        details: '$number · $customer · status: trashed → active',
+      );
     });
   }
 
-  static Future<void> permanentDeleteInvoice(String id) async {
+  static Future<void> permanentDeleteInvoice(String id, {String? actor}) async {
     final db = await dbHelper.database;
+    // Period lock: a closed-period document cannot be destroyed.
+    await PeriodLockService.assertStoredDateUnlocked(db,
+        table: 'invoices', id: id);
     await db.transaction((txn) async {
       // Stock is only still reserved if the invoice was never soft-deleted
       // (soft delete already restored it; restoring again would double-count).
@@ -831,6 +984,10 @@ class InvoiceService {
           where: 'id = ?', whereArgs: [id], limit: 1);
       final wasSoftDeleted =
           rows.isNotEmpty && rows.first['deleted_at'] != null;
+      final customer =
+          rows.isEmpty ? '' : rows.first['customer_name'] as String? ?? '';
+      final number =
+          rows.isEmpty ? id : (rows.first['invoice_number'] as String?) ?? id;
       if (!wasSoftDeleted) {
         await _adjustStockInTxn(txn, id, 1);
       }
@@ -845,17 +1002,35 @@ class InvoiceService {
         if (chequeId != null && chequeId.isNotEmpty) {
           await AccountingService.cancelChequeInTransaction(txn, chequeId,
               reason: 'Invoice permanently deleted');
+          // The cheque transition above already mirrors the cheque-clear
+          // posting; mirror the receipt leg here (idempotent).
+          await JournalStore.reverseSource(txn,
+              sourceType: JournalStore.srcChequeClear, sourceId: chequeId);
         }
         await AccountingService.reverseSourceInTransaction(txn,
             sourceType: 'invoice_payment',
             sourceId: payment['id'] as String,
             reason: 'Invoice permanently deleted');
+        await JournalStore.reverseSource(txn,
+            sourceType: JournalStore.srcReceipt,
+            sourceId: payment['id'] as String);
       }
+      // The document itself leaves the ledger: mirror its sale posting.
+      await JournalStore.reverseSource(txn,
+          sourceType: JournalStore.srcInvoice, sourceId: id);
       await txn
           .delete('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
       await txn
           .delete('invoice_payments', where: 'invoice_id = ?', whereArgs: [id]);
       await txn.delete('invoices', where: 'id = ?', whereArgs: [id]);
+      await AuditLogService.logInTxn(
+        txn,
+        action: AuditActions.invoicePermanentDelete,
+        username: AuditActor.resolve(actor),
+        entity: 'invoices',
+        entityId: id,
+        details: '$number · $customer · status: active → deleted',
+      );
     });
   }
 
@@ -871,8 +1046,8 @@ class InvoiceService {
 
   // ─────────────────────────────────────────────
   // Hard Delete (legacy — kept for backward compat; uses transaction)
-  static Future<void> deleteInvoice(String id) async {
-    await permanentDeleteInvoice(id);
+  static Future<void> deleteInvoice(String id, {String? actor}) async {
+    await permanentDeleteInvoice(id, actor: actor);
   }
 
   // ─────────────────────────────────────────────

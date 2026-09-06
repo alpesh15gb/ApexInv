@@ -64,6 +64,8 @@ class BackupManager {
     'cheques',
     'loan_accounts',
     'loan_movements',
+    'journal_entries',
+    'journal_lines',
     'settings',
   };
 
@@ -96,6 +98,8 @@ class BackupManager {
     'sale_order_items',
     'financial_transactions',
     'loan_movements',
+    'journal_entries',
+    'journal_lines',
   ];
 
   // Create backup of the entire database
@@ -205,6 +209,9 @@ class BackupManager {
     'users',
     'audit_log',
     'payment_terms',
+    'sync_conflicts',
+    'journal_entries',
+    'journal_lines',
     '_sync_outbox',
     '_sync_state',
     '_migration_log',

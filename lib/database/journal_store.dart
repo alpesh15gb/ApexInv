@@ -103,8 +103,7 @@ class JournalStore {
     return ((rows.first['c'] as num?)?.toInt() ?? 0) == 1;
   }
 
-  static Future<Set<String>> _columns(
-      DatabaseExecutor db, String table) async {
+  static Future<Set<String>> _columns(DatabaseExecutor db, String table) async {
     try {
       final rows = await db.rawQuery('PRAGMA table_info($table)');
       return {for (final r in rows) r['name'] as String};
@@ -276,10 +275,10 @@ class JournalStore {
         );
       }
       byEntry[id]!.lines.add(LedgerLine(
-        account: r['account'] as String,
-        debit: (r['debit'] as num?)?.toDouble() ?? 0,
-        credit: (r['credit'] as num?)?.toDouble() ?? 0,
-      ));
+            account: r['account'] as String,
+            debit: (r['debit'] as num?)?.toDouble() ?? 0,
+            credit: (r['credit'] as num?)?.toDouble() ?? 0,
+          ));
     }
     return [for (final id in order) byEntry[id]!];
   }
@@ -289,9 +288,8 @@ class JournalStore {
   static String accountDisplay(Map<String, dynamic>? row,
       {required String fallback}) {
     if (row == null) return fallback;
-    final prefix = row['type'] == 'bank'
-        ? LedgerService.accBank
-        : LedgerService.accCash;
+    final prefix =
+        row['type'] == 'bank' ? LedgerService.accBank : LedgerService.accCash;
     return '$prefix: ${row['name']}';
   }
 
@@ -334,19 +332,20 @@ class JournalStore {
     // there is nothing projectable, so the section is skipped.
     if (await _tableExists(db, 'invoices') &&
         (await _columns(db, 'invoices'))
-            .containsAll(['id', 'type', 'date'])) {
+            .containsAll(['id', 'type', 'date', 'deleted_at'])) {
       final invRows = await db.query('invoices',
-          where: "deleted_at IS NULL AND type IN ('Invoice', 'Credit Note', 'Debit Note')",
+          where:
+              "deleted_at IS NULL AND type IN ('Invoice', 'Credit Note', 'Debit Note')",
           orderBy: 'date');
       if (invRows.isNotEmpty && await _tableExists(db, 'invoice_items')) {
         final ids = invRows.map((r) => r['id'] as String).toList();
         final itemsByInv = <String, List<Map<String, dynamic>>>{};
         for (var i = 0; i < ids.length; i += 500) {
-          final chunk = ids.sublist(
-              i, (i + 500 > ids.length) ? ids.length : i + 500);
+          final chunk =
+              ids.sublist(i, (i + 500 > ids.length) ? ids.length : i + 500);
           final ph = List.filled(chunk.length, '?').join(',');
-          final itemRows =
-              await db.query('invoice_items', where: 'invoice_id IN ($ph)', whereArgs: chunk);
+          final itemRows = await db.query('invoice_items',
+              where: 'invoice_id IN ($ph)', whereArgs: chunk);
           for (final r in itemRows) {
             (itemsByInv[r['invoice_id'] as String] ??= []).add(r);
           }
@@ -361,9 +360,17 @@ class JournalStore {
     // 2. Receipts.
     if (await _tableExists(db, 'invoice_payments') &&
         await _tableExists(db, 'invoices') &&
-        (await _columns(db, 'invoice_payments'))
-            .containsAll(['id', 'date_paid', 'amount_paid']) &&
-        (await _columns(db, 'invoices')).containsAll(['id', 'date'])) {
+        (await _columns(db, 'invoice_payments')).containsAll([
+          'id',
+          'invoice_id',
+          'date_paid',
+          'amount_paid',
+          'payment_method',
+          'account_id',
+          'cheque_status'
+        ]) &&
+        (await _columns(db, 'invoices'))
+            .containsAll(['id', 'date', 'deleted_at', 'type'])) {
       final payRows = await db.rawQuery('''
         SELECT p.id, p.date_paid AS d, p.amount_paid, p.payment_method,
                p.account_id, p.cheque_status, i.customer_name, i.currency_code
@@ -378,8 +385,9 @@ class JournalStore {
         final account = method == 'Check'
             ? LedgerService.accChequesInHand
             : display(p['account_id'] as String?,
-                fallback:
-                    method == 'Cash' ? LedgerService.accCash : LedgerService.accBank);
+                fallback: method == 'Cash'
+                    ? LedgerService.accCash
+                    : LedgerService.accBank);
         await postIfMissing(LedgerPostings.receiptEntry(
           date: DateTime.tryParse(p['d'] as String? ?? '') ?? DateTime.now(),
           customerName: p['customer_name'] as String? ?? '',
@@ -404,8 +412,7 @@ class JournalStore {
       }
       final expRows = await db.query('expenses', orderBy: 'date');
       for (final e in expRows) {
-        final category =
-            categoryNames[e['category_id'] as String] ?? 'General';
+        final category = categoryNames[e['category_id'] as String] ?? 'General';
         final accountId = e['account_id'] as String?;
         await postIfMissing(LedgerPostings.expenseEntry(
           date: DateTime.tryParse(e['date'] as String? ?? '') ?? DateTime.now(),
@@ -421,14 +428,13 @@ class JournalStore {
 
     // 4. Purchase bills (with the legacy aggregate-paid rule).
     if (await _tableExists(db, 'purchase_bills') &&
-        (await _columns(db, 'purchase_bills'))
-            .containsAll(['id', 'date'])) {
+        (await _columns(db, 'purchase_bills')).containsAll(['id', 'date'])) {
       final billRows = await db.query('purchase_bills', orderBy: 'date');
       for (final b in billRows) {
         double recordedPaid = 0;
         if (await _tableExists(db, 'purchase_bill_payments') &&
-            (await _columns(db, 'purchase_bill_payments'))
-                .containsAll(['amount_paid'])) {
+            (await _columns(db, 'purchase_bill_payments')).containsAll(
+                ['purchase_bill_id', 'amount_paid', 'cheque_status'])) {
           final sumRows = await db.rawQuery(
               "SELECT COALESCE(SUM(CASE WHEN COALESCE(cheque_status, 'none') NOT IN ('bounced', 'cancelled') THEN amount_paid ELSE 0 END), 0) AS v FROM purchase_bill_payments WHERE purchase_bill_id = ?",
               [b['id']]);
@@ -453,9 +459,17 @@ class JournalStore {
     // 5. Purchase payments.
     if (await _tableExists(db, 'purchase_bill_payments') &&
         await _tableExists(db, 'purchase_bills') &&
-        (await _columns(db, 'purchase_bill_payments'))
-            .containsAll(['id', 'date_paid', 'amount_paid']) &&
-        (await _columns(db, 'purchase_bills')).containsAll(['id', 'date'])) {
+        (await _columns(db, 'purchase_bill_payments')).containsAll([
+          'id',
+          'purchase_bill_id',
+          'date_paid',
+          'amount_paid',
+          'payment_method',
+          'account_id',
+          'cheque_status'
+        ]) &&
+        (await _columns(db, 'purchase_bills'))
+            .containsAll(['id', 'date', 'supplier_name', 'currency_code'])) {
       final payRows = await db.rawQuery('''
         SELECT p.id, p.date_paid AS d, p.amount_paid, p.payment_method,
                p.account_id, p.cheque_status,
@@ -470,8 +484,9 @@ class JournalStore {
         final account = method == 'Check'
             ? LedgerService.accChequesIssued
             : display(p['account_id'] as String?,
-                fallback:
-                    method == 'Cash' ? LedgerService.accCash : LedgerService.accBank);
+                fallback: method == 'Cash'
+                    ? LedgerService.accCash
+                    : LedgerService.accBank);
         await postIfMissing(LedgerPostings.purchasePaymentEntry(
           date: DateTime.tryParse(p['d'] as String? ?? '') ?? DateTime.now(),
           supplierName: p['supplier_name'] as String? ?? '',
@@ -485,7 +500,8 @@ class JournalStore {
 
     // 6. Cleared cheques.
     if (await _tableExists(db, 'cheques') &&
-        (await _columns(db, 'cheques')).containsAll(['id', 'status'])) {
+        (await _columns(db, 'cheques'))
+            .containsAll(['id', 'status', 'cleared_at'])) {
       final cleared = await db.query('cheques',
           where: "status = 'cleared'", orderBy: 'cleared_at');
       for (final c in cleared) {
@@ -495,8 +511,8 @@ class JournalStore {
               DateTime.now(),
           chequeNumber: c['cheque_number'] as String? ?? '',
           amount: (c['amount'] as num?)?.toDouble() ?? 0,
-          bankAccount:
-              display(c['bank_account_id'] as String?, fallback: LedgerService.accBank),
+          bankAccount: display(c['bank_account_id'] as String?,
+              fallback: LedgerService.accBank),
           received: received,
           currencyCode: c['currency_code'] as String? ?? 'INR',
           sourceId: c['id'] as String,
@@ -512,10 +528,12 @@ class JournalStore {
           'amount',
           'date',
           'source_type',
-          'source_id'
+          'source_id',
+          'voided_at'
         ])) {
       final regRows = await db.query('financial_transactions',
-          where: "voided_at IS NULL AND source_type IN ('transfer', 'adjustment')",
+          where:
+              "voided_at IS NULL AND source_type IN ('transfer', 'adjustment')",
           orderBy: 'date, rowid');
       final groups = <String, List<Map<String, dynamic>>>{};
       for (final row in regRows) {
@@ -554,8 +572,9 @@ class JournalStore {
     // 8. Loan movements.
     if (await _tableExists(db, 'loan_movements') &&
         await _tableExists(db, 'loan_accounts') &&
-        (await _columns(db, 'loan_movements'))
-            .containsAll(['id', 'date', 'type', 'account_id'])) {
+        (await _columns(db, 'loan_movements')).containsAll(
+            ['id', 'date', 'type', 'account_id', 'voided_at', 'loan_id']) &&
+        (await _columns(db, 'loan_accounts')).containsAll(['id'])) {
       final loanRows = await db.rawQuery('''
         SELECT m.*, l.name AS loan_name, l.currency_code
         FROM loan_movements m JOIN loan_accounts l ON l.id = m.loan_id

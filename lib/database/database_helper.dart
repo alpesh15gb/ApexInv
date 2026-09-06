@@ -19,7 +19,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 56;
+  final dbVersion = 57;
 
   /// Emits when the sync engine finishes applying pulled remote rows, so the
   /// UI layer can refresh its lists. Write-side signaling needs no stream:
@@ -1861,6 +1861,51 @@ class DatabaseHelper {
           () async {
         await db.execute(
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_number_unique ON invoices(invoice_number) WHERE invoice_number IS NOT NULL');
+      });
+    }
+    // v57 heal runs BEFORE v55/v56 (not in numeric order) on purpose: the
+    // v56 journal backfill reads purchase/invoice payment columns, so any
+    // database that missed the v48 linking columns must be healed first —
+    // otherwise the backfill crashes and the upgrade never completes. The
+    // version gates keep this correct for every upgrade path (fresh DBs skip
+    // everything; healed DBs re-run nothing).
+    if (oldVersion < 57) {
+      // Heal databases that crossed v48 before the purchase-side linking
+      // columns landed in `link_operational_payments`: such files have the
+      // invoice-side columns (account_id/cheque_id/cheque_status) but
+      // purchase_bill_payments lacks account_id/cheque_id/cheque_status/
+      // payment_group_id, bricking startup with "no such column:
+      // cheque_status" as soon as any query filters on it. Re-applies the
+      // full v48 column list idempotently — a no-op on healthy databases.
+      await _runMigrationStep(db, 57, 'heal_operational_link_columns',
+          () async {
+        final existing = (await db
+                .rawQuery("SELECT name FROM sqlite_master WHERE type='table'"))
+            .map((r) => r['name'] as String?)
+            .whereType<String>()
+            .toSet();
+        for (final stmt in [
+          "ALTER TABLE invoices ADD COLUMN sales_channel TEXT DEFAULT 'invoice'",
+          'ALTER TABLE invoices ADD COLUMN source_order_id TEXT',
+          'ALTER TABLE invoice_payments ADD COLUMN account_id TEXT',
+          'ALTER TABLE invoice_payments ADD COLUMN cheque_id TEXT',
+          "ALTER TABLE invoice_payments ADD COLUMN cheque_status TEXT DEFAULT 'none'",
+          'ALTER TABLE purchase_bill_payments ADD COLUMN account_id TEXT',
+          'ALTER TABLE purchase_bill_payments ADD COLUMN cheque_id TEXT',
+          "ALTER TABLE purchase_bill_payments ADD COLUMN cheque_status TEXT DEFAULT 'none'",
+          'ALTER TABLE purchase_bill_payments ADD COLUMN payment_group_id TEXT',
+          'ALTER TABLE expenses ADD COLUMN account_id TEXT',
+        ]) {
+          final table = stmt.split(' ')[2];
+          if (!existing.contains(table)) continue;
+          try {
+            await db.execute(stmt);
+          } catch (e) {
+            if (!e.toString().toLowerCase().contains('duplicate column name')) {
+              rethrow;
+            }
+          }
+        }
       });
     }
     if (oldVersion < 55) {

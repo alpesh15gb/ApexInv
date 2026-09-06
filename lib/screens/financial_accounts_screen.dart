@@ -25,13 +25,37 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
   String? _selectedId;
   bool _loading = true;
 
+  // ── Presentation-only state (in-memory over already-loaded rows) ──
+  // _load still uses the existing getAccounts / getBalances /
+  // getTransactions calls; search / filter / sort / pagination below only
+  // re-arrange the loaded accounts. Transfer/adjust/edit/postings untouched.
+  String _searchQuery = '';
+  String _activeFilter = 'all'; // all | active | inactive
+  String _sortField = 'name'; // name | balance
+  bool _sortAscending = true;
+  int _currentPage = 0;
+  static const int _pageSize = 10;
+  final TextEditingController _searchController = TextEditingController();
+
+  static const double _wideBreakpoint = 800;
+
   String get _title =>
       widget.accountType == 'bank' ? 'Bank Accounts' : 'Cash In Hand';
+
+  String get _subtitle => widget.accountType == 'bank'
+      ? 'Manage bank balances, transfers and adjustments.'
+      : 'Manage cash balances, transfers and adjustments.';
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load({String? select}) async {
@@ -58,10 +82,99 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
     });
   }
 
+  Map<String, int> get _statusCounts {
+    var active = 0, inactive = 0;
+    for (final a in _accounts) {
+      if (a.active) {
+        active++;
+      } else {
+        inactive++;
+      }
+    }
+    return {'all': _accounts.length, 'active': active, 'inactive': inactive};
+  }
+
+  double get _totalBalance =>
+      _accounts.fold(0, (sum, a) => sum + (_balances[a.id] ?? 0));
+
+  String get _currencySymbol =>
+      _accounts.isEmpty ? '₹' : _accounts.first.currencySymbol;
+
+  List<FinancialAccount> get _filtered {
+    final q = _searchQuery.trim().toLowerCase();
+    return _accounts.where((a) {
+      if (_activeFilter == 'active' && !a.active) return false;
+      if (_activeFilter == 'inactive' && a.active) return false;
+      if (q.isNotEmpty &&
+          !a.name.toLowerCase().contains(q) &&
+          !a.institution.toLowerCase().contains(q) &&
+          !a.accountNumberMasked.toLowerCase().contains(q)) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  List<FinancialAccount> get _visible {
+    final rows = _filtered;
+    rows.sort((a, b) {
+      int result;
+      switch (_sortField) {
+        case 'balance':
+          result = (_balances[a.id] ?? 0).compareTo(_balances[b.id] ?? 0);
+          break;
+        default:
+          result = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      }
+      return _sortAscending ? result : -result;
+    });
+    return rows;
+  }
+
+  List<FinancialAccount> get _pageRows {
+    final rows = _visible;
+    final start = _currentPage * _pageSize;
+    if (start >= rows.length) return const [];
+    final end = (start + _pageSize).clamp(0, rows.length);
+    return rows.sublist(start, end);
+  }
+
+  int get _totalPages => (_visible.length / _pageSize).ceil().clamp(1, 1 << 30);
+
+  void _onSort(String field) {
+    setState(() {
+      if (_sortField == field) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortField = field;
+        _sortAscending = true;
+      }
+      _currentPage = 0;
+    });
+  }
+
+  void _clearFilters() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _activeFilter = 'all';
+      _currentPage = 0;
+    });
+  }
+
   Future<void> _select(String id) async {
     setState(() => _selectedId = id);
     final rows = await AccountingService.getTransactions(id);
     if (mounted && _selectedId == id) setState(() => _transactions = rows);
+  }
+
+  Future<void> _toggleActive(FinancialAccount account) async {
+    try {
+      await AccountingService.setAccountActive(account.id, !account.active);
+      await _load(select: account.id);
+    } catch (e) {
+      _error(e);
+    }
   }
 
   Future<void> _editAccount([FinancialAccount? existing]) async {
@@ -312,11 +425,6 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
       appBar: AppBar(
         title: Text(_title),
         actions: [
-          FilledButton.icon(
-              onPressed: () => _editAccount(),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('New')),
-          const SizedBox(width: 8),
           IconButton(
               onPressed: _transfer,
               tooltip: 'Transfer',
@@ -332,50 +440,419 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
       body: _loading
           ? const AppLoadingState()
           : LayoutBuilder(builder: (context, constraints) {
-              final list = _accountList();
+              final wide = constraints.maxWidth >= _wideBreakpoint;
+              final list = _accountPane(context, wide);
               final register = _register(selected);
-              if (constraints.maxWidth < 800) {
+              if (!wide) {
                 return Column(children: [
-                  SizedBox(height: 210, child: list),
+                  _header(context, false),
+                  _statusChips(),
+                  _searchRow(),
+                  const Divider(height: 1),
+                  SizedBox(height: 300, child: list),
                   const Divider(height: 1),
                   Expanded(child: register),
                 ]);
               }
-              return Row(children: [
-                SizedBox(width: 340, child: list),
-                const VerticalDivider(width: 1),
-                Expanded(child: register),
+              return Column(children: [
+                _header(context, true),
+                _statusChips(),
+                _searchRow(),
+                const Divider(height: 1),
+                Expanded(
+                  child: Row(children: [
+                    SizedBox(width: 420, child: list),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: register),
+                  ]),
+                ),
               ]);
             }),
+      floatingActionButton: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= _wideBreakpoint) {
+            return const SizedBox();
+          }
+          return FloatingActionButton(
+            onPressed: () => _editAccount(),
+            tooltip: 'New Account',
+            child: const Icon(Icons.add),
+          );
+        },
+      ),
     );
   }
 
-  Widget _accountList() => _accounts.isEmpty
-      ? AppEmptyState(
+  Widget _header(BuildContext context, bool wide) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _title,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_accounts.length} accounts · '
+                  'Total $_currencySymbol ${_totalBalance.toStringAsFixed(2)}',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (wide) ...[
+            const SizedBox(width: 12),
+            AppPrimaryButton(
+              onPressed: () => _editAccount(),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('New Account'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChips() {
+    final counts = _statusCounts;
+    final options = <(String, String)>[
+      ('all', 'All'),
+      ('active', 'Active'),
+      ('inactive', 'Inactive'),
+    ];
+    return SizedBox(
+      height: 52,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final option in options)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                selected: _activeFilter == option.$1,
+                label: Text('${option.$2} · ${counts[option.$1] ?? 0}'),
+                onSelected: (_) => setState(() {
+                  _activeFilter = option.$1;
+                  _currentPage = 0;
+                }),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _searchRow() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: AppSearchField(
+        controller: _searchController,
+        hintText: 'Search accounts...',
+        onChanged: (value) => setState(() {
+          _searchQuery = value;
+          _currentPage = 0;
+        }),
+        onClear: _searchController.text.isEmpty ? null : () => _clearFilters(),
+      ),
+    );
+  }
+
+  Widget _accountPane(BuildContext context, bool wide) {
+    if (_accounts.isEmpty) {
+      return AppEmptyState(
           icon: widget.accountType == 'bank'
               ? Icons.account_balance
               : Icons.account_balance_wallet,
-          title: 'No ${widget.accountType} accounts yet.')
-      : ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _accounts.length,
-          itemBuilder: (context, index) {
-            final account = _accounts[index];
-            final selected = account.id == _selectedId;
-            return ListTile(
-              selected: selected,
-              leading: AppRowIcon(widget.accountType == 'bank'
-                  ? Icons.account_balance
-                  : Icons.account_balance_wallet),
-              title: Text(account.name),
-              subtitle: Text(account.active
-                  ? account.institution
-                  : 'Inactive • ${account.institution}'),
-              trailing: AppMoney((_balances[account.id] ?? 0),
-                  currencySymbol: account.currencySymbol, bold: true),
-              onTap: () => _select(account.id),
-            );
-          });
+          title: 'No ${widget.accountType} accounts yet.',
+          subtitle: 'Create your first account to track balances.',
+          action: AppPrimaryButton(
+            onPressed: () => _editAccount(),
+            label: const Text('Create account'),
+          ));
+    }
+    if (_visible.isEmpty) {
+      return Center(
+        child: AppEmptyState(
+          icon: Icons.search_off,
+          title: 'No accounts match this view.',
+          subtitle: 'Try a different status or search.',
+          action: OutlinedButton.icon(
+            onPressed: _clearFilters,
+            icon: const Icon(Icons.clear_all, size: 18),
+            label: const Text('Clear filters'),
+          ),
+        ),
+      );
+    }
+    return Column(children: [
+      Expanded(
+        child: wide ? _accountsTable(context) : _accountsCards(),
+      ),
+      _accountsFooter(context),
+    ]);
+  }
+
+  Widget _accountsTable(BuildContext context) {
+    int? sortIndex;
+    switch (_sortField) {
+      case 'name':
+        sortIndex = 0;
+        break;
+      case 'balance':
+        sortIndex = 1;
+        break;
+    }
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            sortColumnIndex: sortIndex,
+            sortAscending: _sortAscending,
+            showCheckboxColumn: false,
+            columns: [
+              DataColumn(
+                label: const Text(
+                  'Account',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                onSort: (_, __) => _onSort('name'),
+              ),
+              DataColumn(
+                label: const Text(
+                  'Balance',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                numeric: true,
+                onSort: (_, __) => _onSort('balance'),
+              ),
+              const DataColumn(
+                label: Text(
+                  'Status',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const DataColumn(label: Text('')),
+            ],
+            rows: [
+              for (final account in _pageRows)
+                DataRow(
+                  selected: account.id == _selectedId,
+                  onSelectChanged: (_) => _select(account.id),
+                  cells: [
+                    DataCell(
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 150),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              account.name,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            if (account.institution.isNotEmpty)
+                              Text(
+                                account.institution,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      AppMoney(
+                        _balances[account.id] ?? 0,
+                        currencySymbol: account.currencySymbol,
+                        bold: true,
+                      ),
+                    ),
+                    DataCell(_statusPill(account.active)),
+                    DataCell(_rowMenu(account)),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _accountsCards() {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      itemCount: _pageRows.length,
+      itemBuilder: (context, index) {
+        final account = _pageRows[index];
+        final selected = account.id == _selectedId;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: AppListRow(
+            leading: AppRowIcon(widget.accountType == 'bank'
+                ? Icons.account_balance
+                : Icons.account_balance_wallet),
+            title: account.name,
+            subtitle: account.active
+                ? (account.institution.isEmpty
+                    ? 'Active'
+                    : 'Active • ${account.institution}')
+                : 'Inactive • ${account.institution}',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppMoney(
+                  _balances[account.id] ?? 0,
+                  currencySymbol: account.currencySymbol,
+                  bold: true,
+                ),
+                _rowMenu(account),
+              ],
+            ),
+            onTap: selected ? null : () => _select(account.id),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _accountsFooter(BuildContext context) {
+    final total = _visible.length;
+    if (total <= _pageSize) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          '$total of ${_accounts.length} accounts',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      );
+    }
+    final start = _currentPage * _pageSize + 1;
+    final end = ((_currentPage + 1) * _pageSize).clamp(0, total);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Showing $start–$end of $total',
+              style: Theme.of(context).textTheme.bodySmall,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            tooltip: 'Previous page',
+            onPressed:
+                _currentPage > 0 ? () => setState(() => _currentPage--) : null,
+          ),
+          Text(
+            'Page ${_currentPage + 1} of $_totalPages',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: 'Next page',
+            onPressed: (_currentPage + 1) * _pageSize < total
+                ? () => setState(() => _currentPage++)
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(bool active) {
+    final color = active ? Colors.green : Colors.grey;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        active ? 'Active' : 'Inactive',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _rowMenu(FinancialAccount account) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 20),
+      onSelected: (value) {
+        switch (value) {
+          case 'open':
+            _select(account.id);
+            break;
+          case 'edit':
+            _editAccount(account);
+            break;
+          case 'toggle':
+            _toggleActive(account);
+            break;
+          case 'transfer':
+            _transfer();
+            break;
+          case 'adjust':
+            _select(account.id);
+            _adjust();
+            break;
+        }
+      },
+      itemBuilder: (_) => [
+        const PopupMenuItem(value: 'open', child: Text('Open')),
+        const PopupMenuItem(value: 'edit', child: Text('Edit')),
+        if (account.id != 'cash-default')
+          PopupMenuItem(
+            value: 'toggle',
+            child: Text(account.active ? 'Disable' : 'Enable'),
+          ),
+        const PopupMenuItem(value: 'transfer', child: Text('Transfer')),
+        const PopupMenuItem(value: 'adjust', child: Text('Adjust balance')),
+      ],
+    );
+  }
 
   Widget _register(FinancialAccount? account) {
     if (account == null) {
@@ -398,15 +875,7 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
               icon: const Icon(Icons.edit_outlined)),
           if (account.id != 'cash-default')
             IconButton(
-                onPressed: () async {
-                  try {
-                    await AccountingService.setAccountActive(
-                        account.id, !account.active);
-                    await _load(select: account.id);
-                  } catch (e) {
-                    _error(e);
-                  }
-                },
+                onPressed: () => _toggleActive(account),
                 tooltip: account.active ? 'Disable' : 'Enable',
                 icon: Icon(account.active
                     ? Icons.block_outlined
@@ -454,7 +923,8 @@ class _FinancialAccountsScreenState extends State<FinancialAccountsScreen> {
         child: _transactions.isEmpty
             ? const AppEmptyState(
                 icon: Icons.receipt_long_outlined,
-                title: 'No account movements yet.')
+                title: 'No account movements yet.',
+                subtitle: 'New transactions will appear here.')
             : ListView.separated(
                 itemCount: _transactions.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),

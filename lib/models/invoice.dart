@@ -23,6 +23,9 @@ class Invoice {
   TaxMode taxMode;
   bool
       isInterState; // India: interstate supply → show IGST instead of CGST/SGST
+  bool roundOffEnabled; // round the payable total to the nearest rupee; the
+  // paise difference posts as an explicit Round Off ledger line so Sales
+  // and Tax stay exact. Default off (exact totals).
   List<InvoicePayment> payments;
   String? upiId; // selected UPI account for this invoice
   String? bankAccountId; // selected bank account label key for this invoice
@@ -61,6 +64,7 @@ class Invoice {
     this.currencySymbol = '₹',
     this.taxMode = TaxMode.global,
     this.isInterState = false,
+    this.roundOffEnabled = false,
     this.payments = const [],
     this.upiId,
     this.bankAccountId,
@@ -120,13 +124,23 @@ class Invoice {
 
   double get total => _totals.total;
 
+  /// Round-off delta (payable − exact), 0 unless [roundOffEnabled].
+  double get roundOffAmount =>
+      InvoiceTotalsCalculator.roundOffAmount(total, enabled: roundOffEnabled);
+
+  /// What the customer actually owes. Equals [total] unless rounding is on.
+  /// Payments, outstanding, reports, ledger AR, and GSTR invoice value all
+  /// derive from this so the books agree with the printed bill.
+  double get payableTotal =>
+      InvoiceTotalsCalculator.payableTotal(total, enabled: roundOffEnabled);
+
   double get amountPaid => payments
       .where(
           (p) => p.chequeStatus != 'bounced' && p.chequeStatus != 'cancelled')
       .fold(0.0, (sum, p) => sum + p.amountPaid);
 
   double get outstandingBalance =>
-      InvoiceCalculator.outstanding(total: total, paid: amountPaid);
+      InvoiceCalculator.outstanding(total: payableTotal, paid: amountPaid);
 
   /// True when every line's rate already contains tax. Outputs use this to
   /// label rates/tax as inclusive; editors restamp it via the GST toggle.
@@ -134,7 +148,7 @@ class Invoice {
       items.isNotEmpty && items.every((i) => i.product.priceIncludesTax);
 
   PaymentStatus get paymentStatus =>
-      InvoiceCalculator.paymentStatus(total: total, paid: amountPaid);
+      InvoiceCalculator.paymentStatus(total: payableTotal, paid: amountPaid);
 }
 
 extension _InvoiceItemTotals on InvoiceItem {

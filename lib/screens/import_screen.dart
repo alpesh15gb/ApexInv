@@ -143,6 +143,17 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
+                              'Step 1 — Choose a file, Step 2 — Preview, Step 3 — Import, Step 4 — Done.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
                               'Import customers, products, sales, quotations, purchase orders, and purchase bills from a Vyapar .vyb backup file.',
                               style: Theme.of(context)
                                   .textTheme
@@ -206,7 +217,15 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const AppSectionHeader('Preview'),
+                    const AppSectionHeader(
+                        'Step 2 — Preview what will be imported'),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Check the counts below, then start the import.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                    ),
                     if (_preview!.firmName.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -245,6 +264,11 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
+                    Text(
+                      'Step 3 — Importing…',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 12),
                     const AppLoadingState(),
                     const SizedBox(height: 16),
                     Text(
@@ -270,7 +294,7 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                               color: Colors.green, size: 28),
                           const SizedBox(width: 12),
                           Text(
-                            'Import Complete!',
+                            'Step 4 — Import complete!',
                             style: Theme.of(context)
                                 .textTheme
                                 .titleMedium
@@ -279,6 +303,13 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                                 ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your data is now in the app. Use Done to go back.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                       ),
                       const SizedBox(height: 16),
                       _buildResultRow(
@@ -354,7 +385,8 @@ class _ImportScreenState extends ConsumerState<ImportScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const AppSectionHeader('How to get a .vyb file'),
+                    const AppSectionHeader(
+                        'Before you start: how to get a .vyb file'),
                     const SizedBox(height: 12),
                     _buildInstructionStep(1, 'Open the Vyapar app'),
                     _buildInstructionStep(

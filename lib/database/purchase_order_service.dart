@@ -1,5 +1,6 @@
 import 'package:apexbooks/models/purchase_order.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import 'database_helper.dart';
 
 class PurchaseOrderService {
@@ -21,7 +22,43 @@ class PurchaseOrderService {
       {List<PurchaseOrderItem>? items}) async {
     final db = await dbHelper.database;
     await db.transaction((txn) async {
-      final updateMap = po.toMap()..remove('id');
+      final oldRows = await txn.query('purchase_orders',
+          columns: ['status', 'amount_paid'],
+          where: 'id = ?',
+          whereArgs: [po.id],
+          limit: 1);
+      if (oldRows.isEmpty) throw StateError('Purchase order not found');
+      final oldStatus = oldRows.first['status'] as String? ?? 'draft';
+      // amount_paid on a PO is append-only bookkeeping: an edit must never
+      // silently drop what the vendor was already paid.
+      final storedPaid = (oldRows.first['amount_paid'] as num? ?? 0).toDouble();
+      final oldItems = await txn.query('purchase_order_items',
+          columns: ['product_id', 'quantity'],
+          where: 'purchase_order_id = ?',
+          whereArgs: [po.id]);
+      final wasReceived = oldStatus == 'received';
+      final isReceivedNow = po.status == 'received';
+      final oldQty = _qtyByProduct(oldItems.map(PurchaseOrderItem.fromMap));
+      if (!wasReceived && isReceivedNow) {
+        // Draft/confirmed → received via edit: stock the NEW lines once.
+        // When no replacement lines are supplied the stored lines stay, so
+        // stock those instead.
+        await _adjustStockInTxn(
+            txn, items != null ? _qtyByProduct(items) : oldQty);
+      } else if (wasReceived && !isReceivedNow) {
+        // Received → anything else via edit: give back the OLD lines.
+        await _adjustStockInTxn(txn, _negate(oldQty));
+      } else if (wasReceived && isReceivedNow && items != null) {
+        // Received → received with new lines: net delta only.
+        final delta = _qtyByProduct(items);
+        for (final entry in oldQty.entries) {
+          delta[entry.key] = (delta[entry.key] ?? 0) - entry.value;
+        }
+        await _adjustStockInTxn(txn, delta);
+      }
+      final updateMap = po.toMap()
+        ..remove('id')
+        ..['amount_paid'] = storedPaid;
       await txn.update('purchase_orders', updateMap,
           where: 'id = ?', whereArgs: [po.id]);
       if (items != null) {
@@ -115,10 +152,93 @@ class PurchaseOrderService {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// Guarded status transition. Stock-moving states always go through the
+  /// same transactional paths as [markAsReceived]/[cancelPurchaseOrder]:
+  /// 'received' adds stock exactly once (idempotent), leaving 'received'
+  /// for 'cancelled' reverses it. Non-stock transitions just restamp.
   static Future<void> updateStatus(String id, String status) async {
+    if (status == 'received') {
+      await markAsReceived(id);
+      return;
+    }
     final db = await dbHelper.database;
-    await db.update('purchase_orders', {'status': status},
-        where: 'id = ?', whereArgs: [id]);
+    await db.transaction((txn) async {
+      final rows = await txn.query('purchase_orders',
+          columns: ['status'], where: 'id = ?', whereArgs: [id], limit: 1);
+      if (rows.isEmpty) throw StateError('Purchase order not found');
+      final current = rows.first['status'] as String? ?? 'draft';
+      if (current == status) return;
+      if (status == 'cancelled' && current == 'received') {
+        final items = await txn.query('purchase_order_items',
+            columns: ['product_id', 'quantity'],
+            where: 'purchase_order_id = ?',
+            whereArgs: [id]);
+        await _adjustStockInTxn(
+            txn, _negate(_qtyByProduct(items.map(PurchaseOrderItem.fromMap))));
+      }
+      await txn.update('purchase_orders', {'status': status},
+          where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  /// Cancels a purchase order. A received order gives its lines back to
+  /// on-hand stock in the same transaction that restamps it, so cancelling
+  /// can never leak phantom stock. No-op when already cancelled.
+  static Future<void> cancelPurchaseOrder(String id) async {
+    final db = await dbHelper.database;
+    await db.transaction((txn) async {
+      final rows = await txn.query('purchase_orders',
+          columns: ['status'], where: 'id = ?', whereArgs: [id], limit: 1);
+      if (rows.isEmpty) throw StateError('Purchase order not found');
+      final current = rows.first['status'] as String? ?? 'draft';
+      if (current == 'cancelled') return;
+      if (current == 'received') {
+        final items = await txn.query('purchase_order_items',
+            columns: ['product_id', 'quantity'],
+            where: 'purchase_order_id = ?',
+            whereArgs: [id]);
+        await _adjustStockInTxn(
+            txn, _negate(_qtyByProduct(items.map(PurchaseOrderItem.fromMap))));
+      }
+      await txn.update('purchase_orders', {'status': 'cancelled'},
+          where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  /// Sums stockable quantities per product. Lines without a product link are
+  /// skipped (ad-hoc lines that must not touch the catalogue).
+  static Map<String, double> _qtyByProduct(Iterable<PurchaseOrderItem> items) {
+    final result = <String, double>{};
+    for (final item in items) {
+      if (item.productId.isEmpty) continue;
+      result[item.productId] = (result[item.productId] ?? 0) + item.quantity;
+    }
+    return result;
+  }
+
+  static Map<String, double> _negate(Map<String, double> delta) =>
+      {for (final e in delta.entries) e.key: -e.value};
+
+  /// Stock helper — all reads/writes go through [txn] so callers stay atomic.
+  /// Skips missing products and products flagged unlimited_stock.
+  static Future<void> _adjustStockInTxn(
+    DatabaseExecutor txn,
+    Map<String, double> deltaByProductId,
+  ) async {
+    for (final entry in deltaByProductId.entries) {
+      if (entry.value.abs() <= 0.000001) continue;
+      final rows = await txn.query('products',
+          columns: ['stock', 'unlimited_stock'],
+          where: 'id = ?',
+          whereArgs: [entry.key],
+          limit: 1);
+      if (rows.isEmpty || (rows.first['unlimited_stock'] as int? ?? 0) == 1) {
+        continue;
+      }
+      final stock = (rows.first['stock'] as num? ?? 0).toDouble();
+      await txn.update('products', {'stock': stock + entry.value},
+          where: 'id = ?', whereArgs: [entry.key]);
+    }
   }
 
   /// Marks a purchase order received AND adds its lines to on-hand stock in a
@@ -172,18 +292,32 @@ class PurchaseOrderService {
   static Future<void> deletePurchaseOrder(String id) async {
     final db = await dbHelper.database;
     await db.transaction((txn) async {
+      // A received order still holds its lines in on-hand stock: reverse
+      // them (negative delta) in the same txn that removes the order, so a
+      // delete can never leak phantom stock.
+      final header = await txn.query('purchase_orders',
+          columns: ['status'], where: 'id = ?', whereArgs: [id], limit: 1);
+      final wasReceived = header.isNotEmpty &&
+          (header.first['status'] as String? ?? 'draft') == 'received';
+      if (wasReceived) {
+        final items = await txn.query('purchase_order_items',
+            columns: ['product_id', 'quantity'],
+            where: 'purchase_order_id = ?',
+            whereArgs: [id]);
+        await _adjustStockInTxn(
+            txn, _negate(_qtyByProduct(items.map(PurchaseOrderItem.fromMap))));
+      }
       await txn.delete('purchase_order_items',
           where: 'purchase_order_id = ?', whereArgs: [id]);
       await txn.delete('purchase_orders', where: 'id = ?', whereArgs: [id]);
     });
   }
 
+  /// UUID mint (was MAX(CAST(id))+1): cross-device creation cannot collide
+  /// on the sync wire. Legacy numeric-string ids remain readable.
+  /// Display numbering stays in [generateNextOrderNumber] (untouched).
   static Future<String> generateNextId() async {
-    final db = await dbHelper.database;
-    final result = await db
-        .rawQuery("SELECT MAX(CAST(id AS INTEGER)) FROM purchase_orders");
-    final maxId = Sqflite.firstIntValue(result) ?? 0;
-    return (maxId + 1).toString();
+    return const Uuid().v4();
   }
 
   static Future<String> generateNextOrderNumber() async {

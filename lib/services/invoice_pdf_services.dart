@@ -111,13 +111,22 @@ class InvoicePdfServices {
                       '${invoice.currencySymbol} ${invoice.tax.toStringAsFixed(2)}'),
                 ],
               ),
+              if (invoice.roundOffAmount.abs() >= 0.005)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Round Off:'),
+                    Text(
+                        '${invoice.currencySymbol} ${invoice.roundOffAmount.toStringAsFixed(2)}'),
+                  ],
+                ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Total:',
                       style: TextStyle(fontWeight: FontWeight.bold)),
                   Text(
-                      '${invoice.currencySymbol} ${invoice.total.toStringAsFixed(2)}',
+                      '${invoice.currencySymbol} ${invoice.payableTotal.toStringAsFixed(2)}',
                       style: const TextStyle(fontWeight: FontWeight.bold)),
                 ],
               ),

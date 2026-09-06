@@ -19,6 +19,7 @@ import 'package:apexbooks/providers/repositories.dart';
 
 import '../common/supported_currencies.dart';
 import 'package:apexbooks/widgets/app/app.dart';
+import 'package:apexbooks/screens/settings/company_info_screen.dart';
 
 // ─── Date preset enum ─────────────────────────────────────────────────────────
 
@@ -457,9 +458,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           if (!mounted) return;
           setState(() => _trialBalance = tb);
         case 13:
-          final (bsFrom, bsTo) = _range;
+          final (_, bsTo) = _range;
+          // Balance sheet is point-in-time as of the period end.
           final bs = await LedgerService.getBalanceSheet(
-              from: bsFrom, to: bsTo, currencyCode: _reportCurrencyCode);
+              to: bsTo, currencyCode: _reportCurrencyCode);
           if (!mounted) return;
           setState(() => _balanceSheet = bs);
       }
@@ -1346,6 +1348,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     return Column(children: [
       _sectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('As of ${_formatDate(_range.$2)} (point-in-time)',
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w400,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 8),
           Text('ASSETS',
               style: TextStyle(
                   fontSize: 11.5,
@@ -1394,7 +1402,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     final df = DateFormat('dd MMM yyyy');
     if (_dayBook.isEmpty) {
       return _sectionCard(
-          child: _emptyState('No money movement in this period'));
+          child: _emptyState('No money movement in this period',
+              hint:
+                  'Try a wider period from the period list, or record a payment first.'));
     }
     final moneyIn = _dayBook.fold(0.0, (s, e) => s + e.moneyIn);
     final moneyOut = _dayBook.fold(0.0, (s, e) => s + e.moneyOut);
@@ -1510,7 +1520,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     final df = DateFormat('dd MMM yyyy');
     if (_expiries.isEmpty) {
       return _sectionCard(
-          child: _emptyState('No batches expiring in the next 90 days'));
+          child: _emptyState('No batches expiring in the next 90 days',
+              hint: 'Nothing needs attention — check back later.'));
     }
     return _sectionCard(
       padding: EdgeInsets.zero,
@@ -1561,7 +1572,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   Widget _buildCheques() {
     final df = DateFormat('dd MMM yyyy');
     if (_cheques.isEmpty) {
-      return _sectionCard(child: _emptyState('No cheque payments recorded'));
+      return _sectionCard(
+          child: _emptyState('No cheque payments recorded',
+              hint: 'Cheque payments will appear here once recorded.'));
     }
     final pending = _cheques.where((c) => !c.cleared).toList();
     return Column(children: [
@@ -1844,24 +1857,37 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   }
 
   Widget _missingCostBanner() {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEB),
+        color: dark
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
+            : const Color(0xFFFFFBEB),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFFDE68A)),
+        border: Border.all(
+            color: dark
+                ? Theme.of(context).colorScheme.outlineVariant
+                : const Color(0xFFFDE68A)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber_rounded,
-              color: Color(0xFFD97706), size: 18),
+          Icon(Icons.warning_amber_rounded,
+              color: dark
+                  ? Theme.of(context).colorScheme.onSurfaceVariant
+                  : const Color(0xFFD97706),
+              size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               AppLocalizations.of(context)!
                   .reportsMissingCostBannerMessage(_missingCostItemCount),
-              style: const TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: dark
+                      ? Theme.of(context).colorScheme.onSurfaceVariant
+                      : const Color(0xFF92400E)),
             ),
           ),
         ],
@@ -1869,10 +1895,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
   }
 
-  Widget _emptyState(String msg) {
+  Widget _emptyState(String msg, {String? hint, Widget? action}) {
     return AppEmptyState(
       icon: Icons.bar_chart_outlined,
       title: msg,
+      subtitle: hint,
+      action: action,
     );
   }
 
@@ -1950,7 +1978,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                     ),
                     const SizedBox(height: 20),
                     if (_trend.isEmpty)
-                      _emptyState(l10n.reportsNoInvoiceDataMessage)
+                      _emptyState(l10n.reportsNoInvoiceDataMessage,
+                          hint:
+                              'Create an invoice or try a wider period from the period list.')
                     else
                       SizedBox(
                         height: 240,
@@ -2146,7 +2176,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                     _cardTitle(l10n.reportsPaymentStatusBreakdownTitle),
                     const SizedBox(height: 20),
                     if (_status.total == 0)
-                      _emptyState(l10n.reportsNoInvoicesInPeriodMessage)
+                      _emptyState(l10n.reportsNoInvoicesInPeriodMessage,
+                          hint:
+                              'No invoices in this period — try a wider period or Custom range.')
                     else
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
@@ -2217,7 +2249,8 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 20),
                         child: _emptyState(
-                            l10n.reportsNoOutstandingInvoicesMessage),
+                            l10n.reportsNoOutstandingInvoicesMessage,
+                            hint: 'All caught up — nothing overdue right now.'),
                       )
                     else ...[
                       _agedHeader(),
@@ -2472,7 +2505,17 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                     if (_taxBuckets.isEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 20),
-                        child: _emptyState(l10n.reportsNoTaxableItemsMessage),
+                        child: _emptyState(
+                          l10n.reportsNoTaxableItemsMessage,
+                          hint:
+                              'No taxable sales in this period. Try a wider period or Custom range.',
+                          action: AppSecondaryButton(
+                            onPressed: _pickCustomRange,
+                            icon:
+                                const Icon(Icons.date_range_outlined, size: 16),
+                            label: const Text('Adjust dates'),
+                          ),
+                        ),
                       )
                     else ...[
                       _taxTableHeader(),
@@ -2490,14 +2533,27 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                     _cardTitle('GST Offline Tool exports'),
                     const SizedBox(height: 8),
                     Text(
-                      'CSV files shaped for the GSTN Offline Tool — import '
-                      'each file via the tool\'s section import. Party '
-                      'Statement is in the Customers report; GSTR-2 needs '
+                      'File in 3 steps using the controls already on this screen:\n'
+                      '1. Set company GSTIN in Company Info.\n'
+                      '2. Pick the filing period from the period list.\n'
+                      '3. Export below, then import each file via the Offline Tool\'s section import.\n'
+                      'Party Statement is in the Customers report; GSTR-2 needs '
                       'purchase-bill data the app does not track yet.',
                       style: TextStyle(
                           fontSize: 12.5,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                           height: 1.5),
+                    ),
+                    const SizedBox(height: 12),
+                    AppSecondaryButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CompanyInfoScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.business_outlined, size: 16),
+                      label: const Text('Open Company Info (set GSTIN)'),
                     ),
                     const SizedBox(height: 14),
                     Wrap(
@@ -2880,7 +2936,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 20),
               child: _emptyState(
-                  AppLocalizations.of(context)!.reportsNoCustomerDataMessage),
+                  AppLocalizations.of(context)!.reportsNoCustomerDataMessage,
+                  hint:
+                      'Invoices in this period will appear here. Try a wider period.'),
             )
           else ...[
             Padding(
@@ -3078,12 +3136,15 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           if (_statementCustomers.isEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 20),
-              child: _emptyState(l10n.reportsNoCustomersWithInvoicesMessage),
+              child: _emptyState(l10n.reportsNoCustomersWithInvoicesMessage,
+                  hint:
+                      'Create an invoice first, then pick a customer to view the statement.'),
             )
           else if (visibleStatements.isEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 20),
-              child: _emptyState(l10n.reportsNoStatementActivityMessage),
+              child: _emptyState(l10n.reportsNoStatementActivityMessage,
+                  hint: 'Try a wider period from the period list.'),
             )
           else
             ...visibleStatements.map(_customerStatementSection),
@@ -3141,8 +3202,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                 if (statement.lines.isEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 20),
-                    child: _emptyState(AppLocalizations.of(context)!
-                        .reportsNoTransactionsMessage),
+                    child: _emptyState(
+                        AppLocalizations.of(context)!
+                            .reportsNoTransactionsMessage,
+                        hint: 'Try a wider period from the period list.'),
                   )
                 else
                   ...statement.lines.asMap().entries.map((entry) =>
@@ -3457,8 +3520,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                           if (_topProducts.isEmpty)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 20),
-                              child: _emptyState(AppLocalizations.of(context)!
-                                  .reportsNoProductDataMessage),
+                              child: _emptyState(
+                                  AppLocalizations.of(context)!
+                                      .reportsNoProductDataMessage,
+                                  hint:
+                                      'Sales in this period will appear here. Try a wider period.'),
                             )
                           else ...[
                             // Horizontal bars
@@ -3759,7 +3825,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                             Padding(
                               padding: const EdgeInsets.only(bottom: 20),
                               child: _emptyState(
-                                  l10n.reportsNoSalesInPeriodMessage),
+                                  l10n.reportsNoSalesInPeriodMessage,
+                                  hint:
+                                      'No sales in this range — try Last 30 days or a different month above.'),
                             )
                           else ...[
                             _dailyTableHeader(),
@@ -4231,7 +4299,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 20),
                         child: _emptyState(
-                            l10n.reportsNoInvoicesMatchFilterMessage),
+                            l10n.reportsNoInvoicesMatchFilterMessage,
+                            hint:
+                                'Try clearing the day filter or picking a different month above.'),
                       )
                     else ...[
                       ...pageRows.asMap().entries.map((e) =>

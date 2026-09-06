@@ -1,3 +1,4 @@
+import 'package:apexbooks/common/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/domain/invoice_calculator.dart';
@@ -90,7 +91,7 @@ class _ApplyCustomerPaymentDialogState
   // whole invoices as possible instead of leaving several partially paid.
   void _autoFillSmallestFirst() {
     var remaining = double.tryParse(_autoFillController.text.trim()) ?? 0.0;
-    if (remaining <= 0) return;
+    if (!remaining.isFinite || remaining <= 0) return;
     final bySmallest = [..._invoicesForCurrency]
       ..sort((a, b) => a.outstandingBalance.compareTo(b.outstandingBalance));
     setState(() {
@@ -114,10 +115,23 @@ class _ApplyCustomerPaymentDialogState
   }
 
   Future<void> _apply() async {
+    // E3d: synchronous guard before any await so double-tap Apply cannot
+    // post twice. Button is disabled via _isSaving; this covers the window
+    // before rebuild.
+    if (_isSaving) return;
+    _isSaving = true;
     final allocations = <({Invoice invoice, double amount})>[];
     for (final inv in _invoicesForCurrency) {
       final amount =
           double.tryParse(_rowControllers[inv.id]?.text.trim() ?? '') ?? 0.0;
+      if (!amount.isFinite) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Enter valid finite amounts for each invoice.'),
+          backgroundColor: Colors.red,
+        ));
+        _isSaving = false;
+        return;
+      }
       if (amount > InvoiceCalculator.moneyEpsilon) {
         if (amount > inv.outstandingBalance + InvoiceCalculator.moneyEpsilon) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -125,6 +139,7 @@ class _ApplyCustomerPaymentDialogState
                 'Amount for ${inv.invoiceNumber ?? inv.id} exceeds its outstanding balance.'),
             backgroundColor: Colors.red,
           ));
+          _isSaving = false;
           return;
         }
         allocations.add((invoice: inv, amount: amount));
@@ -135,10 +150,11 @@ class _ApplyCustomerPaymentDialogState
         content: Text('Enter an amount for at least one invoice.'),
         backgroundColor: Colors.red,
       ));
+      _isSaving = false;
       return;
     }
 
-    setState(() => _isSaving = true);
+    if (mounted) setState(() {});
     try {
       final saved =
           await ref.read(paymentRepositoryProvider).applyPaymentAcrossInvoices(
@@ -199,7 +215,7 @@ class _ApplyCustomerPaymentDialogState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Receive Payment',
+                        const Text('Record Payment',
                             style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
@@ -395,7 +411,9 @@ class _ApplyCustomerPaymentDialogState
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
+                    child: Text((!_isLoading && _openInvoices.isNotEmpty)
+                        ? 'Cancel'
+                        : 'Close'),
                   ),
                   if (!_isLoading && _openInvoices.isNotEmpty) ...[
                     const SizedBox(width: 12),
@@ -451,14 +469,34 @@ class _ApplyCustomerPaymentDialogState
                     style: TextStyle(
                         fontSize: 12,
                         color: theme.colorScheme.onSurfaceVariant)),
+                if (InvoiceCalculator.isOverdue(
+                  dueDate: inv.dueDate,
+                  outstanding: inv.outstandingBalance,
+                ))
+                  const Text('Overdue',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w700)),
               ],
             ),
           ),
           Expanded(
             flex: 2,
-            child: Text(
-                '${inv.currencySymbol} ${inv.outstandingBalance.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 13, color: Colors.orange)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    '${inv.currencySymbol} ${inv.outstandingBalance.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 13, color: Colors.orange)),
+                if (inv.paymentStatus == PaymentStatus.partial)
+                  const Text('Partial',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600)),
+              ],
+            ),
           ),
           Expanded(
             flex: 2,

@@ -11,6 +11,7 @@ import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/domain/invoice_totals_calculator.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
+import 'package:apexbooks/providers/invoice_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:uuid/uuid.dart';
 import 'package:apexbooks/models/customer.dart';
@@ -22,6 +23,7 @@ import 'package:apexbooks/services/invoice_pdf_services.dart';
 import 'package:apexbooks/services/pdf_service.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
+import 'package:apexbooks/widgets/apply_payment_dialog.dart';
 import 'package:apexbooks/widgets/barcode_scanner_sheet.dart';
 import 'package:apexbooks/widgets/document_editor_shell.dart';
 import 'package:apexbooks/utils/formatters.dart';
@@ -132,6 +134,9 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   // tax is backed out; false → tax is added on top. Applies to every line,
   // existing and subsequently added (per-line dialog remains as override).
   bool _pricesIncludeTax = false;
+  // Document-level round-off: true → the payable total rounds to the
+  // nearest rupee (paise posts to Round Off in the ledger).
+  bool _roundOff = false;
   bool _isInterState =
       false; // India: interstate supply → IGST instead of CGST/SGST
   bool isEditing = false;
@@ -151,6 +156,12 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   String currentInvoiceNumber = "";
   String _currencyCode = 'INR';
   String _currencySymbol = '₹';
+  // Carried from the source document on clone/edit so the save path never
+  // falls back to the settings default (E1). Empty means "no term".
+  String _paymentTermId = '';
+  // Synchronously-checked re-entrancy guard for create/update (E3b). Set
+  // before the first await so double-taps cannot stack two inserts.
+  bool _isSavingInvoice = false;
   List<UpiEntry> _upiEntries = [];
   UpiEntry? _selectedUpi;
   List<BankAccount> _bankAccounts = [];
@@ -232,6 +243,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       taxRateController.text = (taxRate * 100).toStringAsFixed(1);
       _isTaxEnabled = _invoice!.taxMode != TaxMode.none;
       _isPerItem = _invoice!.taxMode == TaxMode.perItem;
+      _roundOff = _invoice!.roundOffEnabled;
       _pricesIncludeTax = invoiceItems.isNotEmpty &&
           invoiceItems.every((i) => i.product.priceIncludesTax);
       _isInterState = _invoice!.isInterState;
@@ -248,6 +260,11 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       _quantityLabel = _invoice!.quantityLabel ?? '';
       _hideInvoiceNumber = _invoice!.hideInvoiceNumber;
       customInvoiceNumberController.text = _invoice!.customInvoiceNumber ?? '';
+      // E1: carry currency + terms synchronously so an early save or a
+      // settings-currency load cannot clobber them.
+      _currencyCode = _invoice!.currencyCode;
+      _currencySymbol = _invoice!.currencySymbol;
+      _paymentTermId = _invoice!.paymentTermId;
       for (final c in _invoice!.additionalCosts) {
         _additionalCostControllers.add((
           label: TextEditingController(text: c.label),
@@ -288,12 +305,21 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       taxRateController.text = (taxRate * 100).toStringAsFixed(1);
       _isTaxEnabled = src.taxMode != TaxMode.none;
       _isPerItem = src.taxMode == TaxMode.perItem;
+      _roundOff = src.roundOffEnabled;
       _pricesIncludeTax = invoiceItems.isNotEmpty &&
           invoiceItems.every((i) => i.product.priceIncludesTax);
       _isInterState = src.isInterState;
       invoiceType = widget.cloneType ?? src.type;
       invoiceTitle = invoiceType == src.type ? src.invoiceTitle : null;
       _quantityLabel = src.quantityLabel ?? '';
+      // E1: carry currency, due date and payment terms into the clone.
+      // Currency is set here AND in _loadCustomersAndProducts (which prefers
+      // the clone source over the settings default), so neither path can
+      // silently revert a USD quote to the settings currency on save.
+      _currencyCode = src.currencyCode;
+      _currencySymbol = src.currencySymbol;
+      _paymentTermId = src.paymentTermId;
+      _selectedDueDate = src.dueDate;
       // Custom PDF number is invoice-specific; don't carry it into a clone.
       for (final c in src.additionalCosts) {
         _additionalCostControllers.add((
@@ -448,6 +474,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       'taxEnabled': _isTaxEnabled,
       'perItemTax': _isPerItem,
       'pricesIncludeTax': _pricesIncludeTax,
+      'roundOff': _roundOff,
       'interState': _isInterState,
       'taxRate': taxRate,
       'taxRateText': taxRateController.text.trim(),
@@ -540,6 +567,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         settingsRepo.getDefaultTaxMode(), // 17
         settingsRepo.getHideInvoiceNumberByDefault(), // 18
         settingsRepo.getSetting(SettingKey.defaultPriceIncludesTax), // 19
+        settingsRepo.getSetting(SettingKey.defaultRoundOff), // 20
       ]);
 
       final c = results[0] as List<Customer>;
@@ -585,6 +613,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       final defaultTaxMode = results[17] as String;
       final hideInvoiceNumberByDefault = results[18] as bool;
       final defaultPriceIncludesTax = (results[19] as String?) == 'true';
+      final defaultRoundOff = (results[20] as String?) == 'true';
 
       // Determine which UPI to pre-select.
       String? existingUpiId;
@@ -653,6 +682,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
           _isPerItem = defaultTaxMode == 'perItem';
           _hideInvoiceNumber = hideInvoiceNumberByDefault;
           _pricesIncludeTax = defaultPriceIncludesTax;
+          _roundOff = defaultRoundOff;
         }
         _businessType = businessType;
         _adHocItemType =
@@ -733,11 +763,29 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
               : (int.tryParse(quantityController.text) ?? 1).toDouble();
       final discount = double.tryParse(discountController.text) ?? 0.0;
       final parsedUnitPrice = double.tryParse(unitPriceController.text);
+      if (!qty.isFinite ||
+          !discount.isFinite ||
+          (parsedUnitPrice != null && !parsedUnitPrice.isFinite)) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Quantity, discount and price must be finite numbers')),
+        );
+        return;
+      }
       final unitPrice =
           (parsedUnitPrice != null && parsedUnitPrice != product.price)
               ? parsedUnitPrice
               : null;
       final extraCost = double.tryParse(extraCostController.text);
+      if (extraCost != null && !extraCost.isFinite) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Extra cost must be a finite number')),
+        );
+        return;
+      }
 
       // Check stock
       if (!product.unlimitedStock && product.stock > 0 && qty > product.stock) {
@@ -1307,132 +1355,144 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   }
 
   Future<bool> _createInvoice() async {
-    // Trial/licence gate: new documents only. Reads are never blocked.
-    if (!await LicenseGate.canCreate(context)) return false;
-    if (nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white),
-              const SizedBox(width: 12),
-              Text(AppLocalizations.of(context)!
-                  .createInvoiceCustomerNameRequiredMessage),
-            ],
-          ),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          showCloseIcon: true,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
-        ),
-      );
-      return false;
-    }
-
-    if (invoiceItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white),
-              const SizedBox(width: 12),
-              Text(AppLocalizations.of(context)!
-                  .createInvoiceAtLeastOneItemRequiredMessage),
-            ],
-          ),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          showCloseIcon: true,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
-        ),
-      );
-      return false;
-    }
-
-    final badDiscountLine = _excessiveDiscountLineName();
-    if (badDiscountLine != null) {
-      _showDiscountExceededSnack(badDiscountLine);
-      return false;
-    }
-
-    if (!mounted) return false;
-    setState(() => isLoading = true);
-
+    // E3b: synchronous re-entrancy guard — checked and set before the
+    // first await so a double-tap cannot stack two inserts.
+    if (_isSavingInvoice) return false;
+    _isSavingInvoice = true;
     try {
-      final invoiceId = await InvoicePdfServices.generateNextId();
-      final invoiceNumber =
-          await InvoicePdfServices.generateNextInvoiceNumber(invoiceType);
-      final invoice = Invoice(
-        id: invoiceId,
-        invoiceNumber: invoiceNumber,
-        customer: _resolveInvoiceCustomer(),
-        items: List.from(invoiceItems),
-        date: _selectedOrderDate,
-        dueDate: _selectedDueDate,
-        notes: notesController.text.isNotEmpty ? notesController.text : null,
-        taxRate: _taxMode == TaxMode.global ? taxRate : 0.0,
-        type: invoiceType,
-        invoiceTitle: invoiceType == 'Invoice' ? invoiceTitle : null,
-        currencyCode: _currencyCode,
-        currencySymbol: _currencySymbol,
-        taxMode: _taxMode,
-        isInterState: _isInterState,
-        upiId: _selectedUpi?.id,
-        bankAccountId: _selectedBankAccount?.accountNumber,
-        quantityLabel:
-            _quantityLabel.trim().isEmpty ? null : _quantityLabel.trim(),
-        additionalCosts: _buildAdditionalCosts(),
-        invoiceDiscountType: _invoiceDiscountType,
-        invoiceDiscountValue: _invoiceDiscountValue,
-        hideInvoiceNumber: _hideInvoiceNumber,
-        customInvoiceNumber: customInvoiceNumberController.text.trim().isEmpty
-            ? null
-            : customInvoiceNumberController.text.trim(),
-      );
-
-      await ref.read(invoiceRepositoryProvider).insertInvoice(invoice);
-
-      if (!mounted) return true;
-      setState(() {
-        _invoice = invoice;
-        currentInvoiceNumber = invoice.invoiceNumber ?? invoice.id;
-        isLoading = false;
-      });
-      _markFormClean();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              Text(AppLocalizations.of(context)!
-                  .createInvoiceCreatedSuccessMessage(
-                      _invoiceTypeLabel(invoiceType))),
-            ],
+      // Trial/licence gate: new documents only. Reads are never blocked.
+      if (!await LicenseGate.canCreate(context)) return false;
+      if (nameController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Text(AppLocalizations.of(context)!
+                    .createInvoiceCustomerNameRequiredMessage),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            showCloseIcon: true,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
           ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          showCloseIcon: true,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
-        ),
-      );
-      return true;
-    } catch (e) {
+        );
+        return false;
+      }
+
+      if (invoiceItems.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Text(AppLocalizations.of(context)!
+                    .createInvoiceAtLeastOneItemRequiredMessage),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            showCloseIcon: true,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+          ),
+        );
+        return false;
+      }
+
+      final badDiscountLine = _excessiveDiscountLineName();
+      if (badDiscountLine != null) {
+        _showDiscountExceededSnack(badDiscountLine);
+        return false;
+      }
+
       if (!mounted) return false;
-      setState(() => isLoading = false);
-      if (kDebugMode) print(e);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!
-              .createInvoiceErrorCreatingMessage(e.toString())),
-          showCloseIcon: true,
-        ),
-      );
-      return false;
+      setState(() => isLoading = true);
+
+      try {
+        final invoiceId = await InvoicePdfServices.generateNextId();
+        final invoiceNumber =
+            await InvoicePdfServices.generateNextInvoiceNumber(invoiceType);
+        final invoice = Invoice(
+          id: invoiceId,
+          invoiceNumber: invoiceNumber,
+          customer: _resolveInvoiceCustomer(),
+          items: List.from(invoiceItems),
+          date: _selectedOrderDate,
+          dueDate: _selectedDueDate,
+          notes: notesController.text.isNotEmpty ? notesController.text : null,
+          taxRate: _taxMode == TaxMode.global ? taxRate : 0.0,
+          type: invoiceType,
+          invoiceTitle: invoiceType == 'Invoice' ? invoiceTitle : null,
+          currencyCode: _currencyCode,
+          currencySymbol: _currencySymbol,
+          taxMode: _taxMode,
+          isInterState: _isInterState,
+          roundOffEnabled: _roundOff,
+          upiId: _selectedUpi?.id,
+          bankAccountId: _selectedBankAccount?.accountNumber,
+          quantityLabel:
+              _quantityLabel.trim().isEmpty ? null : _quantityLabel.trim(),
+          additionalCosts: _buildAdditionalCosts(),
+          invoiceDiscountType: _invoiceDiscountType,
+          invoiceDiscountValue: _invoiceDiscountValue,
+          hideInvoiceNumber: _hideInvoiceNumber,
+          customInvoiceNumber: customInvoiceNumberController.text.trim().isEmpty
+              ? null
+              : customInvoiceNumberController.text.trim(),
+          // E1: preserve the carried payment term (clone or edit); without
+          // this a clone/update would reset terms to ''.
+          paymentTermId: _paymentTermId,
+        );
+
+        await ref.read(invoiceRepositoryProvider).insertInvoice(invoice);
+
+        if (!mounted) return true;
+        setState(() {
+          _invoice = invoice;
+          currentInvoiceNumber = invoice.invoiceNumber ?? invoice.id;
+          isLoading = false;
+        });
+        _markFormClean();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Text(AppLocalizations.of(context)!
+                    .createInvoiceCreatedSuccessMessage(
+                        _invoiceTypeLabel(invoiceType))),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            showCloseIcon: true,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+          ),
+        );
+        return true;
+      } catch (e) {
+        if (!mounted) return false;
+        setState(() => isLoading = false);
+        if (kDebugMode) print(e);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .createInvoiceErrorCreatingMessage(e.toString())),
+            showCloseIcon: true,
+          ),
+        );
+        return false;
+      }
+    } finally {
+      _isSavingInvoice = false;
     }
   }
 
@@ -1788,7 +1848,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             final newNameError = name.isEmpty ? 'Required' : null;
             final newPriceError = priceText.isEmpty
                 ? 'Required'
-                : price <= 0
+                : (!price.isFinite || price <= 0)
                     ? 'Must be > 0'
                     : null;
             if (newNameError != null || newPriceError != null) {
@@ -1818,14 +1878,35 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
               priceIncludesTax: dialogPriceIncludesTax,
             );
             final extraCost = double.tryParse(extraCostController.text);
+            if (extraCost != null && !extraCost.isFinite) {
+              setDialogState(() {
+                priceError = null;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('Extra cost must be a finite number')),
+              );
+              return;
+            }
+            final adHocQty = !_showQuantity
+                ? 1.0
+                : _fractionalQuantity
+                    ? (double.tryParse(quantityController.text) ?? 1.0)
+                    : (int.tryParse(quantityController.text) ?? 1).toDouble();
+            final adHocDiscount =
+                double.tryParse(discountController.text) ?? 0.0;
+            if (!adHocQty.isFinite || !adHocDiscount.isFinite) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content:
+                        Text('Quantity and discount must be finite numbers')),
+              );
+              return;
+            }
             final item = InvoiceItem(
               product: adHocProduct,
-              quantity: !_showQuantity
-                  ? 1.0
-                  : _fractionalQuantity
-                      ? (double.tryParse(quantityController.text) ?? 1.0)
-                      : (int.tryParse(quantityController.text) ?? 1).toDouble(),
-              discount: double.tryParse(discountController.text) ?? 0.0,
+              quantity: adHocQty,
+              discount: adHocDiscount,
               extraCost: extraCost,
               unit: selectedUnit.trim(),
               description: descriptionController.text.trim(),
@@ -2634,8 +2715,11 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     });
   }
 
-  double get _invoiceDiscountValue =>
-      double.tryParse(_invoiceDiscountController.text) ?? 0.0;
+  double get _invoiceDiscountValue {
+    final v = double.tryParse(_invoiceDiscountController.text);
+    if (v == null || !v.isFinite) return 0.0;
+    return v;
+  }
 
   List<AdditionalCost> _buildAdditionalCosts() {
     final costs = <AdditionalCost>[];
@@ -3181,130 +3265,141 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   }
 
   Future<bool> _updateInvoice() async {
-    if (_invoice == null) return false;
-
-    if (nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white),
-              const SizedBox(width: 12),
-              Text(AppLocalizations.of(context)!
-                  .createInvoiceCustomerNameRequiredMessage),
-            ],
-          ),
-          backgroundColor: Colors.red,
-          showCloseIcon: true,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
-        ),
-      );
-      return false;
-    }
-
-    if (invoiceItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white),
-              const SizedBox(width: 12),
-              Text(AppLocalizations.of(context)!
-                  .createInvoiceAtLeastOneItemRequiredMessage),
-            ],
-          ),
-          backgroundColor: Colors.red,
-          showCloseIcon: true,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
-        ),
-      );
-      return false;
-    }
-    final badUpdateDiscountLine = _excessiveDiscountLineName();
-    if (badUpdateDiscountLine != null) {
-      _showDiscountExceededSnack(badUpdateDiscountLine);
-      return false;
-    }
-    if (!mounted) return false;
-    setState(() => isLoading = true);
-
+    // E3b: same synchronous guard as _createInvoice; E1: _paymentTermId
+    // preserves terms across edits (otherwise update would clear to '').
+    if (_isSavingInvoice) return false;
+    _isSavingInvoice = true;
     try {
-      final updatedInvoice = Invoice(
-        id: _invoice!.id,
-        invoiceNumber: _invoice!.invoiceNumber,
-        customer: _resolveInvoiceCustomer(),
-        items: List.from(invoiceItems),
-        date: _selectedOrderDate,
-        dueDate: _selectedDueDate,
-        notes: notesController.text.isNotEmpty ? notesController.text : null,
-        taxRate: _taxMode == TaxMode.global ? taxRate : 0.0,
-        type: invoiceType,
-        invoiceTitle: invoiceType == 'Invoice' ? invoiceTitle : null,
-        currencyCode: _currencyCode,
-        currencySymbol: _currencySymbol,
-        taxMode: _taxMode,
-        isInterState: _isInterState,
-        upiId: _selectedUpi?.id,
-        bankAccountId: _selectedBankAccount?.accountNumber,
-        quantityLabel:
-            _quantityLabel.trim().isEmpty ? null : _quantityLabel.trim(),
-        additionalCosts: _buildAdditionalCosts(),
-        invoiceDiscountType: _invoiceDiscountType,
-        invoiceDiscountValue: _invoiceDiscountValue,
-        hideInvoiceNumber: _hideInvoiceNumber,
-        customInvoiceNumber: customInvoiceNumberController.text.trim().isEmpty
-            ? null
-            : customInvoiceNumberController.text.trim(),
-      );
+      if (_invoice == null) return false;
 
-      await ref.read(invoiceRepositoryProvider).updateInvoice(updatedInvoice);
-
-      final refreshedInvoice = await ref
-          .read(invoiceRepositoryProvider)
-          .getInvoiceById(updatedInvoice.id);
-
-      if (!mounted) return true;
-      setState(() {
-        _invoice = refreshedInvoice ?? updatedInvoice;
-        isLoading = false;
-      });
-      _markFormClean();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              Text(AppLocalizations.of(context)!
-                  .createInvoiceUpdatedSuccessMessage(
-                      _invoiceTypeLabel(invoiceType))),
-            ],
+      if (nameController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Text(AppLocalizations.of(context)!
+                    .createInvoiceCustomerNameRequiredMessage),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            showCloseIcon: true,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
           ),
-          backgroundColor: Colors.green,
-          showCloseIcon: true,
-          duration: const Duration(milliseconds: 2000),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
-        ),
-      );
-      return true;
-    } catch (e) {
+        );
+        return false;
+      }
+
+      if (invoiceItems.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Text(AppLocalizations.of(context)!
+                    .createInvoiceAtLeastOneItemRequiredMessage),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            showCloseIcon: true,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+          ),
+        );
+        return false;
+      }
+      final badUpdateDiscountLine = _excessiveDiscountLineName();
+      if (badUpdateDiscountLine != null) {
+        _showDiscountExceededSnack(badUpdateDiscountLine);
+        return false;
+      }
       if (!mounted) return false;
-      setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!
-              .createInvoiceErrorUpdatingMessage(e.toString())),
-          showCloseIcon: true,
-        ),
-      );
-      return false;
+      setState(() => isLoading = true);
+
+      try {
+        final updatedInvoice = Invoice(
+          id: _invoice!.id,
+          invoiceNumber: _invoice!.invoiceNumber,
+          customer: _resolveInvoiceCustomer(),
+          items: List.from(invoiceItems),
+          date: _selectedOrderDate,
+          dueDate: _selectedDueDate,
+          notes: notesController.text.isNotEmpty ? notesController.text : null,
+          taxRate: _taxMode == TaxMode.global ? taxRate : 0.0,
+          type: invoiceType,
+          invoiceTitle: invoiceType == 'Invoice' ? invoiceTitle : null,
+          currencyCode: _currencyCode,
+          currencySymbol: _currencySymbol,
+          taxMode: _taxMode,
+          isInterState: _isInterState,
+          roundOffEnabled: _roundOff,
+          upiId: _selectedUpi?.id,
+          bankAccountId: _selectedBankAccount?.accountNumber,
+          quantityLabel:
+              _quantityLabel.trim().isEmpty ? null : _quantityLabel.trim(),
+          additionalCosts: _buildAdditionalCosts(),
+          invoiceDiscountType: _invoiceDiscountType,
+          invoiceDiscountValue: _invoiceDiscountValue,
+          hideInvoiceNumber: _hideInvoiceNumber,
+          customInvoiceNumber: customInvoiceNumberController.text.trim().isEmpty
+              ? null
+              : customInvoiceNumberController.text.trim(),
+          // E1: preserve the carried payment term on edit.
+          paymentTermId: _paymentTermId,
+        );
+
+        await ref.read(invoiceRepositoryProvider).updateInvoice(updatedInvoice);
+
+        final refreshedInvoice = await ref
+            .read(invoiceRepositoryProvider)
+            .getInvoiceById(updatedInvoice.id);
+
+        if (!mounted) return true;
+        setState(() {
+          _invoice = refreshedInvoice ?? updatedInvoice;
+          isLoading = false;
+        });
+        _markFormClean();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Text(AppLocalizations.of(context)!
+                    .createInvoiceUpdatedSuccessMessage(
+                        _invoiceTypeLabel(invoiceType))),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            showCloseIcon: true,
+            duration: const Duration(milliseconds: 2000),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
+          ),
+        );
+        return true;
+      } catch (e) {
+        if (!mounted) return false;
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .createInvoiceErrorUpdatingMessage(e.toString())),
+            showCloseIcon: true,
+          ),
+        );
+        return false;
+      }
+    } finally {
+      _isSavingInvoice = false;
     }
   }
 
@@ -3412,9 +3507,11 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
+                _sectionLabelV2('Next steps'),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 16,
+                  runSpacing: 16,
                   children: [
                     _buildSuccessActionButton(
                       icon: Icons.visibility,
@@ -3424,7 +3521,6 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                       onPressed: () => InvoicePdfServices.showInvoiceDetails(
                           context, _invoice!),
                     ),
-                    const SizedBox(width: 16),
                     _buildSuccessActionButton(
                       icon: Icons.picture_as_pdf,
                       label: AppLocalizations.of(context)!
@@ -3435,7 +3531,6 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                       onPressed: () =>
                           InvoicePdfServices.previewPDF(context, _invoice!),
                     ),
-                    const SizedBox(width: 16),
                     _buildSuccessActionButton(
                       icon: Icons.download_outlined,
                       label: AppLocalizations.of(context)!.actionDownloadPdf,
@@ -3443,7 +3538,6 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                       onPressed: () =>
                           PDFService.downloadPDF(context, _invoice!),
                     ),
-                    const SizedBox(width: 16),
                     _buildSuccessActionButton(
                       icon: Icons.print,
                       label: AppLocalizations.of(context)!
@@ -3454,6 +3548,25 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                       onPressed: () =>
                           InvoicePdfServices.generatePDF(context, _invoice!),
                     ),
+                    // Invoices continue the journey to payment: reuse the
+                    // existing payment dialog (quotations have no payments).
+                    if (invoiceType == 'Invoice')
+                      _buildSuccessActionButton(
+                        icon: Icons.payments_outlined,
+                        label:
+                            AppLocalizations.of(context)!.actionRecordPayment,
+                        color: Colors.teal,
+                        onPressed: () => showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (_) => ApplyPaymentDialog(
+                            invoice: _invoice!,
+                            onPaymentRecorded: () {
+                              ref.read(invoicesProvider.notifier).refresh();
+                            },
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -3653,6 +3766,11 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     final tax = totals.tax;
     final invoiceDiscountAmount = totals.invoiceDiscountAmount;
     final total = totals.total;
+    // Payable honors the round-off toggle; every displayed grand total,
+    // due row, and action-bar figure below uses [payable], never [total].
+    final roundOff =
+        InvoiceTotalsCalculator.roundOffAmount(total, enabled: _roundOff);
+    final payable = total + roundOff;
 
     final bool showingSuccessScreen = !isEditing && _invoice != null;
     final validationErrors = <String>[
@@ -3958,7 +4076,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                                             totalDiscount,
                                             invoiceDiscountAmount),
                                       ),
-                                actions: _actionButtonsV2(grandTotal: total),
+                                actions: _actionButtonsV2(grandTotal: payable),
                               ),
                             ),
                           ],
@@ -5544,6 +5662,24 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             },
           ),
           const SizedBox(height: 10),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment<bool>(
+                  value: false,
+                  icon: Icon(Icons.calculate_outlined, size: 15),
+                  tooltip: 'Exact total, paise included'),
+              ButtonSegment<bool>(
+                  value: true,
+                  icon: Icon(Icons.adjust_rounded, size: 15),
+                  tooltip: 'Round the payable total to the nearest rupee'),
+            ],
+            selected: {_roundOff},
+            onSelectionChanged: (selection) {
+              if (!mounted) return;
+              setState(() => _roundOff = selection.first);
+            },
+          ),
+          const SizedBox(height: 10),
           if (!_isPerItem)
             TextField(
               controller: taxRateController,
@@ -5666,6 +5802,10 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       double grossSubtotal,
       double totalDiscount,
       double invoiceDiscountAmount) {
+    // [total] is exact here; the payable (rounded when enabled) is derived
+    // locally so both layout chains stay in sync.
+    final roundOff =
+        InvoiceTotalsCalculator.roundOffAmount(total, enabled: _roundOff);
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
       decoration: BoxDecoration(
@@ -5739,15 +5879,19 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             const SizedBox(height: 8),
             _buildPreviousBalanceDueRow(),
           ],
+          if (roundOff.abs() >= 0.005) ...[
+            const SizedBox(height: 4),
+            _buildTotalRow('Round Off', roundOff, false),
+          ],
           const SizedBox(height: 14),
-          _buildTotalRow(
-              AppLocalizations.of(context)!.fieldTotalLabel, total, true),
+          _buildTotalRow(AppLocalizations.of(context)!.fieldTotalLabel,
+              total + roundOff, true),
           if (_showPreviousBalance &&
               selectedCustomer != null &&
               !_isPreviousBalanceLoading &&
               _previousBalanceDue > 0) ...[
             const SizedBox(height: 8),
-            _buildTotalDueRow(total + _previousBalanceDue),
+            _buildTotalDueRow(total + roundOff + _previousBalanceDue),
           ],
           if (isEditing &&
               _invoice != null &&

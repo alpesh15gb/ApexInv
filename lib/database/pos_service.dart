@@ -40,10 +40,14 @@ class PosService {
     required String currencyCode,
     required String currencySymbol,
     String notes = '',
+    bool roundOffEnabled = false,
   }) async {
     if (items.isEmpty) throw ArgumentError('The POS cart is empty');
     if (items.any((item) => item.quantity <= 0)) {
       throw ArgumentError('Item quantities must be positive');
+    }
+    if (tenders.any((t) => !t.amount.isFinite)) {
+      throw ArgumentError('Tender amounts must be finite numbers');
     }
     final invoiceId = await InvoiceService.generateNextId();
     final invoiceNumber =
@@ -59,12 +63,14 @@ class PosService {
       currencyCode: currencyCode,
       currencySymbol: currencySymbol,
       taxMode: TaxMode.perItem,
+      roundOffEnabled: roundOffEnabled,
     );
     final paid = tenders.fold(0.0, (sum, tender) => sum + tender.amount);
-    if (tenders.any((t) => t.amount <= 0) || paid > invoice.total + 0.005) {
+    if (tenders.any((t) => t.amount <= 0) ||
+        paid > invoice.payableTotal + 0.005) {
       throw StateError('Tender total must be positive and cannot exceed total');
     }
-    if (paid < invoice.total - 0.005 && customer.id == 'walk-in') {
+    if (paid < invoice.payableTotal - 0.005 && customer.id == 'walk-in') {
       throw StateError('Select a customer before making a credit sale');
     }
 
@@ -85,8 +91,7 @@ class PosService {
             FROM sale_order_items i JOIN sale_orders o ON o.id = i.sale_order_id
             WHERE i.product_id = ? AND o.status IN ('confirmed', 'partial')
           ''', [item.product.id]);
-          final reserved =
-              (reservedRows.first['qty'] as num? ?? 0).toDouble();
+          final reserved = (reservedRows.first['qty'] as num? ?? 0).toDouble();
           if (item.quantity > stock - reserved + 0.000001) {
             throw StateError('Insufficient stock for ${item.product.name}');
           }
@@ -112,6 +117,7 @@ class PosService {
         'currency_code': currencyCode,
         'currency_symbol': currencySymbol,
         'tax_mode': 'per_item',
+        'round_off': invoice.roundOffEnabled ? 1 : 0,
         'additional_costs': jsonEncode(<Object>[]),
         'previous_balance': 0,
         'invoice_discount_type': 'percent',
@@ -142,8 +148,7 @@ class PosService {
           'product_alias_name': item.product.aliasName,
           'product_unit': item.product.unit,
           'unit': item.unit,
-          'product_price_includes_tax':
-              item.product.priceIncludesTax ? 1 : 0,
+          'product_price_includes_tax': item.product.priceIncludesTax ? 1 : 0,
           'description': item.description,
         });
       }
@@ -197,7 +202,7 @@ class PosService {
               notes: notes);
         }
         final balanceAfter =
-            (invoice.total - previouslyPaid - tender.amount)
+            (invoice.payableTotal - previouslyPaid - tender.amount)
                 .clamp(0, double.infinity)
                 .toDouble();
         final payment = InvoicePayment(

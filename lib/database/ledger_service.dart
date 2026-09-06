@@ -9,8 +9,10 @@ import 'invoice_service.dart';
 /// from the business data and needs no sync of its own. Posting rules
 /// (single-company cash+accrual hybrid, standard Indian chart of accounts):
 ///
-///   Sale (invoice/Debit Note) Dr Accounts Receivable / Cr Sales + Cr GST Output
-///   Credit Note (sale reversal) Dr Sales + Dr GST Output / Cr AR
+///   Sale (invoice/Debit Note) Dr AR (payable, rounded if enabled) /
+///     Cr Sales (exact) + Cr GST Output (exact) + Round Off delta
+///   Credit Note (sale reversal) Dr Sales + Dr GST Output / Cr AR (payable),
+///     with the Round Off delta mirrored
 ///   Receipt (payment, incl. note-linked) Dr Cash/Bank / Cr Accounts Receivable
 ///   Expense             Dr <category expense> / Cr Cash
 ///   Purchase bill (eligible) Dr Purchases net + Dr GST Input / Cr Payables total
@@ -39,6 +41,7 @@ class LedgerService {
   static const accCapital = '3000 Owner Capital (Opening)';
   static const accRetained = '3100 Retained Earnings';
   static const accSales = '4000 Sales';
+  static const accRoundOff = '6200 Round Off';
   static const accOtherIncome = '4100 Other Income';
   static const accPurchases = '5000 Purchases';
   static const accExpenses = '6000 Operating Expenses';
@@ -104,29 +107,46 @@ class LedgerService {
         .toList()
       ..sort((a, b) => a.date.compareTo(b.date));
     for (final inv in invoices) {
+      // AR settles at the payable total (rounded when the invoice opts in);
+      // Sales and GST stay exact and the paise difference posts explicitly
+      // to Round Off so the trial balance still proves out.
       final total = inv.total;
+      final payable = inv.payableTotal;
       final tax = inv.tax;
       final net = total - tax;
+      final roundOff = payable - total;
+      LedgerLine? roundOffLine;
+      if (roundOff.abs() >= 0.005) {
+        roundOffLine = roundOff > 0
+            ? LedgerLine(account: accRoundOff, debit: 0, credit: roundOff)
+            : LedgerLine(account: accRoundOff, debit: -roundOff, credit: 0);
+      }
       if (inv.type == 'Credit Note') {
         entries.add(JournalEntry(
           date: inv.date,
           description:
-              'Credit Note — ${inv.customer.name} (${inv.currencySymbol}${total.toStringAsFixed(2)})',
+              'Credit Note — ${inv.customer.name} (${inv.currencySymbol}${payable.toStringAsFixed(2)})',
           lines: [
             LedgerLine(account: accSales, debit: net, credit: 0),
             LedgerLine(account: accGstOutput, debit: tax, credit: 0),
-            LedgerLine(account: accReceivable, debit: 0, credit: total),
+            if (roundOffLine != null)
+              LedgerLine(
+                  account: roundOffLine.account,
+                  debit: roundOffLine.credit,
+                  credit: roundOffLine.debit),
+            LedgerLine(account: accReceivable, debit: 0, credit: payable),
           ],
         ));
       } else {
         entries.add(JournalEntry(
           date: inv.date,
           description:
-              '${inv.type == 'Debit Note' ? 'Debit Note' : 'Sale'} — ${inv.customer.name} (${inv.currencySymbol}${total.toStringAsFixed(2)})',
+              '${inv.type == 'Debit Note' ? 'Debit Note' : 'Sale'} — ${inv.customer.name} (${inv.currencySymbol}${payable.toStringAsFixed(2)})',
           lines: [
-            LedgerLine(account: accReceivable, debit: total, credit: 0),
+            LedgerLine(account: accReceivable, debit: payable, credit: 0),
             LedgerLine(account: accSales, debit: 0, credit: net),
             LedgerLine(account: accGstOutput, debit: 0, credit: tax),
+            if (roundOffLine != null) roundOffLine,
           ],
         ));
       }
@@ -170,11 +190,11 @@ class LedgerService {
     final expenses = await db.rawQuery('''
       SELECT e.date, e.description, e.amount, e.account_id,
              c.name AS category
-             , a.currency_code
+              , a.currency_code
       FROM expenses e
       LEFT JOIN expense_categories c ON c.id = e.category_id
       LEFT JOIN financial_accounts a ON a.id = e.account_id
-      WHERE 1 = 1 ${dateFilter('e.date')} ${currencyFilter('a.currency_code')}
+      WHERE 1 = 1 ${dateFilter('e.date')} ${currencyCode == null ? '' : "AND COALESCE(a.currency_code, 'INR') = ?"}
       ORDER BY e.date
     ''', [if (currencyCode != null) currencyCode]);
     for (final e in expenses) {
@@ -209,7 +229,7 @@ class LedgerService {
       SELECT b.id, b.date, b.supplier_name, b.total_amount, b.total_tax,
              b.amount_paid, b.currency_symbol, b.currency_code,
              b.itc_eligible, b.reverse_charge,
-             COALESCE(SUM(p.amount_paid), 0) AS recorded_paid
+             COALESCE(SUM(CASE WHEN COALESCE(p.cheque_status, 'none') NOT IN ('bounced', 'cancelled') THEN p.amount_paid ELSE 0 END), 0) AS recorded_paid
       FROM purchase_bills b
       LEFT JOIN purchase_bill_payments p ON p.purchase_bill_id = b.id
       WHERE 1 = 1
@@ -535,8 +555,9 @@ class LedgerService {
   }
 
   /// Balance sheet from the full ledger: assets = liabilities + equity.
+  /// Point-in-time as of [to] (all activity through the end date); there is
+  /// intentionally no `from` — a balance sheet has no period.
   static Future<BalanceSheet> getBalanceSheet({
-    DateTime? from,
     DateTime? to,
     String? currencyCode,
   }) async {
@@ -558,6 +579,7 @@ class LedgerService {
     double purchasesDebit = 0;
     double expensesDebit = 0;
     double gstOutputCredit = 0;
+    double roundOffNet = 0;
     for (final r in tb.rows) {
       if (r.account == accSales) salesCredit += r.credit - r.debit;
       if (r.account == accPurchases) purchasesDebit += r.debit - r.credit;
@@ -567,9 +589,13 @@ class LedgerService {
         expensesDebit += r.debit - r.credit;
       }
       if (r.account == accGstOutput) gstOutputCredit += r.credit - r.debit;
+      // Round-off paise: credit balance is income, debit balance an expense.
+      if (r.account == accRoundOff) roundOffNet += r.credit - r.debit;
     }
-    // Net income = Sales (credit) − Purchases (debit) − Expenses (debit).
-    final netProfit = salesCredit - purchasesDebit - expensesDebit;
+    // Net income = Sales (credit) − Purchases (debit) − Expenses (debit)
+    // + Round Off (net).
+    final netProfit =
+        salesCredit - purchasesDebit - expensesDebit + roundOffNet;
 
     final receivable = getNet(accReceivable);
     final chequesInHand = getNet(accChequesInHand);

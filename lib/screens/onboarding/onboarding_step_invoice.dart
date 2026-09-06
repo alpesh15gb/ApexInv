@@ -36,6 +36,13 @@ class OnboardingStepInvoice extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text(
+            'These become the defaults for every new document.',
+            style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
           _CurrencyField(
             selectedCode: selectedCurrencyCode,
             onChanged: onCurrencyChanged,

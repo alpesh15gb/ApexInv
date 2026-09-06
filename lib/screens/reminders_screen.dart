@@ -51,9 +51,6 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: const Text('Payment Reminders'),
-        backgroundColor:
-            theme.appBarTheme.backgroundColor ?? theme.primaryColor,
-        foregroundColor: Colors.white,
         actions: [
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
@@ -91,6 +88,12 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                                   fontSize: 12.5,
                                   color: theme.colorScheme.onSurfaceVariant),
                             ),
+                            Text(
+                              'Use WhatsApp or Copy on each invoice to follow up.',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurfaceVariant),
+                            ),
                           ],
                         ),
                       ),
@@ -101,7 +104,8 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                   child: _overdue.isEmpty
                       ? const AppEmptyState(
                           icon: Icons.celebration_outlined,
-                          title: 'Nothing overdue. Great job!')
+                          title: 'Nothing overdue. Great job!',
+                          subtitle: 'All invoices are paid or not yet due.')
                       : ListView.separated(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                           itemCount: _overdue.length,
@@ -120,11 +124,45 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                               subtitle: inv.dueDate == null
                                   ? null
                                   : 'Due ${df.format(inv.dueDate!)}'
-                                      '  ·  $overdueDays day${overdueDays == 1 ? '' : 's'} over',
-                              trailing: AppMoney(inv.outstanding,
-                                  currencySymbol: inv.currencySymbol,
-                                  bold: true,
-                                  style: TextStyle(color: Colors.red[700])),
+                                      '  ·  $overdueDays day${overdueDays == 1 ? '' : 's'} overdue — send a reminder',
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  AppMoney(inv.outstanding,
+                                      currencySymbol: inv.currencySymbol,
+                                      bold: true,
+                                      style: TextStyle(
+                                          color: theme.colorScheme.error)),
+                                  IconButton(
+                                    tooltip: 'Send WhatsApp reminder',
+                                    icon: const Icon(Icons.chat_outlined,
+                                        size: 20),
+                                    onPressed: () =>
+                                        ReminderService.openWhatsApp(inv,
+                                            upiId: _upiId),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Copy reminder message',
+                                    icon: const Icon(Icons.copy_outlined,
+                                        size: 20),
+                                    onPressed: () async {
+                                      final url = ReminderService.whatsappUrl(
+                                          inv,
+                                          upiId: _upiId);
+                                      await Clipboard.setData(ClipboardData(
+                                          text: Uri.parse(url)
+                                                  .queryParameters['text'] ??
+                                              ''));
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(const SnackBar(
+                                                content: Text(
+                                                    'Reminder message copied — paste it anywhere')));
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
                             );
                           },
                         ),
@@ -152,7 +190,7 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                         onPressed: () =>
                             ReminderService.openWhatsApp(inv, upiId: _upiId),
                         icon: const Icon(Icons.chat_outlined, size: 16),
-                        label: const Text('WhatsApp latest'),
+                        label: const Text('WhatsApp oldest overdue'),
                       ),
                       OutlinedButton.icon(
                         onPressed: () async {
@@ -169,7 +207,7 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                           }
                         },
                         icon: const Icon(Icons.copy_outlined, size: 16),
-                        label: const Text('Copy message'),
+                        label: const Text('Copy oldest message'),
                       ),
                     ],
                   ],

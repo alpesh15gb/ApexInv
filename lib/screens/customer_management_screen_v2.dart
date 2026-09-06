@@ -7,6 +7,7 @@ import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/utils/formatters.dart';
 import 'package:apexbooks/utils/gstin_validator.dart';
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/widgets/app/app.dart';
 import 'package:apexbooks/common/supported_currencies.dart';
 import 'package:flutter/material.dart';
@@ -54,6 +55,12 @@ class _CustomerManagementScreenV2State
   String? _selectedOutstandingCurrency;
   final FocusNode _searchFocusNode = FocusNode();
   final ScrollController _horizontalScrollController = ScrollController();
+
+  // ── Shared reference table state (presentation-only, in-memory) ──
+  // Row checkboxes + sortable headers + status pills mirror the invoice
+  // reference design. Selection never touches queries/CRUD — it only
+  // highlights already-loaded rows and drives the selected-count label.
+  final Set<String> _selectedIdsV2 = {};
 
   // Form controllers
   final _nameController = TextEditingController();
@@ -157,6 +164,8 @@ class _CustomerManagementScreenV2State
         _outstandingByCustomer = outstanding;
         _outstandingCurrencySymbol =
             SupportedCurrencies.fromCode(selected).symbol;
+        // Presentation-only: drop checkbox state for rows that no longer exist.
+        _selectedIdsV2.removeWhere((id) => !data.any((c) => c.id == id));
         _filterAndSort();
       });
     } catch (e) {
@@ -1370,6 +1379,246 @@ class _CustomerManagementScreenV2State
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       );
 
+  // ── Shared reference helpers: selection (presentation-only) ──
+  bool _isAllPageSelectedV2(List<Customer> pageItems) =>
+      pageItems.isNotEmpty &&
+      pageItems.every((c) => _selectedIdsV2.contains(c.id));
+
+  bool _isSomePageSelectedV2(List<Customer> pageItems) =>
+      pageItems.any((c) => _selectedIdsV2.contains(c.id));
+
+  void _toggleSelectAllV2(List<Customer> pageItems) {
+    if (!mounted) return;
+    setState(() {
+      if (_isAllPageSelectedV2(pageItems)) {
+        for (final c in pageItems) {
+          _selectedIdsV2.remove(c.id);
+        }
+      } else {
+        for (final c in pageItems) {
+          _selectedIdsV2.add(c.id);
+        }
+      }
+    });
+  }
+
+  void _toggleOneV2(String id) {
+    if (!mounted) return;
+    setState(() {
+      if (_selectedIdsV2.contains(id)) {
+        _selectedIdsV2.remove(id);
+      } else {
+        _selectedIdsV2.add(id);
+      }
+    });
+  }
+
+  // ── Shared reference helpers: sortable header cell ──
+  // Tapping reuses the existing in-memory sort (_sortBy/_isAscending via
+  // _onSortSelectionV2) — no query change, just presentation ordering.
+  Widget _sortableHeaderV2(String label, String field) {
+    final active = _sortBy == field;
+    return InkWell(
+      onTap: () => _onSortSelectionV2(field, active ? !_isAscending : true),
+      borderRadius: BorderRadius.circular(4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            !active
+                ? Icons.unfold_more
+                : (_isAscending ? Icons.arrow_upward : Icons.arrow_downward),
+            size: 13,
+            color: active ? Colors.white : Colors.white70,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Shared reference helpers: status pills (in-memory only) ──
+  Widget _typePillV2(Customer c) {
+    final isBusiness = c.businessName.trim().isNotEmpty;
+    final color = isBusiness ? Colors.green : Colors.deepPurple;
+    final label = isBusiness
+        ? AppLocalizations.of(context)!.customerMgmtBusinessesLabel
+        : AppLocalizations.of(context)!.customerMgmtIndividualsLabel;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w600, color: color.shade700),
+      ),
+    );
+  }
+
+  Widget _outstandingPillV2(double outstanding) {
+    final hasDue = outstanding > 0.005;
+    final color = hasDue ? Colors.orange : Colors.green;
+    final label = hasDue
+        ? AppLocalizations.of(context)!.customerMgmtWithOutstandingLabel
+        : AppLocalizations.of(context)!.paymentStatusPaid;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w600, color: color.shade700),
+      ),
+    );
+  }
+
+  // ── Shared reference helpers: row ⋯ menu (reuses every existing action) ──
+  List<PopupMenuEntry<String>> _rowMenuItemsV2(Customer c, bool isWide) {
+    // Wide shows View/Payment/Edit as quick icons, so the menu only needs
+    // the remaining actions. Narrow carries everything in the menu.
+    return [
+      if (!isWide) ...[
+        PopupMenuItem(
+          value: 'view',
+          child: _menuRowV2(Icons.visibility_outlined,
+              AppLocalizations.of(context)!.actionView, Colors.green),
+        ),
+        if (widget.onViewCustomerStatement != null)
+          PopupMenuItem(
+            value: 'statement',
+            child: _menuRowV2(
+                Icons.receipt_long_outlined,
+                AppLocalizations.of(context)!.customerMgmtViewStatementTooltip,
+                Colors.blue),
+          ),
+        PopupMenuItem(
+          value: 'pay',
+          child: _menuRowV2(
+              Icons.payments_outlined, 'Receive Payment', Colors.purple),
+        ),
+        PopupMenuItem(
+          value: 'edit',
+          child: _menuRowV2(Icons.edit_outlined,
+              AppLocalizations.of(context)!.actionEdit, Colors.blue),
+        ),
+      ] else ...[
+        if (widget.onViewCustomerStatement != null)
+          PopupMenuItem(
+            value: 'statement',
+            child: _menuRowV2(
+                Icons.receipt_long_outlined,
+                AppLocalizations.of(context)!.customerMgmtViewStatementTooltip,
+                Colors.blue),
+          ),
+      ],
+      if (widget.user.isAdmin())
+        PopupMenuItem(
+          value: 'delete',
+          child: _menuRowV2(Icons.delete_outline,
+              AppLocalizations.of(context)!.actionDelete, Colors.red),
+        ),
+    ];
+  }
+
+  void _handleRowMenuV2(String action, Customer c) {
+    switch (action) {
+      case 'view':
+        _viewCustomerV2(c);
+      case 'statement':
+        widget.onViewCustomerStatement?.call(c);
+      case 'pay':
+        _receivePayment(c);
+      case 'edit':
+        _editCustomerV2(c);
+      case 'delete':
+        if (widget.user.isAdmin()) _deleteCustomerV2(c);
+    }
+  }
+
+  Widget _menuRowV2(IconData icon, String label, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 10),
+        Text(label),
+      ],
+    );
+  }
+
+  Widget _rowActionsV2(Customer c, bool isWide) {
+    final items = _rowMenuItemsV2(c, isWide);
+    // Wide shows quick icons; the ⋯ menu only appears when it actually
+    // carries something (statement and/or admin delete).
+    final menu = items.isEmpty
+        ? const SizedBox.shrink()
+        : PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 20),
+            tooltip:
+                AppLocalizations.of(context)!.invoiceMgmtMoreActionsTooltip,
+            padding: EdgeInsets.zero,
+            onSelected: (action) => _handleRowMenuV2(action, c),
+            itemBuilder: (ctx) => items,
+          );
+    if (!isWide) {
+      // Narrow always has view/pay/edit in the menu, so items is non-empty.
+      return items.isEmpty
+          ? const SizedBox.shrink()
+          : PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 20),
+              tooltip:
+                  AppLocalizations.of(context)!.invoiceMgmtMoreActionsTooltip,
+              padding: EdgeInsets.zero,
+              onSelected: (action) => _handleRowMenuV2(action, c),
+              itemBuilder: (ctx) => items,
+            );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.visibility_outlined, size: 18),
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _viewCustomerV2(c),
+          tooltip: AppLocalizations.of(context)!.actionView,
+        ),
+        IconButton(
+          icon: const Icon(Icons.payments_outlined, size: 18),
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _receivePayment(c),
+          tooltip: 'Receive Payment',
+        ),
+        IconButton(
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _editCustomerV2(c),
+          tooltip: AppLocalizations.of(context)!.actionEdit,
+        ),
+        menu,
+      ],
+    );
+  }
+
   // A PopupMenuButton's `child` should stay non-interactive (PopupMenuButton
   // itself provides the tap-to-open handling) — a real OutlinedButton with
   // onPressed: null there would render as visually disabled/greyed out.
@@ -1587,16 +1836,11 @@ class _CustomerManagementScreenV2State
               : const Icon(Icons.refresh),
           tooltip: AppLocalizations.of(context)!.actionRefresh,
         ),
-        FilledButton.icon(
+        AppPrimaryButton(
           onPressed: () => setState(() => _showAddPanelV2 = true),
           icon: const Icon(Icons.add, size: 18),
           label:
               Text(AppLocalizations.of(context)!.customerMgmtNewCustomerButton),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppBorderRadius.xsmall)),
-          ),
         ),
       ],
     );
@@ -1623,17 +1867,12 @@ class _CustomerManagementScreenV2State
           Row(
             children: [
               Expanded(
-                child: FilledButton.icon(
+                child: AppPrimaryButton(
+                  expanded: true,
                   onPressed: () => setState(() => _showAddPanelV2 = true),
                   icon: const Icon(Icons.add, size: 18),
                   label: Text(AppLocalizations.of(context)!
                       .customerMgmtNewCustomerButton),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppBorderRadius.xsmall)),
-                  ),
                 ),
               ),
               IconButton(
@@ -2054,24 +2293,54 @@ class _CustomerManagementScreenV2State
     final serial = _currentPage * _pageSize + index + 1;
     final outstanding = _outstandingByCustomer[c.id] ?? 0;
     final hasOutstanding = outstanding > 0.005;
+    // Shared reference: checkbox selection + zebra + status pills + ⋯ menu.
+    // All actions reuse the existing view/statement/payment/edit/delete
+    // callbacks — presentation only.
+    final isSelected = _selectedIdsV2.contains(c.id);
+    final isEven = index.isEven;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
       decoration: BoxDecoration(
+        color: isSelected
+            ? Theme.of(context).primaryColor.withValues(alpha: 0.08)
+            : (isEven
+                ? Theme.of(context).colorScheme.surfaceContainerHighest
+                : Theme.of(context).colorScheme.surfaceContainer),
         border: Border(
           bottom:
               BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+          left: isSelected
+              ? BorderSide(color: Theme.of(context).primaryColor, width: 3)
+              : BorderSide.none,
         ),
       ),
+      padding: const EdgeInsets.fromLTRB(8, 10, 4, 10),
       child: Row(
         children: [
           SizedBox(
+            width: 44,
+            child: Checkbox(
+              value: isSelected,
+              onChanged: (_) => _toggleOneV2(c.id),
+              activeColor: Theme.of(context).primaryColor,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          SizedBox(
             width: 56,
-            child: Text('$serial',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 12.5,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('$serial',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).primaryColor)),
+              ),
+            ),
           ),
           Expanded(
             flex: 3,
@@ -2094,6 +2363,8 @@ class _CustomerManagementScreenV2State
                                 color: Theme.of(context)
                                     .colorScheme
                                     .onSurfaceVariant)),
+                      const SizedBox(height: 4),
+                      _typePillV2(c),
                     ],
                   ),
                 ),
@@ -2129,92 +2400,82 @@ class _CustomerManagementScreenV2State
           if (_visibleColumnsV2['outstanding'] ?? true)
             Expanded(
               flex: 2,
-              child: hasOutstanding
-                  ? AppMoney(
-                      outstanding,
-                      currencySymbol: _outstandingCurrencySymbol,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.orange.shade800),
-                    )
-                  : Text(
-                      '—',
-                      style: TextStyle(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  hasOutstanding
+                      ? AppMoney(
+                          outstanding,
+                          currencySymbol: _outstandingCurrencySymbol,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange.shade800),
+                        )
+                      : Text(
+                          '—',
+                          style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
+                        ),
+                  const SizedBox(height: 4),
+                  _outstandingPillV2(outstanding),
+                ],
+              ),
             ),
           SizedBox(
-            width: 200,
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.visibility_outlined, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _viewCustomerV2(c),
-                  tooltip: AppLocalizations.of(context)!.actionView,
-                ),
-                if (widget.onViewCustomerStatement != null)
-                  IconButton(
-                    icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => widget.onViewCustomerStatement!(c),
-                    tooltip: AppLocalizations.of(context)!
-                        .customerMgmtViewStatementTooltip,
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.payments_outlined, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _receivePayment(c),
-                  tooltip: 'Receive Payment',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _editCustomerV2(c),
-                  tooltip: AppLocalizations.of(context)!.actionEdit,
-                ),
-                if (widget.user.isAdmin())
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    visualDensity: VisualDensity.compact,
-                    color: Theme.of(context).colorScheme.error,
-                    onPressed: () => _deleteCustomerV2(c),
-                    tooltip: AppLocalizations.of(context)!.actionDelete,
-                  ),
-              ],
-            ),
+            width: 160,
+            child: _rowActionsV2(c, true),
           ),
         ],
       ),
     );
   }
 
-  Widget _tableHeaderRowV2() {
-    TextStyle style = TextStyle(
-        fontSize: 11,
+  Widget _tableHeaderRowV2([List<Customer>? pageItems]) {
+    // Shared reference: dark gradient header with checkbox + sortable
+    // columns, matching the invoice list screen.
+    final items = pageItems ?? const <Customer>[];
+    final allSelected = items.isNotEmpty && _isAllPageSelectedV2(items);
+    final someSelected =
+        items.isNotEmpty && _isSomePageSelectedV2(items) && !allSelected;
+    const style = TextStyle(
+        color: Colors.white,
+        fontSize: 12.5,
         fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: Theme.of(context).colorScheme.onSurfaceVariant);
+        letterSpacing: 0.4);
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant, width: 1.4),
-        ),
+        gradient: CustomerManagementScreenColors.topBarBackgroundGradientColor,
+        borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(12), topRight: Radius.circular(12)),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         children: [
+          SizedBox(
+            width: 44,
+            child: Checkbox(
+              value: allSelected,
+              tristate: someSelected,
+              onChanged:
+                  items.isEmpty ? null : (_) => _toggleSelectAllV2(items),
+              activeColor: Colors.white,
+              checkColor: Theme.of(context).primaryColor,
+              side: const BorderSide(color: Colors.white70, width: 2),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
           SizedBox(
               width: 56,
               child: Text(AppLocalizations.of(context)!.customerMgmtColSlNo,
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: style)),
           Expanded(
               flex: 3,
-              child: Text(
+              child: _sortableHeaderV2(
                   AppLocalizations.of(context)!.customerMgmtColNameBusiness,
-                  style: style)),
+                  'name')),
           if (_visibleColumnsV2['phone'] ?? true)
             Expanded(
                 flex: 2,
@@ -2241,13 +2502,13 @@ class _CustomerManagementScreenV2State
           if (_visibleColumnsV2['outstanding'] ?? true)
             Expanded(
                 flex: 2,
-                child: Text(
+                child: _sortableHeaderV2(
                     AppLocalizations.of(context)!
                         .invoiceMgmtColOutstanding
                         .toUpperCase(),
-                    style: style)),
+                    'outstanding')),
           SizedBox(
-              width: 200,
+              width: 160,
               child: Text(AppLocalizations.of(context)!.customerMgmtColActions,
                   style: style)),
         ],
@@ -2401,7 +2662,45 @@ class _CustomerManagementScreenV2State
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _tableHeaderRowV2(),
+          _tableHeaderRowV2(pageItems),
+          if (_selectedIdsV2.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withValues(alpha: 0.08),
+                border: Border(
+                  bottom: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: Theme.of(context).primaryColor,
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Text(
+                        AppLocalizations.of(context)!
+                            .invoiceMgmtSelectedCountLabel(
+                                _selectedIdsV2.length),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _selectedIdsV2.clear()),
+                    icon: const Icon(Icons.deselect, size: 16),
+                    label: Text(
+                        AppLocalizations.of(context)!.invoiceMgmtDeselectLabel),
+                  ),
+                ],
+              ),
+            ),
           _isLoading && _customers.isEmpty
               ? const SizedBox(height: 240, child: AppLoadingState())
               : pageItems.isEmpty
@@ -2419,26 +2718,47 @@ class _CustomerManagementScreenV2State
     );
   }
 
-  /// Compact-phone customer card: avatar + name/business, contact meta and
-  /// outstanding, with the primary actions inline and Delete tucked into
-  /// the overflow menu.
+  /// Compact-phone customer card: checkbox + avatar + name/business +
+  /// type/outstanding pills, with the primary actions inline and the rest
+  /// in the overflow menu (shared reference narrow pattern).
   Widget _customerCardV2(Customer c, int index) {
     final l10n = AppLocalizations.of(context)!;
     final serial = _currentPage * _pageSize + index + 1;
     final outstanding = _outstandingByCustomer[c.id] ?? 0;
     final hasOutstanding = outstanding > 0.005;
+    final isSelected = _selectedIdsV2.contains(c.id);
     final meta = <String>[
       if ((c.phone).isNotEmpty) c.phone,
       if (c.email.isNotEmpty) c.email,
       if (c.gstin.isNotEmpty) c.gstin,
     ];
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return Container(
+      decoration: BoxDecoration(
+        color: isSelected
+            ? Theme.of(context).primaryColor.withValues(alpha: 0.06)
+            : null,
+        borderRadius: BorderRadius.circular(8),
+        border: isSelected
+            ? Border.all(
+                color: Theme.of(context).primaryColor.withValues(alpha: 0.4))
+            : null,
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: Checkbox(
+                  value: isSelected,
+                  onChanged: (_) => _toggleOneV2(c.id),
+                  activeColor: Theme.of(context).primaryColor,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
               _avatarV2(c),
               const SizedBox(width: 10),
               Expanded(
@@ -2464,6 +2784,15 @@ class _CustomerManagementScreenV2State
                   style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _typePillV2(c),
+              _outstandingPillV2(outstanding),
             ],
           ),
           if (meta.isNotEmpty) ...[
@@ -2509,8 +2838,8 @@ class _CustomerManagementScreenV2State
                               Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
               const Spacer(),
-              // 2-3 common quick actions visible; statement/edit/delete live
-              // in the card overflow menu.
+              // 2 quick actions visible; everything (incl. quick ones) stays
+              // reachable via the card overflow menu.
               IconButton(
                 icon: const Icon(Icons.visibility_outlined, size: 18),
                 visualDensity: VisualDensity.compact,
@@ -2526,45 +2855,8 @@ class _CustomerManagementScreenV2State
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, size: 20),
                 tooltip: l10n.invoiceMgmtMoreActionsTooltip,
-                onSelected: (value) {
-                  switch (value) {
-                    case 'statement':
-                      widget.onViewCustomerStatement?.call(c);
-                    case 'edit':
-                      _editCustomerV2(c);
-                    case 'delete':
-                      if (widget.user.isAdmin()) _deleteCustomerV2(c);
-                  }
-                },
-                itemBuilder: (ctx) => [
-                  if (widget.onViewCustomerStatement != null)
-                    PopupMenuItem(
-                        value: 'statement',
-                        child: Row(children: [
-                          const Icon(Icons.receipt_long_outlined, size: 18),
-                          const SizedBox(width: 10),
-                          Text(l10n.customerMgmtViewStatementTooltip),
-                        ])),
-                  PopupMenuItem(
-                      value: 'edit',
-                      child: Row(children: [
-                        const Icon(Icons.edit_outlined, size: 18),
-                        const SizedBox(width: 10),
-                        Text(l10n.actionEdit),
-                      ])),
-                  if (widget.user.isAdmin())
-                    PopupMenuItem(
-                        value: 'delete',
-                        child: Row(children: [
-                          Icon(Icons.delete_outline,
-                              size: 18,
-                              color: Theme.of(context).colorScheme.error),
-                          const SizedBox(width: 10),
-                          Text(l10n.actionDelete,
-                              style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error)),
-                        ])),
-                ],
+                onSelected: (value) => _handleRowMenuV2(value, c),
+                itemBuilder: (ctx) => _rowMenuItemsV2(c, false),
               ),
             ],
           ),
@@ -2726,7 +3018,17 @@ class _CustomerManagementScreenV2State
   }
 
   Widget _buildV2(BuildContext context) {
+    // Shared reference narrow pattern: cards + FAB for creating.
+    final isNarrow = context.isCompact;
     return Scaffold(
+      floatingActionButton: isNarrow && !_showAddPanelV2
+          ? FloatingActionButton(
+              onPressed: () => setState(() => _showAddPanelV2 = true),
+              tooltip:
+                  AppLocalizations.of(context)!.customerMgmtNewCustomerButton,
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -2767,9 +3069,10 @@ class _CustomerManagementScreenV2State
                               _statCardsRowV2(),
                               const SizedBox(height: 12),
                             ],
-                            Container(
+                            // Shared reference: search + group chips live in one
+                            // card (AppCard reuse keeps light/dark correct).
+                            AppCard(
                               padding: const EdgeInsets.all(12),
-                              decoration: _flatCardDecorationV2(context),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -2853,6 +3156,8 @@ class _CustomerManagementScreenV2State
   }
 
   Widget _buildEmptyState() {
+    // Shared reference empty state keeps the guidance subtitle and offers
+    // the primary create action when nothing is filtering the list.
     return AppEmptyState(
       icon: Icons.person_off,
       title: AppLocalizations.of(context)!.createInvoiceNoCustomersFoundMessage,
@@ -2860,6 +3165,14 @@ class _CustomerManagementScreenV2State
           ? AppLocalizations.of(context)!.customerMgmtAddFirstCustomerSubtitle
           : AppLocalizations.of(context)!
               .customerMgmtTryAdjustingSearchSubtitle,
+      action: _searchQuery.isEmpty
+          ? AppPrimaryButton(
+              onPressed: () => setState(() => _showAddPanelV2 = true),
+              icon: const Icon(Icons.add),
+              label: Text(
+                  AppLocalizations.of(context)!.customerMgmtNewCustomerButton),
+            )
+          : null,
     );
   }
 }

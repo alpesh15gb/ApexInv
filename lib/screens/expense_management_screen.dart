@@ -29,10 +29,27 @@ class _ExpenseManagementScreenState
   int _totalCount = 0;
   double _totalAmount = 0.0;
 
+  // ── Presentation-only state (in-memory over the already-loaded page) ──
+  // The server query in _loadData is untouched: search + category still
+  // filter server-side with pagination. [_view] and sorting below only
+  // re-arrange the rows already fetched for this page.
+  final TextEditingController _searchController = TextEditingController();
+  String _view = 'all'; // all | month | cash | bank
+  String _sortField = 'date'; // date | amount | description
+  bool _sortAscending = false;
+
+  static const double _wideBreakpoint = 800;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -60,6 +77,89 @@ class _ExpenseManagementScreenState
     }
   }
 
+  // ── In-memory aggregation over already-loaded rows ──────────────────────
+
+  Map<String, int> get _viewCounts {
+    final now = DateTime.now();
+    var month = 0, cash = 0, bank = 0;
+    for (final e in _expenses) {
+      if (e.date.year == now.year && e.date.month == now.month) month++;
+      if ((e.paymentMethod ?? '') == 'Cash') {
+        cash++;
+      } else if ((e.paymentMethod ?? '') == 'Bank Transfer' ||
+          (e.paymentMethod ?? '') == 'Online') {
+        bank++;
+      }
+    }
+    return {
+      'all': _expenses.length,
+      'month': month,
+      'cash': cash,
+      'bank': bank,
+    };
+  }
+
+  List<Expense> get _visible {
+    final now = DateTime.now();
+    final filtered = _expenses.where((e) {
+      switch (_view) {
+        case 'month':
+          return e.date.year == now.year && e.date.month == now.month;
+        case 'cash':
+          return (e.paymentMethod ?? '') == 'Cash';
+        case 'bank':
+          return (e.paymentMethod ?? '') == 'Bank Transfer' ||
+              (e.paymentMethod ?? '') == 'Online';
+        default:
+          return true;
+      }
+    }).toList();
+    filtered.sort((a, b) {
+      int result;
+      switch (_sortField) {
+        case 'amount':
+          result = a.amount.compareTo(b.amount);
+          break;
+        case 'description':
+          result = a.description.toLowerCase().compareTo(
+                b.description.toLowerCase(),
+              );
+          break;
+        default:
+          result = a.date.compareTo(b.date);
+      }
+      return _sortAscending ? result : -result;
+    });
+    return filtered;
+  }
+
+  void _onSort(String field) {
+    setState(() {
+      if (_sortField == field) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortField = field;
+        _sortAscending = field == 'description';
+      }
+    });
+  }
+
+  void _clearFilters() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _selectedCategoryId = null;
+      _view = 'all';
+      _currentPage = 0;
+    });
+    _loadData();
+  }
+
+  String _categoryName(Expense e) =>
+      (e.categoryName == null || e.categoryName!.isEmpty)
+          ? e.categoryId
+          : e.categoryName!;
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -69,278 +169,144 @@ class _ExpenseManagementScreenState
       appBar: AppBar(
         title: const Text('Expenses'),
         actions: [
-          FilledButton.icon(
-            onPressed: () => _showAddExpenseDialog(),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Create'),
+          IconButton(
+            onPressed: _isLoading ? null : _loadData,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        children: [
-          // Stats card
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final useRow = constraints.maxWidth > 400;
-                if (useRow) {
-                  return Row(
-                    children: [
-                      _buildStatChip(
-                        'Total Expenses',
-                        currencyFormat.format(_totalAmount),
-                        Icons.receipt,
-                        colorScheme.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      _buildStatChip(
-                        'Count',
-                        _totalCount.toString(),
-                        Icons.numbers,
-                        colorScheme.secondary,
-                      ),
-                    ],
-                  );
-                }
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    _buildStatChip(
-                      'Total Expenses',
-                      currencyFormat.format(_totalAmount),
-                      Icons.receipt,
-                      colorScheme.primary,
-                    ),
-                    _buildStatChip(
-                      'Count',
-                      _totalCount.toString(),
-                      Icons.numbers,
-                      colorScheme.secondary,
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          // Search and filter bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth > 400) {
-                  return Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Search expenses...',
-                            prefixIcon: const Icon(Icons.search, size: 20),
-                            isDense: true,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          onChanged: (value) {
-                            _searchQuery = value;
-                            _currentPage = 0;
-                            _loadData();
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: DropdownButtonFormField<String?>(
-                          value: _selectedCategoryId,
-                          isDense: true,
-                          decoration: InputDecoration(
-                            hintText: 'Category',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          items: [
-                            const DropdownMenuItem(
-                              value: null,
-                              child: Text('All Categories'),
-                            ),
-                            ..._categories.map((c) => DropdownMenuItem(
-                                  value: c.id,
-                                  child: Text(c.name),
-                                )),
-                          ],
-                          onChanged: (value) {
-                            _selectedCategoryId = value;
-                            _currentPage = 0;
-                            _loadData();
-                          },
-                        ),
-                      ),
-                    ],
-                  );
-                }
-                return Column(
-                  children: [
-                    TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search expenses...',
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onChanged: (value) {
-                        _searchQuery = value;
-                        _currentPage = 0;
-                        _loadData();
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String?>(
-                      value: _selectedCategoryId,
-                      isDense: true,
-                      decoration: InputDecoration(
-                        hintText: 'Category',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('All Categories'),
-                        ),
-                        ..._categories.map((c) => DropdownMenuItem(
-                              value: c.id,
-                              child: Text(c.name),
-                            )),
-                      ],
-                      onChanged: (value) {
-                        _selectedCategoryId = value;
-                        _currentPage = 0;
-                        _loadData();
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          // Expense list
-          Expanded(
-            child: _isLoading
-                ? const AppLoadingState()
-                : _expenses.isEmpty
-                    ? Center(
-                        child: AppEmptyState(
-                          icon: Icons.receipt_long,
-                          title: 'No expenses found',
-                          action: FilledButton.tonal(
-                            onPressed: _showAddExpenseDialog,
-                            child: const Text('Add First Expense'),
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _expenses.length,
-                        itemBuilder: (context, index) {
-                          final expense = _expenses[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: AppListRow(
-                              leading: AppRowIcon(Icons.receipt,
-                                  color: colorScheme.primary),
-                              title: expense.description,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= _wideBreakpoint;
+          return Column(
+            children: [
+              _header(context, wide, currencyFormat),
+              _viewChips(),
+              _filterRow(context, wide),
+              const Divider(height: 1),
+              Expanded(
+                child: _isLoading
+                    ? const AppLoadingState()
+                    : _expenses.isEmpty
+                        ? Center(
+                            child: AppEmptyState(
+                              icon: Icons.receipt_long,
+                              title: 'No expenses yet.',
                               subtitle:
-                                  '${expense.categoryName ?? expense.categoryId} • ${DateFormat('dd MMM yyyy').format(expense.date)}',
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  AppMoney(expense.amount,
-                                      currencySymbol: '₹',
-                                      bold: true,
-                                      style:
-                                          TextStyle(color: colorScheme.error)),
-                                  PopupMenuButton<String>(
-                                    itemBuilder: (context) => [
-                                      const PopupMenuItem(
-                                        value: 'edit',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.edit, size: 18),
-                                            SizedBox(width: 8),
-                                            Text('Edit'),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'delete',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.delete,
-                                                size: 18, color: Colors.red),
-                                            SizedBox(width: 8),
-                                            Text('Delete',
-                                                style: TextStyle(
-                                                    color: Colors.red)),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    onSelected: (action) {
-                                      if (action == 'edit')
-                                        _showEditExpenseDialog(expense);
-                                      if (action == 'delete')
-                                        _deleteExpense(expense);
-                                    },
-                                  ),
-                                ],
+                                  'Record business spending to track costs.',
+                              action: AppPrimaryButton(
+                                onPressed: _showAddExpenseDialog,
+                                label: const Text('Record expense'),
                               ),
                             ),
-                          );
-                        },
-                      ),
-          ),
+                          )
+                        : _visible.isEmpty
+                            ? Center(
+                                child: AppEmptyState(
+                                  icon: Icons.search_off,
+                                  title: 'No expenses match this view.',
+                                  subtitle:
+                                      'Try a different view, search or category.',
+                                  action: OutlinedButton.icon(
+                                    onPressed: _clearFilters,
+                                    icon: const Icon(Icons.clear_all, size: 18),
+                                    label: const Text('Clear filters'),
+                                  ),
+                                ),
+                              )
+                            : wide
+                                ? _table(context, colorScheme)
+                                : _cards(context, colorScheme),
+              ),
+              _paginationFooter(context),
+            ],
+          );
+        },
+      ),
+      floatingActionButton: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= _wideBreakpoint) return const SizedBox();
+          return FloatingActionButton(
+            onPressed: _showAddExpenseDialog,
+            tooltip: 'New Expense',
+            child: const Icon(Icons.add),
+          );
+        },
+      ),
+    );
+  }
 
-          // Pagination
-          if (_totalCount > _pageSize)
-            Container(
-              padding: const EdgeInsets.all(8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: _currentPage > 0
-                        ? () {
-                            _currentPage--;
-                            _loadData();
-                          }
-                        : null,
+  Widget _header(BuildContext context, bool wide, NumberFormat currencyFormat) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Expenses',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                  Text(
-                    'Page ${_currentPage + 1} of ${(_totalCount / _pageSize).ceil()}',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Record business spending to track costs.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right),
-                    onPressed: (_currentPage + 1) * _pageSize < _totalCount
-                        ? () {
-                            _currentPage++;
-                            _loadData();
-                          }
-                        : null,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$_totalCount records · Total ${currencyFormat.format(_totalAmount)}',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+          if (wide) ...[
+            const SizedBox(width: 12),
+            AppPrimaryButton(
+              onPressed: _showAddExpenseDialog,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('New Expense'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _viewChips() {
+    final counts = _viewCounts;
+    final views = <(String, String)>[
+      ('all', 'All'),
+      ('month', 'This month'),
+      ('cash', 'Cash'),
+      ('bank', 'Bank/Online'),
+    ];
+    return SizedBox(
+      height: 52,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        scrollDirection: Axis.horizontal,
+        children: [
+          for (final view in views)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                selected: _view == view.$1,
+                label: Text('${view.$2} · ${counts[view.$1] ?? 0}'),
+                onSelected: (_) => setState(() => _view = view.$1),
               ),
             ),
         ],
@@ -348,40 +314,301 @@ class _ExpenseManagementScreenState
     );
   }
 
-  Widget _buildStatChip(
-      String label, String value, IconData icon, Color color) {
-    return Container(
-      width: 200,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+  Widget _filterRow(BuildContext context, bool wide) {
+    final search = AppSearchField(
+      controller: _searchController,
+      hintText: 'Search expenses...',
+      onChanged: (value) {
+        _searchQuery = value;
+        _currentPage = 0;
+        _loadData();
+      },
+      onClear: _searchController.text.isEmpty ? null : _clearFilters,
+    );
+    final category = DropdownButtonFormField<String?>(
+      value: _selectedCategoryId,
+      isDense: true,
+      decoration: InputDecoration(
+        hintText: 'Category',
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
       ),
-      child: Row(
+      items: [
+        const DropdownMenuItem(
+          value: null,
+          child: Text('All Categories'),
+        ),
+        ..._categories.map((c) => DropdownMenuItem(
+              value: c.id,
+              child: Text(c.name),
+            )),
+      ],
+      onChanged: (value) {
+        _selectedCategoryId = value;
+        _currentPage = 0;
+        _loadData();
+      },
+    );
+    if (wide) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        child: Row(
+          children: [
+            Expanded(flex: 3, child: search),
+            const SizedBox(width: 8),
+            Expanded(flex: 2, child: category),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Column(
         children: [
-          Icon(icon, size: 20, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          search,
+          const SizedBox(height: 8),
+          category,
+        ],
+      ),
+    );
+  }
+
+  Widget _table(BuildContext context, ColorScheme colorScheme) {
+    int? sortIndex;
+    switch (_sortField) {
+      case 'description':
+        sortIndex = 0;
+        break;
+      case 'date':
+        sortIndex = 2;
+        break;
+      case 'amount':
+        sortIndex = 4;
+        break;
+    }
+    DataColumn col(String label, String field, {bool numeric = false}) =>
+        DataColumn(
+          label: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          numeric: numeric,
+          onSort: (_, __) => _onSort(field),
+        );
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            sortColumnIndex: sortIndex,
+            sortAscending: _sortAscending,
+            columns: [
+              col('Expense', 'description'),
+              const DataColumn(
+                label: Text(
+                  'Category',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              col('Date', 'date'),
+              const DataColumn(
+                label: Text(
+                  'Method',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              col('Amount', 'amount', numeric: true),
+              const DataColumn(label: Text('')),
+            ],
+            rows: [
+              for (final expense in _visible)
+                DataRow(cells: [
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 260),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            expense.description,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          if ((expense.notes ?? '').isNotEmpty)
+                            Text(
+                              expense.notes!,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  DataCell(Text(_categoryName(expense))),
+                  DataCell(
+                      Text(DateFormat('dd MMM yyyy').format(expense.date))),
+                  DataCell(Text(expense.paymentMethod ?? '—')),
+                  DataCell(
+                    AppMoney(
+                      expense.amount,
+                      currencySymbol: '₹',
+                      bold: true,
+                      style: TextStyle(color: colorScheme.error),
+                    ),
+                  ),
+                  DataCell(
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, size: 20),
+                      onSelected: (action) {
+                        if (action == 'edit') {
+                          _showEditExpenseDialog(expense);
+                        }
+                        if (action == 'delete') _deleteExpense(expense);
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit, size: 18),
+                              SizedBox(width: 8),
+                              Text('Edit'),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete, size: 18, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('Delete',
+                                  style: TextStyle(color: Colors.red)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _cards(BuildContext context, ColorScheme colorScheme) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
+      itemCount: _visible.length,
+      itemBuilder: (context, index) {
+        final expense = _visible[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: AppListRow(
+            leading: AppRowIcon(Icons.receipt, color: colorScheme.primary),
+            title: expense.description,
+            subtitle:
+                '${_categoryName(expense)} • ${DateFormat('dd MMM yyyy').format(expense.date)}',
+            trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  label,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: color),
-                ),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: color,
+                AppMoney(expense.amount,
+                    currencySymbol: '₹',
+                    bold: true,
+                    style: TextStyle(color: colorScheme.error)),
+                PopupMenuButton<String>(
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 18),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
                       ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, size: 18, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (action) {
+                    if (action == 'edit') _showEditExpenseDialog(expense);
+                    if (action == 'delete') _deleteExpense(expense);
+                  },
                 ),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _paginationFooter(BuildContext context) {
+    if (_totalCount <= 0) return const SizedBox();
+    final totalPages = (_totalCount / _pageSize).ceil().clamp(1, 1 << 30);
+    final start = _totalCount == 0 ? 0 : _currentPage * _pageSize + 1;
+    final end = ((_currentPage + 1) * _pageSize).clamp(0, _totalCount);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Showing $start–$end of $_totalCount',
+              style: Theme.of(context).textTheme.bodySmall,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            tooltip: 'Previous page',
+            onPressed: _currentPage > 0
+                ? () {
+                    _currentPage--;
+                    _loadData();
+                  }
+                : null,
+          ),
+          Text(
+            'Page ${_currentPage + 1} of $totalPages',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: 'Next page',
+            onPressed: (_currentPage + 1) * _pageSize < _totalCount
+                ? () {
+                    _currentPage++;
+                    _loadData();
+                  }
+                : null,
           ),
         ],
       ),
@@ -422,11 +649,13 @@ class _ExpenseManagementScreenState
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(expense == null ? 'Add Expense' : 'Edit Expense'),
+          title: Text(expense == null ? 'New Expense' : 'Edit Expense'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const AppSectionHeader('1 · Expense details'),
                 TextField(
                   controller: descriptionController,
                   decoration: const InputDecoration(
@@ -435,6 +664,29 @@ class _ExpenseManagementScreenState
                   ),
                 ),
                 const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedCategoryId,
+                  decoration: const InputDecoration(labelText: 'Category *'),
+                  items: _categories
+                      .map((c) => DropdownMenuItem(
+                            value: c.id,
+                            child: Text(c.name),
+                          ))
+                      .toList(),
+                  onChanged: (v) =>
+                      setDialogState(() => selectedCategoryId = v ?? ''),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountController,
+                  decoration: const InputDecoration(
+                    labelText: 'Amount *',
+                    hintText: '0.00',
+                    prefixText: '₹ ',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const AppSectionHeader('2 · Payment'),
                 DropdownButtonFormField<String>(
                   value: paymentMethod,
                   decoration:
@@ -453,7 +705,10 @@ class _ExpenseManagementScreenState
                   value: accountChoices().any((a) => a.id == accountId)
                       ? accountId
                       : null,
-                  decoration: const InputDecoration(labelText: 'Pay from'),
+                  decoration: const InputDecoration(
+                    labelText: 'Pay from',
+                    helperText: 'Pick the cash or bank account used.',
+                  ),
                   items: accountChoices()
                       .map((a) => DropdownMenuItem<String>(
                             value: a.id,
@@ -461,29 +716,6 @@ class _ExpenseManagementScreenState
                           ))
                       .toList(),
                   onChanged: (v) => setDialogState(() => accountId = v),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: amountController,
-                  decoration: const InputDecoration(
-                    labelText: 'Amount *',
-                    hintText: '0.00',
-                    prefixText: '₹ ',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedCategoryId,
-                  decoration: const InputDecoration(labelText: 'Category *'),
-                  items: _categories
-                      .map((c) => DropdownMenuItem(
-                            value: c.id,
-                            child: Text(c.name),
-                          ))
-                      .toList(),
-                  onChanged: (v) =>
-                      setDialogState(() => selectedCategoryId = v ?? ''),
                 ),
                 const SizedBox(height: 12),
                 ListTile(
@@ -499,8 +731,9 @@ class _ExpenseManagementScreenState
                       firstDate: DateTime(2020),
                       lastDate: DateTime.now().add(const Duration(days: 1)),
                     );
-                    if (picked != null)
+                    if (picked != null) {
                       setDialogState(() => selectedDate = picked);
+                    }
                   },
                 ),
                 const SizedBox(height: 12),
@@ -532,7 +765,7 @@ class _ExpenseManagementScreenState
                 }
                 Navigator.pop(context, true);
               },
-              child: Text(expense == null ? 'Add' : 'Save'),
+              child: Text(expense == null ? 'Save expense' : 'Save'),
             ),
           ],
         ),
@@ -550,6 +783,7 @@ class _ExpenseManagementScreenState
         return;
       }
 
+      final wasNew = expense == null;
       if (expense == null) {
         // Trial/licence gate: new expenses only; edits stay allowed.
         if (!await LicenseGate.canCreate(context)) return;
@@ -576,6 +810,12 @@ class _ExpenseManagementScreenState
         ));
       }
       _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(wasNew ? 'Expense recorded.' : 'Expense updated.'),
+          backgroundColor: Colors.green,
+        ));
+      }
     }
   }
 

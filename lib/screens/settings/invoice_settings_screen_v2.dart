@@ -61,6 +61,7 @@ class _InvoiceSettingsScreenV2State
   bool _showRoundOff = false;
   String _defaultTaxMode = 'global';
   bool _defaultPriceIncludesTax = false;
+  bool _defaultRoundOff = false;
   String? _signatureBase64;
   String _signaturePosition = 'left';
   String _selectedSignatureSize = 'medium';
@@ -128,6 +129,7 @@ class _InvoiceSettingsScreenV2State
       settingsRepo.getShowTimeInPdf(),
       settingsRepo.getPdfTimeFormat(),
       settingsRepo.getSetting(SettingKey.defaultPriceIncludesTax),
+      settingsRepo.getSetting(SettingKey.defaultRoundOff),
     ]);
 
     if (!mounted) return;
@@ -175,6 +177,7 @@ class _InvoiceSettingsScreenV2State
       _showTimeInPdf = results[38] as bool;
       _pdfTimeFormat = results[39] as String;
       _defaultPriceIncludesTax = (results[40] as String?) == 'true';
+      _defaultRoundOff = (results[41] as String?) == 'true';
       _isLoading = false;
     });
   }
@@ -233,6 +236,8 @@ class _InvoiceSettingsScreenV2State
         settingsRepo.setSetting(SettingKey.defaultTaxMode, _defaultTaxMode),
         settingsRepo.setSetting(SettingKey.defaultPriceIncludesTax,
             _defaultPriceIncludesTax.toString()),
+        settingsRepo.setSetting(
+            SettingKey.defaultRoundOff, _defaultRoundOff.toString()),
         settingsRepo.setSetting(
             SettingKey.showRoundOff, _showRoundOff.toString()),
         settingsRepo.setSetting(SettingKey.hideInvoiceNumberByDefault,
@@ -798,6 +803,41 @@ class _InvoiceSettingsScreenV2State
                 onSelectionChanged: (selection) {
                   if (!mounted) return;
                   setState(() => _defaultPriceIncludesTax = selection.first);
+                },
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+            border:
+                Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Round off total by default'),
+              const Text('Round new invoice payables to the nearest rupee',
+                  style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 8),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment<bool>(
+                      value: false,
+                      icon: Icon(Icons.add, size: 16),
+                      label: Text('Exact')),
+                  ButtonSegment<bool>(
+                      value: true,
+                      icon: Icon(Icons.done_all, size: 16),
+                      label: Text('Rounded')),
+                ],
+                selected: {_defaultRoundOff},
+                onSelectionChanged: (selection) {
+                  if (!mounted) return;
+                  setState(() => _defaultRoundOff = selection.first);
                 },
               ),
             ],

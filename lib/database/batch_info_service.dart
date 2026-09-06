@@ -1,5 +1,5 @@
 import 'package:apexbooks/models/batch_info.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import 'database_helper.dart';
 
 class BatchInfoService {
@@ -82,11 +82,9 @@ class BatchInfoService {
     await db.delete('batch_info', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// UUID mint (was MAX+1 'batch-N'): cross-device creation cannot collide
+  /// on the sync wire. Legacy 'batch-N' ids remain readable.
   static Future<String> generateNextId() async {
-    final db = await dbHelper.database;
-    final result = await db.rawQuery(
-        "SELECT MAX(CAST(REPLACE(id, 'batch-', '') AS INTEGER)) FROM batch_info WHERE id LIKE 'batch-%'");
-    final maxId = Sqflite.firstIntValue(result) ?? 0;
-    return 'batch-${maxId + 1}';
+    return const Uuid().v4();
   }
 }

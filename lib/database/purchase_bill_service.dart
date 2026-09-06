@@ -32,11 +32,24 @@ class PurchaseBillService {
   static Future<void> updateBill(PurchaseBill bill) async {
     final db = await dbHelper.database;
     await db.transaction((txn) async {
+      // Overpay guard (mirrors the sales-side updateInvoice check): the
+      // header's amount_paid may be stale, so recompute what the supplier
+      // already received from live payment rows and refuse to shrink the
+      // payable total below it. RC bills owe the net, not the gross.
+      final paidRows = await txn.rawQuery(
+        "SELECT COALESCE(SUM(amount_paid), 0.0) AS paid FROM purchase_bill_payments WHERE purchase_bill_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
+        [bill.id],
+      );
+      final livePaid = (paidRows.first['paid'] as num?)?.toDouble() ?? 0.0;
+      if (livePaid > bill.payableTotal + 0.005) {
+        throw StateError('Purchase bill total below amount already paid');
+      }
       final oldRows = await txn.query('purchase_bill_items',
           columns: ['product_id', 'quantity'],
           where: 'purchase_bill_id = ?',
           whereArgs: [bill.id]);
-      await txn.update('purchase_bills', _headerMap(bill),
+      final header = _headerMap(bill)..['amount_paid'] = livePaid;
+      await txn.update('purchase_bills', header,
           where: 'id = ?', whereArgs: [bill.id]);
       await txn.delete('purchase_bill_items',
           where: 'purchase_bill_id = ?', whereArgs: [bill.id]);
@@ -223,29 +236,47 @@ class PurchaseBillService {
     DateTime? chequeDate,
     String? paymentGroupId,
   }) async {
+    if (!amount.isFinite) {
+      throw ArgumentError('Payment amount must be a finite number');
+    }
     final db = await dbHelper.database;
     final bill = await getBill(id);
     if (bill == null) throw StateError('Purchase bill not found: $id');
-    final recordedAmount = amount.clamp(0, bill.outstanding).toDouble();
-    if (recordedAmount <= 0) throw StateError('Purchase bill is fully paid');
-    final paid = bill.amountPaid + recordedAmount;
+    // Overpay policy matches the sales side (PaymentService.addPayment):
+    // throw when amount exceeds the outstanding balance (with epsilon)
+    // instead of silently clamping. The in-txn re-read below is authoritative;
+    // this stale-header check is only a fast fail.
+    const epsilon = 0.005;
+    if (amount <= epsilon || amount > bill.outstanding + epsilon) {
+      throw StateError('Payment must be within the outstanding balance');
+    }
     final paymentId = const Uuid().v4();
     final isCheque = paymentMethod == 'Check';
-    final payment = PurchaseBillPayment(
-      id: paymentId,
-      purchaseBillId: id,
-      amountPaid: recordedAmount,
-      previouslyPaid: bill.amountPaid,
-      balanceAfter:
-          (bill.totalAmount - paid).clamp(0, double.infinity).toDouble(),
-      datePaid: datePaid,
-      paymentMethod: paymentMethod,
-      notes: notes,
-      accountId: accountId,
-      chequeStatus: isCheque ? 'pending' : 'none',
-      paymentGroupId: paymentGroupId,
-    );
     await db.transaction((txn) async {
+      // Re-read outstanding inside the txn like the batch path does: the
+      // header above may be stale if another payment committed between the
+      // getBill and this transaction.
+      final fresh = await txn.query('purchase_bills',
+          columns: [
+            'amount_paid',
+            'total_amount',
+            'total_tax',
+            'reverse_charge',
+            'itc_eligible'
+          ],
+          where: 'id = ?',
+          whereArgs: [id],
+          limit: 1);
+      if (fresh.isEmpty) throw StateError('Purchase bill no longer exists');
+      final previous = (fresh.first['amount_paid'] as num? ?? 0).toDouble();
+      final isRc = (fresh.first['reverse_charge'] as int? ?? 0) == 1 &&
+          (fresh.first['itc_eligible'] as int? ?? 1) == 1;
+      final billPayable =
+          ((fresh.first['total_amount'] as num? ?? 0).toDouble()) -
+              (isRc ? ((fresh.first['total_tax'] as num? ?? 0).toDouble()) : 0);
+      if (amount <= epsilon || previous + amount > billPayable + epsilon) {
+        throw StateError('Payment must be within the outstanding balance');
+      }
       String? resolvedAccountId;
       String? chequeId;
       if (isCheque) {
@@ -262,7 +293,7 @@ class PurchaseBillService {
         chequeId = await AccountingService.createCheque(txn,
             direction: 'issued',
             partyName: bill.supplierName,
-            amount: recordedAmount,
+            amount: amount,
             chequeNumber: chequeNumber!,
             chequeDate: chequeDate,
             sourceType: 'purchase_bill_payment',
@@ -279,7 +310,7 @@ class PurchaseBillService {
         await AccountingService.insertMovement(txn,
             accountId: resolvedAccountId,
             kind: 'supplier_payment',
-            amount: -recordedAmount,
+            amount: -amount,
             date: datePaid,
             sourceType: 'purchase_bill_payment',
             sourceId: paymentId,
@@ -287,21 +318,23 @@ class PurchaseBillService {
             notes: notes ?? '');
       }
       final storedPayment = PurchaseBillPayment(
-        id: payment.id,
-        purchaseBillId: payment.purchaseBillId,
-        amountPaid: payment.amountPaid,
-        previouslyPaid: payment.previouslyPaid,
-        balanceAfter: payment.balanceAfter,
-        datePaid: payment.datePaid,
-        paymentMethod: payment.paymentMethod,
-        notes: payment.notes,
+        id: paymentId,
+        purchaseBillId: id,
+        amountPaid: amount,
+        previouslyPaid: previous,
+        balanceAfter: (billPayable - previous - amount)
+            .clamp(0, double.infinity)
+            .toDouble(),
+        datePaid: datePaid,
+        paymentMethod: paymentMethod,
+        notes: notes,
         accountId: resolvedAccountId,
         chequeId: chequeId,
-        chequeStatus: payment.chequeStatus,
-        paymentGroupId: payment.paymentGroupId,
+        chequeStatus: isCheque ? 'pending' : 'none',
+        paymentGroupId: paymentGroupId,
       );
       await txn.insert('purchase_bill_payments', storedPayment.toMap());
-      await txn.update('purchase_bills', {'amount_paid': paid},
+      await txn.update('purchase_bills', {'amount_paid': previous + amount},
           where: 'id = ?', whereArgs: [id]);
     });
     final rows = await db.query('purchase_bill_payments',
@@ -328,6 +361,9 @@ class PurchaseBillService {
     String? accountId,
     String? notes,
   }) async {
+    if (allocations.any((a) => !a.amount.isFinite)) {
+      throw ArgumentError('Allocation amounts must be finite numbers');
+    }
     final positive = allocations.where((a) => a.amount > 0).toList();
     if (positive.isEmpty) throw ArgumentError('Enter at least one allocation');
     if (paymentMethod == 'Check') {
@@ -367,14 +403,25 @@ class PurchaseBillService {
           notes: notes ?? '');
       for (final allocation in positive) {
         final rows = await txn.query('purchase_bills',
-            columns: ['amount_paid', 'total_amount'],
+            columns: [
+              'amount_paid',
+              'total_amount',
+              'total_tax',
+              'reverse_charge',
+              'itc_eligible'
+            ],
             where: 'id = ?',
             whereArgs: [allocation.bill.id],
             limit: 1);
         if (rows.isEmpty) throw StateError('Purchase bill no longer exists');
         final previous = (rows.first['amount_paid'] as num? ?? 0).toDouble();
-        final billTotal = (rows.first['total_amount'] as num? ?? 0).toDouble();
-        if (previous + allocation.amount > billTotal + 0.005) {
+        // RC bills owe the net, matching the model outstanding above.
+        final isRc = (rows.first['reverse_charge'] as int? ?? 0) == 1 &&
+            (rows.first['itc_eligible'] as int? ?? 1) == 1;
+        final billPayable = (rows.first['total_amount'] as num? ?? 0)
+                .toDouble() -
+            (isRc ? ((rows.first['total_tax'] as num? ?? 0).toDouble()) : 0);
+        if (previous + allocation.amount > billPayable + 0.005) {
           throw StateError('A bill changed while the payment was being saved');
         }
         final payment = PurchaseBillPayment(
@@ -382,7 +429,7 @@ class PurchaseBillService {
           purchaseBillId: allocation.bill.id,
           amountPaid: allocation.amount,
           previouslyPaid: previous,
-          balanceAfter: (billTotal - previous - allocation.amount)
+          balanceAfter: (billPayable - previous - allocation.amount)
               .clamp(0, double.infinity)
               .toDouble(),
           datePaid: datePaid,

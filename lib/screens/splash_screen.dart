@@ -8,6 +8,7 @@ import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/screens/auth/login_screen.dart';
 import 'package:apexbooks/utils/app_logger.dart';
 import 'package:apexbooks/utils/post_auth_navigation.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 const _tag = 'SplashScreen';
 
@@ -39,9 +40,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
           title: Text(l10n.splashInitErrorTitle),
           content: Text(l10n.splashInitErrorMessage('$e')),
           actions: [
-            ElevatedButton(
+            AppPrimaryButton(
               onPressed: () => _initializeApp(),
-              child: Text(l10n.actionRetry),
+              label: Text(l10n.actionRetry),
             ),
           ],
         ),
@@ -80,10 +81,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            const AppBrandLogo(height: 84),
+            AppSpacing.hXlarge,
             Text(AppLocalizations.of(context)!.splashInitializingMessage,
                 style: const TextStyle(fontSize: 18)),
             AppSpacing.hXlarge,
-            const CircularProgressIndicator(),
+            const AppLoadingState(),
           ],
         ),
       ),

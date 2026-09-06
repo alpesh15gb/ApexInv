@@ -194,7 +194,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isPhone = screenWidth < 600;
     final cardWidth = isPhone ? screenWidth - 48 : 420.0;
     final cardPadding = isPhone ? 20.0 : 32.0;
-    final logoWidth = (cardWidth * 0.65).clamp(140.0, 230.0);
     return Scaffold(
       backgroundColor:
           isDark ? null : Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -272,15 +271,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Image.asset(
-                          // TODO: swap to a real dark-mode asset once available.
-                          isDark
-                              ? 'assets/images/logo_dark.png'
-                              : 'assets/images/logo.png',
-                          width: logoWidth,
-                          height: 100,
-                          fit: BoxFit.contain,
-                        ),
+                        const AppBrandLogo(height: 72),
                         AppSpacing.hSmall,
                         if (!cfg.isCloud && _needsSetup) ...[
                           Container(

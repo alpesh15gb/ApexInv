@@ -20,7 +20,7 @@ import 'package:apexbooks/licensing/license_service.dart';
 import 'package:apexbooks/widgets/update_dialog.dart';
 import 'package:apexbooks/domain/invoice_calculator.dart';
 import 'package:apexbooks/domain/customer_identity.dart';
-import 'package:apexbooks/common/invoiso_colors.dart';
+import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/models/invoice.dart';
 import 'package:apexbooks/models/product.dart';
 import 'package:apexbooks/common/common.dart';
@@ -31,11 +31,19 @@ import 'package:apexbooks/utils/formatters.dart';
 import 'package:apexbooks/widgets/apply_payment_dialog.dart';
 import 'package:apexbooks/widgets/customer_info_button.dart';
 import 'package:apexbooks/utils/session_manager.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 import 'package:apexbooks/models/user.dart';
 // import 'package:apexbooks/screens/customer_management_screen.dart';
 import 'package:apexbooks/screens/customer_management_screen_v2.dart';
 import 'package:apexbooks/database/database_helper.dart';
+import 'package:apexbooks/database/report_service.dart';
+import 'package:apexbooks/database/accounting_service.dart';
+import 'package:apexbooks/database/purchase_bill_service.dart';
+import 'package:apexbooks/models/accounting.dart';
+import 'package:apexbooks/models/purchase_bill.dart';
+import 'package:apexbooks/services/reminder_service.dart';
+import 'package:apexbooks/screens/import_screen.dart';
 import 'package:apexbooks/screens/screens_v1/create_invoice_screen.dart' as v1;
 import 'package:apexbooks/screens/create_invoice_screen_v2.dart';
 // import 'package:apexbooks/screens/product_management_screen.dart';
@@ -283,6 +291,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return DashboardHome(
             onEditInvoice: editInvoice,
             onCloneInvoice: cloneInvoice,
+            onCreateInvoice: () => _openNewDocument('Invoice'),
+            onNavigateTab: (index) {
+              _selectTab(index);
+            },
             user: _currentUser);
       case 1:
         final createInvoiceKey = ValueKey(
@@ -360,7 +372,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       case 8:
         return const ExpenseManagementScreen();
       case 9:
-        return const PurchaseOrderScreen();
+        return PurchaseOrderScreen(user: _currentUser);
       case 11:
         return PurchaseBillScreen(user: _currentUser);
       case 12:
@@ -712,16 +724,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    Positioned(
+                    const Positioned(
                       left: 16,
                       right: 36,
-                      child: Image.asset(
-                        Theme.of(context).brightness == Brightness.dark
-                            ? 'assets/images/logo_dark.png'
-                            : 'assets/images/logo.png',
-                        height: 36,
-                        fit: BoxFit.fitHeight,
-                      ),
+                      child: AppBrandLogo(height: 36),
                     ),
                     Positioned(
                       right: 6,
@@ -754,17 +760,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.asset(
-                        Theme.of(context).brightness == Brightness.dark
-                            ? 'assets/images/logo_v_dark.png'
-                            : 'assets/images/logo_v.png',
-                        width: 38,
-                        height: 38,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
+                    const AppBrandLogo(height: 38, showWordmark: false),
                     const SizedBox(height: 4),
                     Tooltip(
                       message: AppLocalizations.of(context)!
@@ -1187,16 +1183,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: AppSectionHeader(title),
     );
   }
 
@@ -1354,10 +1342,17 @@ class DashboardHome extends ConsumerStatefulWidget {
   final Function(Invoice) onEditInvoice;
   final Function(Invoice, String) onCloneInvoice;
   final User user;
+  final VoidCallback? onCreateInvoice;
+
+  /// Routes to another dashboard tab via the existing [_selectTab] routing
+  /// (same guards/destinations as the sidebar and bottom navigation bar).
+  final ValueChanged<int> onNavigateTab;
   const DashboardHome({
     required this.onEditInvoice,
     required this.onCloneInvoice,
     required this.user,
+    required this.onNavigateTab,
+    this.onCreateInvoice,
     super.key,
   });
 
@@ -1377,6 +1372,34 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
   List<Product> outOfStockProducts = [];
   List<Invoice> overdueInvoices = [];
   String _currencySymbol = '₹';
+  String _currencyCode = 'INR';
+  // ── Ledgerly overview (all read-only aggregations over existing queries) ──
+  /// Full overdue list for ageing/focus panels (ReminderService batch query).
+  List<OverdueInvoice> _reminderOverdue = [];
+
+  /// Monthly P&L for the last 5 full months + current month-to-date.
+  List<PnlSummary> _pnlSeries = [];
+
+  /// Previous-month same-day window P&L, for an honest MoM profit delta.
+  PnlSummary? _pnlPrevWindow;
+
+  /// Dated cash events for the cash-flow panel (ReportService day book).
+  List<DayBookEntry> _dayBook = [];
+
+  /// Active cash/bank accounts in the selected currency + live balances.
+  List<FinancialAccount> _cashAccounts = [];
+  Map<String, double> _cashBalances = {};
+
+  /// Month-end cash totals (5 month-ends + now) for the cash sparkline/delta.
+  List<double> _cashSeries = [];
+  double _cashPrevMonthEnd = 0;
+  List<Product> _allProducts = [];
+
+  /// Current-month sales invoices, for the honest GSTR-1 status block.
+  List<Invoice> _periodInvoices = [];
+
+  /// Current-month purchase bills, for the honest ITC comparison block.
+  List<PurchaseBill> _periodBills = [];
   bool isLoading = true;
   String _dashboardLayout = 'default';
   bool _showLayoutBanner = false;
@@ -1398,34 +1421,130 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
     if (!mounted) return;
     setState(() => isLoading = true);
 
+    // Dashboard renders under a single currency symbol — fetch it first so
+    // revenue/outstanding/monthly/top-customers are filtered to it (mixed
+    // currencies must never be summed under one symbol).
+    final currency = await ref.read(settingsRepositoryProvider).getCurrency();
+    if (!mounted) return;
     final results = await Future.wait([
       ref.read(customerRepositoryProvider).getTotalCustomerCount(), // 0
       ref.read(productRepositoryProvider).getTotalProductCount(), // 1
-      ref.read(invoiceRepositoryProvider).getDashboardFinancials(), // 2
+      ref
+          .read(invoiceRepositoryProvider)
+          .getDashboardFinancials(currencyCode: currency.code), // 2
       ref.read(invoiceRepositoryProvider).getRecentInvoices(limit: 5), // 3
       ref.read(invoiceRepositoryProvider).getDueSoonInvoices(), // 4
       ref.read(invoiceRepositoryProvider).getOverdueInvoices(limit: 10), // 5
-      ref.read(settingsRepositoryProvider).getCurrency(), // 6
-      ref.read(invoiceRepositoryProvider).getMonthlyRevenue(), // 7
+      ref
+          .read(invoiceRepositoryProvider)
+          .getMonthlyRevenue(currencyCode: currency.code), // 6
       ref
           .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.dashboardLayout), // 8
-      ref.read(invoiceRepositoryProvider).getTopCustomers(), // 9
-      ref.read(invoiceRepositoryProvider).getTopProducts(), // 10
+          .getSetting(SettingKey.dashboardLayout), // 7
+      ref
+          .read(invoiceRepositoryProvider)
+          .getTopCustomers(currencyCode: currency.code), // 8
+      ref.read(invoiceRepositoryProvider).getTopProducts(), // 9
       ref
           .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.layoutBannerDismissed), // 11
+          .getSetting(SettingKey.layoutBannerDismissed), // 10
       ref
           .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.supportBannerDismissed), // 12
-      ref.read(productRepositoryProvider).getOutOfStockProducts(), // 13
+          .getSetting(SettingKey.supportBannerDismissed), // 11
+      ref.read(productRepositoryProvider).getOutOfStockProducts(), // 12
       ref
           .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.themeBannerDismissed), // 14
+          .getSetting(SettingKey.themeBannerDismissed), // 13
       ref
           .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.shortcutsBannerDismissed), // 15
+          .getSetting(SettingKey.shortcutsBannerDismissed), // 14
     ]);
+
+    // ── Ledgerly overview batch: read-only and additive. Every figure below
+    // comes from an existing query; the screen only groups/filters the
+    // returned rows (ageing buckets, monthly money-in/out, stock value).
+    // A failure here must never blank the core dashboard, so the panels
+    // fall back to honest empty states.
+    final code = currency.code;
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1);
+    final prevMonthStart = DateTime(now.year, now.month - 1, 1);
+    final daysInPrevMonth =
+        DateTime(prevMonthStart.year, prevMonthStart.month + 1, 0).day;
+    final prevWindowEnd = DateTime(prevMonthStart.year, prevMonthStart.month,
+        now.day > daysInPrevMonth ? daysInPrevMonth : now.day, 23, 59, 59);
+    final sixMonthStart = DateTime(now.year, now.month - 5, 1);
+    final seriesStarts =
+        List.generate(6, (i) => DateTime(now.year, now.month - (5 - i), 1));
+    DateTime monthEnd(DateTime m) =>
+        DateTime(m.year, m.month + 1, 0, 23, 59, 59);
+
+    var reminderOverdue = <OverdueInvoice>[];
+    var dayBook = <DayBookEntry>[];
+    var cashAccounts = <FinancialAccount>[];
+    var cashBalances = <String, double>{};
+    var cashSeries = <double>[];
+    var cashPrevMonthEnd = 0.0;
+    var allProducts = <Product>[];
+    var periodInvoices = <Invoice>[];
+    var periodBills = <PurchaseBill>[];
+    var pnlSeries = <PnlSummary>[];
+    PnlSummary? pnlPrevWindow;
+    try {
+      final extra = await Future.wait([
+        ReminderService.getOverdue(limit: 200), // 0
+        ReportService.getDayBook(sixMonthStart, now, currencyCode: code), // 1
+        AccountingService.getAccounts(), // 2
+        ref.read(productRepositoryProvider).getAllProducts(), // 3
+        ref.read(invoiceRepositoryProvider).getInvoicesForExport(
+            fromDate: monthStart, toDate: now, filterType: 'Invoice'), // 4
+        PurchaseBillService.getBills(from: monthStart, to: now), // 5
+        for (var i = 0; i < seriesStarts.length; i++)
+          ReportService.getPnl(
+            seriesStarts[i],
+            i == seriesStarts.length - 1 ? now : monthEnd(seriesStarts[i]),
+            currencyCode: code,
+          ), // 6..11
+        ReportService.getPnl(prevMonthStart, prevWindowEnd,
+            currencyCode: code), // 12
+      ]);
+      reminderOverdue = extra[0] as List<OverdueInvoice>;
+      dayBook = extra[1] as List<DayBookEntry>;
+      final accounts = extra[2] as List<FinancialAccount>;
+      // Currency scope: never sum mixed currencies under one symbol.
+      cashAccounts = accounts.where((a) => a.currencyCode == code).toList();
+      allProducts = extra[3] as List<Product>;
+      periodInvoices = extra[4] as List<Invoice>;
+      periodBills = extra[5] as List<PurchaseBill>;
+      pnlSeries = extra.sublist(6, 12).cast<PnlSummary>();
+      pnlPrevWindow = extra[12] as PnlSummary;
+      // Live balances plus real historical balances (AccountingService
+      // supports `through`, so month-end points are actuals, not estimates).
+      cashBalances = await AccountingService.getBalances(cashAccounts);
+      final seriesDates = [
+        for (var i = 0; i < 5; i++)
+          DateTime(now.year, now.month - (4 - i), 0, 23, 59, 59),
+        now,
+      ];
+      final balanceFutures = <Future<double>>[];
+      for (var d = 0; d < seriesDates.length; d++) {
+        final date = seriesDates[d];
+        final historical = d < seriesDates.length - 1;
+        balanceFutures.add(() async {
+          var total = 0.0;
+          for (final account in cashAccounts) {
+            total += await AccountingService.getBalance(account.id,
+                through: historical ? date : null);
+          }
+          return total;
+        }());
+      }
+      cashSeries = await Future.wait(balanceFutures);
+      cashPrevMonthEnd =
+          cashSeries.length >= 2 ? cashSeries[cashSeries.length - 2] : 0.0;
+    } catch (_) {
+      // Panels keep their honest empty defaults (see initializers above).
+    }
 
     final customerCount = results[0] as int;
     final productCount = results[1] as int;
@@ -1434,17 +1553,16 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
     final recent = results[3] as List<Invoice>;
     final dueSoon = results[4] as List<Invoice>;
     final overdue = results[5] as List<Invoice>;
-    final currency = results[6] as CurrencyOption;
-    final monthly = results[7] as List<Map<String, dynamic>>;
-    final layout = results[8] as String?;
-    final topCust = results[9] as List<Map<String, dynamic>>;
-    final topProd = results[10] as List<Map<String, dynamic>>;
-    final bannerDismissed = results[11] as String?;
-    final supportDismissed = results[12] as String?;
-    final outOfStock = results[13] as List<Product>;
-    final themeBannerDismissed = results[14] as String?;
+    final monthly = results[6] as List<Map<String, dynamic>>;
+    final layout = results[7] as String?;
+    final topCust = results[8] as List<Map<String, dynamic>>;
+    final topProd = results[9] as List<Map<String, dynamic>>;
+    final bannerDismissed = results[10] as String?;
+    final supportDismissed = results[11] as String?;
+    final outOfStock = results[12] as List<Product>;
+    final themeBannerDismissed = results[13] as String?;
     final shortcutsBannerDismissed =
-        Platform.isAndroid ? '1' : results[15] as String?;
+        Platform.isAndroid ? '1' : results[14] as String?;
     final String milestone = financials.count >= 100
         ? '100'
         : financials.count >= 50
@@ -1464,6 +1582,18 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
       dueSoonInvoices = dueSoon;
       overdueInvoices = overdue;
       _currencySymbol = currency.symbol;
+      _currencyCode = code;
+      _reminderOverdue = reminderOverdue;
+      _dayBook = dayBook;
+      _cashAccounts = cashAccounts;
+      _cashBalances = cashBalances;
+      _cashSeries = cashSeries;
+      _cashPrevMonthEnd = cashPrevMonthEnd;
+      _allProducts = allProducts;
+      _periodInvoices = periodInvoices;
+      _periodBills = periodBills;
+      _pnlSeries = pnlSeries;
+      _pnlPrevWindow = pnlPrevWindow;
       _monthlyRevenue = monthly;
       _dashboardLayout = layout ?? 'default';
       _topCustomers = topCust;
@@ -1696,7 +1826,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark
           ? null
-          : Colors.grey[50],
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
       appBar: AppBar(
         title: Text(AppLocalizations.of(context)!.dashboardOverviewTitle),
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor ??
@@ -1714,9 +1844,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           const SizedBox(width: 8),
         ],
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _buildContent(),
+      body: isLoading ? const AppLoadingState() : _buildContent(),
     );
   }
 
@@ -1746,82 +1874,20 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               _buildThemeDiscoveryBanner(),
               _buildShortcutsDiscoveryBanner(),
               _buildSupportBanner(),
-              // ── Greeting Banner ──────────────────────────────
-              _buildGreetingBanner(),
+              // ── Ledgerly overview ──────────────────────────────
+              _buildLedgerlyGreeting(),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
 
-              // ── Stats ────────────────────────────────────────
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final cards = <Widget>[
-                    _buildStatCard(
-                        AppLocalizations.of(context)!.navCustomers,
-                        totalCustomers.toString(),
-                        const Color(0xFF1565C0),
-                        Icons.people_outline),
-                    _buildStatCard(
-                      AppLocalizations.of(context)!.navProducts,
-                      totalProducts.toString(),
-                      const Color(0xFF2E7D32),
-                      Icons.inventory_2_outlined,
-                      subtitle: outOfStockProducts.isNotEmpty
-                          ? AppLocalizations.of(context)!
-                              .dashboardOutOfStockCountLabel(
-                                  outOfStockProducts.length)
-                          : null,
-                      subtitleColor: Colors.red[600],
-                    ),
-                    _buildStatCard(
-                        AppLocalizations.of(context)!.navInvoices,
-                        totalInvoices.toString(),
-                        const Color(0xFFE65100),
-                        Icons.receipt_long_outlined),
-                    _buildStatCard(
-                      AppLocalizations.of(context)!
-                          .dashboardRevenueCollectedLabel,
-                      '$_currencySymbol ${totalRevenue.toStringAsFixed(2)}',
-                      const Color(0xFF6A1B9A),
-                      Icons.account_balance_wallet_outlined,
-                    ),
-                    _buildStatCard(
-                      AppLocalizations.of(context)!.dashboardOutstandingLabel,
-                      '$_currencySymbol ${totalOutstanding.toStringAsFixed(2)}',
-                      const Color(0xFFC62828),
-                      Icons.hourglass_top_outlined,
-                      subtitle: overdueInvoices.isNotEmpty
-                          ? AppLocalizations.of(context)!
-                              .dashboardOverdueCountLabel(
-                                  overdueInvoices.length)
-                          : null,
-                      subtitleColor: Colors.red[700],
-                    ),
-                  ];
-                  if (constraints.maxWidth < Breakpoints.compactMax) {
-                    const gap = 12.0;
-                    final cardWidth = (constraints.maxWidth - gap) / 2;
-                    return Wrap(
-                      spacing: gap,
-                      runSpacing: gap,
-                      children: [
-                        for (final card in cards)
-                          SizedBox(width: cardWidth, child: card),
-                      ],
-                    );
-                  }
-                  return IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var i = 0; i < cards.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 16),
-                          Expanded(child: cards[i]),
-                        ],
-                      ],
-                    ),
-                  );
-                },
-              ),
+              _buildLedgerlyKpis(),
+
+              const SizedBox(height: 20),
+
+              _buildLedgerlyPanels(),
+
+              const SizedBox(height: 20),
+
+              _buildLedgerlyQuickActions(),
 
               // ── Due Soon ─────────────────────────────────────
               if (dueSoonInvoices.isNotEmpty) ...[
@@ -1877,40 +1943,16 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               const SizedBox(height: 20),
 
               recentInvoices.isEmpty
-                  ? Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(48),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.receipt_long_outlined,
-                                size: 80,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outlineVariant),
-                            const SizedBox(height: 16),
-                            Text(
-                              AppLocalizations.of(context)!
-                                  .dashboardNoInvoicesYetTitle,
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                  fontWeight: FontWeight.w500),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              AppLocalizations.of(context)!
-                                  .dashboardNoInvoicesYetSubtitle,
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant),
-                            ),
-                          ],
-                        ),
+                  ? AppEmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: AppLocalizations.of(context)!
+                          .dashboardNoInvoicesYetTitle,
+                      subtitle: AppLocalizations.of(context)!
+                          .dashboardNoInvoicesYetSubtitle,
+                      action: AppPrimaryButton(
+                        onPressed: widget.onCreateInvoice,
+                        label:
+                            Text(AppLocalizations.of(context)!.navNewInvoice),
                       ),
                     )
                   : ListView.builder(
@@ -1921,146 +1963,137 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
                         final invoice = recentInvoices[index];
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
-                          child: Card(
-                            elevation: 2,
-                            shadowColor: Colors.black.withValues(alpha: 0.1),
-                            shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(AppBorderRadius.xsmall),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: LayoutBuilder(
-                                builder: (context, rowConstraints) {
-                                  final badge =
-                                      _recentInvoiceBadge(invoice, index);
-                                  if (rowConstraints.maxWidth <
-                                      Breakpoints.compactMax) {
-                                    return _compactRecentInvoiceCard(
-                                        invoice, index, badge);
-                                  }
-                                  return Row(
-                                    children: [
-                                      badge,
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: _recentInvoiceDetails(invoice),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.end,
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 16, vertical: 8),
-                                            decoration: BoxDecoration(
-                                              color: Colors.purple
-                                                  .withValues(alpha: 0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              '${invoice.currencySymbol} ${invoice.total.toStringAsFixed(2)}',
-                                              style: const TextStyle(
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.purple,
-                                              ),
+                          child: AppCard(
+                            child: LayoutBuilder(
+                              builder: (context, rowConstraints) {
+                                final badge =
+                                    _recentInvoiceBadge(invoice, index);
+                                if (rowConstraints.maxWidth <
+                                    Breakpoints.compactMax) {
+                                  return _compactRecentInvoiceCard(
+                                      invoice, index, badge);
+                                }
+                                return Row(
+                                  children: [
+                                    badge,
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: _recentInvoiceDetails(invoice),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 16, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple
+                                                .withValues(alpha: 0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            '${invoice.currencySymbol} ${invoice.payableTotal.toStringAsFixed(2)}',
+                                            style: const TextStyle(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.purple,
                                             ),
                                           ),
-                                          const SizedBox(height: 8),
-                                          Wrap(
-                                            spacing: 6,
-                                            runSpacing: 6,
-                                            alignment: WrapAlignment.end,
-                                            children: [
-                                              _buildActionButton(
-                                                  Icons.visibility_outlined,
-                                                  Colors.green,
-                                                  AppLocalizations.of(context)!
-                                                      .actionView,
-                                                  () => InvoicePdfServices
-                                                      .showInvoiceDetails(
-                                                          context, invoice)),
-                                              _buildActionButton(
-                                                  Icons.edit_outlined,
-                                                  Colors.blue,
-                                                  AppLocalizations.of(context)!
-                                                      .actionEdit,
-                                                  () => widget
-                                                      .onEditInvoice(invoice)),
-                                              _buildActionButton(
-                                                  Icons.copy_all_outlined,
-                                                  Colors.teal,
-                                                  AppLocalizations.of(context)!
-                                                      .actionDuplicate,
-                                                  () => _showCloneDialog(
-                                                      invoice)),
-                                              _buildActionButton(
-                                                  Icons.picture_as_pdf_outlined,
-                                                  Colors.orange,
-                                                  AppLocalizations.of(context)!
-                                                      .actionPdfPreview,
-                                                  () => InvoicePdfServices
-                                                      .previewPDF(
-                                                          context, invoice)),
-                                              _buildActionButton(
-                                                  Icons.download_outlined,
-                                                  Colors.deepPurple,
-                                                  AppLocalizations.of(context)!
-                                                      .actionDownloadPdf,
-                                                  () => PDFService.downloadPDF(
-                                                      context, invoice)),
-                                              _buildActionButton(
-                                                  Icons.print_outlined,
-                                                  Colors.blueGrey,
-                                                  AppLocalizations.of(context)!
-                                                      .actionPrint,
-                                                  () => InvoicePdfServices
-                                                      .generatePDF(
-                                                          context, invoice)),
-                                              _buildActionButton(
-                                                  Icons.payments_outlined,
-                                                  Colors.purple,
-                                                  AppLocalizations.of(context)!
-                                                      .actionPayment,
-                                                  invoice.type == 'Invoice'
-                                                      ? () => showDialog(
-                                                            context: context,
-                                                            barrierDismissible:
-                                                                false,
-                                                            builder: (_) =>
-                                                                ApplyPaymentDialog(
-                                                              invoice: invoice,
-                                                              onPaymentRecorded:
-                                                                  () {
-                                                                if (!mounted)
-                                                                  return;
-                                                                setState(() {});
-                                                              },
-                                                            ),
-                                                          )
-                                                      : null),
-                                              _buildActionButton(
-                                                  Icons.delete_outline,
-                                                  Colors.red,
-                                                  AppLocalizations.of(context)!
-                                                      .actionDelete,
-                                                  widget.user.isAdmin()
-                                                      ? () => _showDeleteDialog(
-                                                          invoice)
-                                                      : null),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          alignment: WrapAlignment.end,
+                                          children: [
+                                            _buildActionButton(
+                                                Icons.visibility_outlined,
+                                                Colors.green,
+                                                AppLocalizations.of(context)!
+                                                    .actionView,
+                                                () => InvoicePdfServices
+                                                    .showInvoiceDetails(
+                                                        context, invoice)),
+                                            _buildActionButton(
+                                                Icons.edit_outlined,
+                                                Colors.blue,
+                                                AppLocalizations.of(context)!
+                                                    .actionEdit,
+                                                () => widget
+                                                    .onEditInvoice(invoice)),
+                                            _buildActionButton(
+                                                Icons.copy_all_outlined,
+                                                Colors.teal,
+                                                AppLocalizations.of(context)!
+                                                    .actionDuplicate,
+                                                () =>
+                                                    _showCloneDialog(invoice)),
+                                            _buildActionButton(
+                                                Icons.picture_as_pdf_outlined,
+                                                Colors.orange,
+                                                AppLocalizations.of(context)!
+                                                    .actionPdfPreview,
+                                                () => InvoicePdfServices
+                                                    .previewPDF(
+                                                        context, invoice)),
+                                            _buildActionButton(
+                                                Icons.download_outlined,
+                                                Colors.deepPurple,
+                                                AppLocalizations.of(context)!
+                                                    .actionDownloadPdf,
+                                                () => PDFService.downloadPDF(
+                                                    context, invoice)),
+                                            _buildActionButton(
+                                                Icons.print_outlined,
+                                                Colors.blueGrey,
+                                                AppLocalizations.of(context)!
+                                                    .actionPrint,
+                                                () => InvoicePdfServices
+                                                    .generatePDF(
+                                                        context, invoice)),
+                                            _buildActionButton(
+                                                Icons.payments_outlined,
+                                                Colors.purple,
+                                                AppLocalizations.of(context)!
+                                                    .actionPayment,
+                                                invoice.type == 'Invoice'
+                                                    ? () => showDialog(
+                                                          context: context,
+                                                          barrierDismissible:
+                                                              false,
+                                                          builder: (_) =>
+                                                              ApplyPaymentDialog(
+                                                            invoice: invoice,
+                                                            onPaymentRecorded:
+                                                                () {
+                                                              if (!mounted)
+                                                                return;
+                                                              setState(() {});
+                                                            },
+                                                          ),
+                                                        )
+                                                    : null),
+                                            _buildActionButton(
+                                                Icons.delete_outline,
+                                                Colors.red,
+                                                AppLocalizations.of(context)!
+                                                    .actionDelete,
+                                                widget.user.isAdmin()
+                                                    ? () => _showDeleteDialog(
+                                                        invoice)
+                                                    : null),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                           ),
                         );
@@ -2255,7 +2288,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                '${invoice.currencySymbol} ${invoice.total.toStringAsFixed(2)}',
+                '${invoice.currencySymbol} ${invoice.payableTotal.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -2360,6 +2393,1257 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           ],
         ),
       ],
+    );
+  }
+
+  // ── Ledgerly overview ─────────────────────────────────────────────────────
+  // Presentation-only redesign of the default overview tab. Every number
+  // below comes from the queries loaded in _loadDashboardData; this section
+  // only formats, filters by the selected currency, and groups returned rows
+  // (ageing buckets, monthly money-in/out, stock value). No calculation,
+  // query predicate, persistence, sync, or accounting logic lives here.
+
+  /// Month-over-month % change. Null when the previous value is ~zero, so
+  /// the card omits the chip instead of showing a misleading figure.
+  double? _momPct(double current, double previous) {
+    if (previous.abs() < 0.005) return null;
+    return (current - previous) / previous.abs() * 100;
+  }
+
+  Widget? _deltaChip(double? pct) {
+    if (pct == null || !pct.isFinite) return null;
+    final up = pct >= 0;
+    final color = up ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+              size: 12, color: color),
+          const SizedBox(width: 2),
+          Text('${pct.abs().toStringAsFixed(1)}%',
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSparkline(List<double> values, Color color) {
+    final maxV = values.fold(0.0, (a, b) => b > a ? b : a);
+    final minV = values.fold(0.0, (a, b) => b < a ? b : a);
+    return SizedBox(
+      height: 44,
+      child: LineChart(
+        LineChartData(
+          minY: minV < 0 ? minV * 1.2 : 0,
+          maxY: maxV > 0 ? maxV * 1.2 : 1,
+          lineBarsData: [
+            LineChartBarData(
+              spots: [
+                for (var i = 0; i < values.length; i++)
+                  FlSpot(i.toDouble(), values[i]),
+              ],
+              isCurved: true,
+              color: color,
+              barWidth: 2,
+              dotData: const FlDotData(show: false),
+              belowBarData:
+                  BarAreaData(show: true, color: color.withValues(alpha: 0.12)),
+            ),
+          ],
+          titlesData: const FlTitlesData(show: false),
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          lineTouchData: const LineTouchData(enabled: false),
+        ),
+      ),
+    );
+  }
+
+  Widget _ledgerlyKpi({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    Widget? titleChip,
+    double? deltaPct,
+    List<double>? sparkline,
+    Widget? action,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final chip = _deltaChip(deltaPct);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(9)),
+                child: Icon(icon, color: color, size: 16),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(title,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurfaceVariant),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
+              if (titleChip != null) titleChip,
+              if (chip != null) ...[
+                const SizedBox(width: 6),
+                chip,
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.bold,
+                  color: scheme.onSurface),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 2),
+          Text(subtitle,
+              style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis),
+          if (sparkline != null && sparkline.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildSparkline(sparkline, color),
+          ],
+          if (action != null) ...[
+            const SizedBox(height: 10),
+            action,
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _overdueTitleChip(int count) {
+    final color = count > 0 ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20)),
+      child: Text(count > 0 ? '$count overdue' : 'All clear',
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+
+  /// Four KPI cards. Sales headlines are all-time collected/count/average
+  /// from getDashboardFinancials (one consistent source); the delta chip and
+  /// sparkline show the monthly-receipts trend. Net Profit is the P&L profit
+  /// for the current month (ReportService.getPnl, same engine as the
+  /// Reports P&L tab) with margin, MoM delta, and a 6-month P&L sparkline.
+  Widget _buildLedgerlyKpis() {
+    final months = _lastSixMonths();
+    final keys = months.map(_monthKey).toList();
+    final receipts = [for (final k in keys) _receiptsByMonth[k] ?? 0.0];
+    final salesDelta = _momPct(
+        _receiptsByMonth[keys.last] ?? 0, _receiptsByMonth[keys[4]] ?? 0);
+    final avgBill = totalInvoices > 0 ? totalRevenue / totalInvoices : 0.0;
+
+    const emptyPnl =
+        PnlSummary(revenue: 0, expenses: 0, purchases: 0, collected: 0);
+    final cur = _pnlSeries.length == 6 ? _pnlSeries.last : emptyPnl;
+    final profits = _pnlSeries.length == 6
+        ? [for (final p in _pnlSeries) p.profit]
+        : List.filled(6, 0.0);
+    final profitDelta = _pnlPrevWindow == null
+        ? null
+        : _momPct(cur.profit, _pnlPrevWindow!.profit);
+    final margin =
+        cur.revenue.abs() > 0.005 ? cur.profit / cur.revenue * 100 : null;
+
+    var inCash = 0.0;
+    var inBank = 0.0;
+    for (final a in _cashAccounts) {
+      final b = _cashBalances[a.id] ?? 0;
+      if (a.type == 'cash') {
+        inCash += b;
+      } else {
+        inBank += b;
+      }
+    }
+    final cashNow = inCash + inBank;
+    final cashDelta = _momPct(cashNow, _cashPrevMonthEnd);
+    final List<double>? cashSpark =
+        _cashSeries.length == 6 ? _cashSeries : null;
+
+    final overdueCount = _scopedOverdue.length;
+    final salesCard = _ledgerlyKpi(
+      title: 'Sales',
+      value: _inrCompact(totalRevenue),
+      subtitle: totalInvoices > 0
+          ? '$totalInvoices invoices · avg ${_inrCompact(avgBill)}'
+          : 'No invoices yet',
+      icon: Icons.trending_up_outlined,
+      color: const Color(0xFF6A1B9A),
+      deltaPct: salesDelta,
+      sparkline: receipts,
+    );
+    final profitCard = _ledgerlyKpi(
+      title: 'Net Profit',
+      value: _inrCompact(cur.profit),
+      subtitle: margin == null
+          ? 'This month · margin —'
+          : 'This month · margin ${margin.toStringAsFixed(1)}%',
+      icon: Icons.savings_outlined,
+      color: const Color(0xFF2E7D32),
+      deltaPct: profitDelta,
+      sparkline: profits,
+    );
+    final outstandingCard = _ledgerlyKpi(
+      title: 'Outstanding',
+      value: _inrCompact(totalOutstanding),
+      subtitle: totalOutstanding.abs() < 0.005
+          ? 'Nothing outstanding'
+          : overdueCount > 0
+              ? 'From $_scopedOverdueCustomerCount customers'
+              : 'Nothing overdue',
+      icon: Icons.hourglass_top_outlined,
+      color: const Color(0xFFC62828),
+      titleChip: _overdueTitleChip(overdueCount),
+      action: SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: () => widget.onNavigateTab(17),
+          icon: const Icon(Icons.send_outlined, size: 16),
+          label: const Text('Send reminder'),
+        ),
+      ),
+    );
+    final cashCard = _ledgerlyKpi(
+      title: 'Cash & Bank',
+      value: _inrCompact(cashNow),
+      subtitle: _cashAccounts.isEmpty
+          ? 'No accounts in $_currencyCode'
+          : 'Cash ${_inrCompact(inCash)} · Bank ${_inrCompact(inBank)}',
+      icon: Icons.account_balance_wallet_outlined,
+      color: const Color(0xFF1565C0),
+      deltaPct: cashDelta,
+      sparkline: cashSpark,
+    );
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cards = [salesCard, profitCard, outstandingCard, cashCard];
+        if (c.maxWidth < Breakpoints.compactMax) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(height: 12),
+                cards[i],
+              ],
+            ],
+          );
+        }
+        if (c.maxWidth < 1100) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(children: [
+                Expanded(child: cards[0]),
+                const SizedBox(width: 12),
+                Expanded(child: cards[1]),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: cards[2]),
+                const SizedBox(width: 12),
+                Expanded(child: cards[3]),
+              ]),
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) const SizedBox(width: 12),
+              Expanded(child: cards[i]),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  /// 6-month grouped bars: money-in (invoice receipts) vs money-out
+  /// (expenses + purchase-bill payments), grouped in-screen from the
+  /// currency-scoped day-book rows. Zero months are honest zeroes.
+  Widget _buildCashFlowPanel() {
+    final scheme = Theme.of(context).colorScheme;
+    final months = _lastSixMonths();
+    final inByMonth = <String, double>{};
+    final outByMonth = <String, double>{};
+    for (final e in _dayBook) {
+      final key = _monthKey(e.date);
+      inByMonth[key] = (inByMonth[key] ?? 0) + e.moneyIn;
+      outByMonth[key] = (outByMonth[key] ?? 0) + e.moneyOut;
+    }
+    final ins = [for (final m in months) inByMonth[_monthKey(m)] ?? 0.0];
+    final outs = [for (final m in months) outByMonth[_monthKey(m)] ?? 0.0];
+    final hasData =
+        ins.any((v) => v.abs() > 0.005) || outs.any((v) => v.abs() > 0.005);
+    const inColor = Color(0xFF2E7D32);
+    const outColor = Color(0xFFE65100);
+
+    final Widget chart;
+    if (!hasData) {
+      chart = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 36),
+        child: Center(
+          child: Text('No cash movement in the last 6 months.',
+              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+        ),
+      );
+    } else {
+      final maxV = [...ins, ...outs].fold<double>(0, (a, b) => b > a ? b : a);
+      chart = SizedBox(
+        height: 210,
+        child: BarChart(
+          BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            groupsSpace: 14,
+            maxY: maxV * 1.25,
+            barGroups: [
+              for (var i = 0; i < 6; i++)
+                BarChartGroupData(
+                  x: i,
+                  barsSpace: 4,
+                  barRods: [
+                    BarChartRodData(
+                      toY: ins[i],
+                      width: 10,
+                      color: inColor,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(4)),
+                    ),
+                    BarChartRodData(
+                      toY: outs[i],
+                      width: 10,
+                      color: outColor,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(4)),
+                    ),
+                  ],
+                ),
+            ],
+            titlesData: FlTitlesData(
+              leftTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (value, meta) {
+                    final idx = value.toInt();
+                    if (idx < 0 || idx >= months.length) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(DateFormat('MMM').format(months[idx]),
+                          style: TextStyle(
+                              fontSize: 11, color: scheme.onSurfaceVariant)),
+                    );
+                  },
+                ),
+              ),
+            ),
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              getDrawingHorizontalLine: (_) => FlLine(
+                  color: Colors.grey.withValues(alpha: 0.12), strokeWidth: 1),
+            ),
+            borderData: FlBorderData(show: false),
+            barTouchData: BarTouchData(
+              touchTooltipData: BarTouchTooltipData(
+                getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                  final label = rodIndex == 0 ? 'In' : 'Out';
+                  return BarTooltipItem(
+                    '$label ${_inrCompact(rod.toY)}',
+                    const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return _ledgerlyPanel(
+      title: 'Cash Flow',
+      subtitle: 'Last 6 months',
+      icon: Icons.waterfall_chart_outlined,
+      color: const Color(0xFF0288D1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: [
+              _legendDot(inColor, 'Money in (receipts)'),
+              _legendDot(outColor, 'Money out (payments & expenses)'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          chart,
+        ],
+      ),
+    );
+  }
+
+  Widget _focusRow({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required String actionLabel,
+    required VoidCallback onAction,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface)),
+              const SizedBox(height: 2),
+              Text(subtitle,
+                  style:
+                      TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+        TextButton(onPressed: onAction, child: Text(actionLabel)),
+      ],
+    );
+  }
+
+  /// Next GSTR-3B due date from the calendar (20th; monthly filers).
+  /// Honestly calendar-based — quarterly filers follow a different schedule.
+  DateTime _nextGstr3bDue() {
+    final now = DateTime.now();
+    if (now.day <= 20) return DateTime(now.year, now.month, 20);
+    return DateTime(now.year, now.month + 1, 20);
+  }
+
+  Widget _buildFocusPanel() {
+    final overdueCount = _scopedOverdue.length;
+    final lowStockCount = _restockCount;
+    final due = _nextGstr3bDue();
+    return _ledgerlyPanel(
+      title: "Today's Focus",
+      subtitle: DateFormat('EEEE, MMM d').format(DateTime.now()),
+      icon: Icons.center_focus_strong_outlined,
+      color: const Color(0xFF7C3AED),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _focusRow(
+            icon: Icons.warning_amber_rounded,
+            color: const Color(0xFFC62828),
+            title: 'Overdue invoices',
+            subtitle: overdueCount == 0
+                ? 'All clear — nothing overdue'
+                : '$overdueCount invoices · ${_inrCompact(_scopedOverdueTotal)} to collect',
+            actionLabel: 'View & Remind',
+            onAction: () => widget.onNavigateTab(17),
+          ),
+          const Divider(height: 20),
+          _focusRow(
+            icon: Icons.inventory_2_outlined,
+            color: const Color(0xFFE65100),
+            title: 'Low stock',
+            subtitle: lowStockCount == 0
+                ? 'Stock levels healthy'
+                : '$lowStockCount items need restocking',
+            actionLabel: 'View Items',
+            onAction: () => widget.onNavigateTab(6),
+          ),
+          const Divider(height: 20),
+          _focusRow(
+            icon: Icons.receipt_long_outlined,
+            color: const Color(0xFF00897B),
+            title: 'GSTR-3B due ${DateFormat('d MMM yyyy').format(due)}',
+            subtitle: 'Calendar-based · monthly filer',
+            actionLabel: 'File Now',
+            onAction: () => widget.onNavigateTab(7),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Receivables buckets from the currency-scoped overdue rows.
+  /// Current = total outstanding (same engine, all invoices) minus the
+  /// overdue buckets — the not-yet-due residual.
+  ({double current, double d30, double d60, double dOver}) _ageingBuckets() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    var d30 = 0.0;
+    var d60 = 0.0;
+    var dOver = 0.0;
+    for (final r in _scopedOverdue) {
+      final due = r.dueDate;
+      final days = due == null
+          ? 0
+          : today.difference(DateTime(due.year, due.month, due.day)).inDays;
+      if (days <= 30) {
+        d30 += r.outstanding;
+      } else if (days <= 60) {
+        d60 += r.outstanding;
+      } else {
+        dOver += r.outstanding;
+      }
+    }
+    final residual = totalOutstanding - (d30 + d60 + dOver);
+    return (
+      current: residual > 0 ? residual : 0.0,
+      d30: d30,
+      d60: d60,
+      dOver: dOver,
+    );
+  }
+
+  Widget _buildAgeingPanel() {
+    final scheme = Theme.of(context).colorScheme;
+    final b = _ageingBuckets();
+    final total = b.current + b.d30 + b.d60 + b.dOver;
+    if (total.abs() < 0.005) {
+      return _ledgerlyPanel(
+        title: 'Receivables Ageing',
+        subtitle: 'By due date',
+        icon: Icons.hourglass_bottom_outlined,
+        color: const Color(0xFF5C6BC0),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Center(
+            child: Text('No outstanding receivables.',
+                style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+          ),
+        ),
+      );
+    }
+    final segments = <({String label, double value, Color color})>[
+      (label: 'Current', value: b.current, color: const Color(0xFF2E7D32)),
+      (label: '1–30 days', value: b.d30, color: const Color(0xFFF9A825)),
+      (label: '31–60 days', value: b.d60, color: const Color(0xFFE65100)),
+      (label: '60+ days', value: b.dOver, color: const Color(0xFFC62828)),
+    ];
+    return _ledgerlyPanel(
+      title: 'Receivables Ageing',
+      subtitle: 'Total ${_inrCompact(total)}',
+      icon: Icons.hourglass_bottom_outlined,
+      color: const Color(0xFF5C6BC0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              height: 14,
+              child: Row(
+                children: [
+                  for (final s in segments)
+                    if (s.value > 0.005)
+                      Expanded(
+                        flex: (s.value / total * 1000).round().clamp(1, 1000),
+                        child: Container(color: s.color),
+                      ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final s in segments)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                          color: s.color, shape: BoxShape.circle)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(s.label,
+                        style: TextStyle(
+                            fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ),
+                  Text(_inrCompact(s.value),
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface)),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                        '${(s.value / total * 100).toStringAsFixed(1)}%',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  ),
+                ],
+              ),
+            ),
+          if (_reminderOverdue.length >= 200)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Overdue list capped at 200 rows — Current absorbs the rest.',
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<Invoice> get _scopedPeriodInvoices =>
+      _periodInvoices.where((i) => i.currencyCode == _currencyCode).toList();
+
+  List<PurchaseBill> get _scopedPeriodBills =>
+      _periodBills.where((b) => b.currencyCode == _currencyCode).toList();
+
+  Widget _gstStatusRow({
+    required String title,
+    required String detail,
+    required String status,
+    required Color statusColor,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(title,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface)),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20)),
+              child: Text(status,
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: statusColor)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(detail,
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+      ],
+    );
+  }
+
+  /// Honest GST statuses from real period data only: current-month sales
+  /// invoices (count + taxable + output tax) and ITC-eligible purchase-bill
+  /// tax vs output tax with the gap amount. No computed-looking "matched %"
+  /// is shown unless it is exactly this ratio.
+  Widget _buildGstPanel() {
+    final now = DateTime.now();
+    final invoices = _scopedPeriodInvoices;
+    final taxable = invoices.fold(0.0, (s, i) => s + (i.total - i.tax));
+    final salesTax = invoices.fold(0.0, (s, i) => s + i.tax);
+    final bills = _scopedPeriodBills;
+    final itcTax =
+        bills.where((b) => b.itcEligible).fold(0.0, (s, b) => s + b.totalTax);
+    final matchPct = salesTax > 0.005 ? itcTax / salesTax * 100 : null;
+    final gap = salesTax - itcTax;
+
+    final String itcDetail;
+    final String itcStatus;
+    final Color itcColor;
+    if (bills.isEmpty && salesTax.abs() < 0.005) {
+      itcDetail = 'No purchase bills or sales tax this period';
+      itcStatus = 'No data';
+      itcColor = Colors.grey;
+    } else if (bills.isEmpty) {
+      itcDetail = 'No purchase bills — ITC ${_inrCompact(0)}';
+      itcStatus = 'No bills';
+      itcColor = const Color(0xFFE65100);
+    } else if (matchPct == null) {
+      itcDetail = 'ITC ${_inrCompact(itcTax)} · no output tax this period';
+      itcStatus = 'No output tax';
+      itcColor = Colors.grey;
+    } else {
+      itcDetail =
+          'ITC ${_inrCompact(itcTax)} vs output ${_inrCompact(salesTax)} · '
+          '${matchPct.toStringAsFixed(1)}% · gap ${_inrCompact(gap)}';
+      if (gap.abs() < 0.005) {
+        itcStatus = 'Fully matched';
+        itcColor = const Color(0xFF2E7D32);
+      } else {
+        itcStatus = 'Check gap';
+        itcColor = const Color(0xFFE65100);
+      }
+    }
+
+    return _ledgerlyPanel(
+      title: 'GST Health',
+      subtitle: DateFormat('MMMM yyyy').format(now),
+      icon: Icons.verified_outlined,
+      color: const Color(0xFF00897B),
+      trailing: TextButton(
+        onPressed: () => widget.onNavigateTab(7),
+        child: const Text('GST reports'),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _gstStatusRow(
+            title: 'GSTR-1 · sales',
+            detail: invoices.isEmpty
+                ? 'No sales invoices this period'
+                : '${invoices.length} invoices · taxable ${_inrCompact(taxable)} · '
+                    'tax ${_inrCompact(salesTax)}',
+            status: invoices.isEmpty ? 'Nothing to file' : 'Ready to file',
+            statusColor:
+                invoices.isEmpty ? Colors.grey : const Color(0xFF2E7D32),
+          ),
+          const SizedBox(height: 12),
+          _gstStatusRow(
+            title: 'ITC vs output tax',
+            detail: itcDetail,
+            status: itcStatus,
+            statusColor: itcColor,
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Product> get _saleableProducts => _allProducts
+      .where((p) => p.type == 'product' && !p.unlimitedStock)
+      .toList();
+
+  /// Per-item reorder level when set, else the Items screen's existing
+  /// low-stock convention (10 units).
+  double _lowThreshold(Product p) => p.reorderLevel > 0 ? p.reorderLevel : 10;
+
+  List<Product> get _outOfStockNow {
+    final list = _saleableProducts
+        .where((p) => p.stock.toDouble() <= 0)
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return list;
+  }
+
+  List<Product> get _lowStockNow {
+    final list = _saleableProducts
+        .where((p) =>
+            p.stock.toDouble() > 0 && p.stock.toDouble() <= _lowThreshold(p))
+        .toList()
+      ..sort((a, b) => a.stock.compareTo(b.stock));
+    return list;
+  }
+
+  int get _restockCount => _outOfStockNow.length + _lowStockNow.length;
+
+  double get _stockValue =>
+      _saleableProducts.fold(0.0, (s, p) => s + p.price * p.stock.toDouble());
+
+  /// Total stock value from the loaded product rows (price × stock).
+  /// A last-month delta is not computable from current rows, so it is
+  /// omitted rather than estimated.
+  Widget _buildInventoryPanel() {
+    final scheme = Theme.of(context).colorScheme;
+    final items = [..._outOfStockNow, ..._lowStockNow].take(5).toList();
+    return _ledgerlyPanel(
+      title: 'Inventory Pulse',
+      subtitle: '${_saleableProducts.length} stocked items',
+      icon: Icons.inventory_2_outlined,
+      color: const Color(0xFF2E7D32),
+      trailing: TextButton(
+        onPressed: () => widget.onNavigateTab(6),
+        child: const Text('View Items'),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(_inrCompact(_stockValue),
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: scheme.onSurface)),
+          Text('Total stock value',
+              style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 12),
+          if (items.isEmpty)
+            Text(
+                _saleableProducts.isEmpty
+                    ? 'No stocked items yet.'
+                    : 'Nothing needs restocking.',
+                style:
+                    TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant))
+          else
+            for (final p in items)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(p.name,
+                          style: TextStyle(
+                              fontSize: 12.5, color: scheme.onSurface),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    Text(
+                      p.stock.toDouble() <= 0
+                          ? 'Out of stock · reorder at ${_fmtQty(p.reorderLevel)}'
+                          : '${_fmtQty(p.stock)} left · reorder at ${_fmtQty(p.reorderLevel)}',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: p.stock.toDouble() <= 0
+                              ? const Color(0xFFC62828)
+                              : const Color(0xFFE65100)),
+                    ),
+                    const SizedBox(width: 4),
+                    Tooltip(
+                      message: 'Update stock',
+                      child: InkWell(
+                        onTap: () => _showUpdateStockDialog(p),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.all(5),
+                          child: Icon(Icons.add_box_outlined,
+                              size: 16, color: scheme.primary),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLedgerlyPanels() {
+    final cashFlow = _buildCashFlowPanel();
+    final focus = _buildFocusPanel();
+    final ageing = _buildAgeingPanel();
+    final gst = _buildGstPanel();
+    final inventory = _buildInventoryPanel();
+    return LayoutBuilder(
+      builder: (context, c) {
+        if (c.maxWidth < Breakpoints.compactMax) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              cashFlow,
+              const SizedBox(height: 16),
+              focus,
+              const SizedBox(height: 16),
+              ageing,
+              const SizedBox(height: 16),
+              gst,
+              const SizedBox(height: 16),
+              inventory,
+            ],
+          );
+        }
+        Widget pair(Widget left, Widget right) => IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: left),
+                  const SizedBox(width: 16),
+                  Expanded(child: right),
+                ],
+              ),
+            );
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            pair(cashFlow, focus),
+            const SizedBox(height: 16),
+            pair(ageing, gst),
+            const SizedBox(height: 16),
+            inventory,
+          ],
+        );
+      },
+    );
+  }
+
+  static const List<String> _businessQuotes = [
+    'Cash flow is the lifeblood of your business.',
+    'Know your numbers, and your numbers will grow.',
+    'Profit is a habit, not an event.',
+    'Small steps every day lead to big results.',
+    'Discipline in collections keeps growth funded.',
+    'What gets measured gets managed.',
+  ];
+
+  String _timeOfDayGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  String _ownerFirstName() {
+    final name = widget.user.username.trim();
+    if (name.isEmpty) return 'there';
+    return name.split(RegExp(r'\s+')).first;
+  }
+
+  /// Compact Indian money formatting, presentation only:
+  /// `₹ 8.42 L`, `₹ 1.24 Cr`, `₹ 62,400`, `₹ 850.50`.
+  String _inrCompact(double amount) {
+    final negative = amount < 0;
+    final v = amount.abs();
+    final String body;
+    if (v >= 10000000) {
+      body = '${(v / 10000000).toStringAsFixed(2)} Cr';
+    } else if (v >= 100000) {
+      body = '${(v / 100000).toStringAsFixed(2)} L';
+    } else if (v >= 1000) {
+      body = NumberFormat('#,##0').format(v);
+    } else {
+      body = v.toStringAsFixed(2);
+    }
+    return '${negative ? '-' : ''}$_currencySymbol $body';
+  }
+
+  static String _monthKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}';
+
+  /// Last six calendar month starts, oldest first (labels + zero-padding).
+  List<DateTime> _lastSixMonths() {
+    final now = DateTime.now();
+    return List.generate(6, (i) => DateTime(now.year, now.month - (5 - i), 1));
+  }
+
+  static String _fmtQty(num v) =>
+      v % 1 == 0 ? v.toInt().toString() : v.toStringAsFixed(1);
+
+  Map<String, double> get _receiptsByMonth => {
+        for (final row in _monthlyRevenue)
+          (row['month'] as String): (row['revenue'] as num).toDouble(),
+      };
+
+  /// Overdue rows in the selected currency (ReminderService exposes the
+  /// symbol, which is what the dashboard renders under).
+  List<OverdueInvoice> get _scopedOverdue => _reminderOverdue
+      .where((r) => r.currencySymbol == _currencySymbol)
+      .toList();
+
+  double get _scopedOverdueTotal =>
+      _scopedOverdue.fold(0.0, (sum, r) => sum + r.outstanding);
+
+  int get _scopedOverdueCustomerCount => _scopedOverdue
+      .map((r) => r.customerName.trim())
+      .where((n) => n.isNotEmpty)
+      .toSet()
+      .length;
+
+  void _openScanBill() {
+    Navigator.push(
+        context, MaterialPageRoute(builder: (_) => const ImportScreen()));
+  }
+
+  Widget _buildLedgerlyGreeting() {
+    final now = DateTime.now();
+    final dayIndex = now.difference(DateTime(now.year, 1, 1)).inDays;
+    final quote = _businessQuotes[dayIndex % _businessQuotes.length];
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${_timeOfDayGreeting()}, ${_ownerFirstName()}!',
+            style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+                letterSpacing: -0.3),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Here's what's happening with your business today.",
+            style: TextStyle(fontSize: 13.5, color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.format_quote_rounded, size: 15, color: scheme.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  quote,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontStyle: FontStyle.italic,
+                      color: scheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            DateFormat('EEEE, MMM d, yyyy').format(now),
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shared panel chrome for the Ledgerly overview cards.
+  Widget _ledgerlyPanel({
+    required String title,
+    String? subtitle,
+    required IconData icon,
+    required Color color,
+    Widget? trailing,
+    required Widget child,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(9)),
+                child: Icon(icon, color: color, size: 17),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface)),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 1),
+                      Text(subtitle,
+                          style: TextStyle(
+                              fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                    ],
+                  ],
+                ),
+              ),
+              if (trailing != null) trailing,
+            ],
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ],
+    );
+  }
+
+  Widget _quickActionButton(
+      ({IconData icon, String label, VoidCallback onTap, Color color}) action,
+      {required bool expanded}) {
+    final button = FilledButton.tonalIcon(
+      onPressed: action.onTap,
+      icon: Icon(action.icon, size: 18, color: action.color),
+      label: Text(action.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+        alignment: expanded ? Alignment.centerLeft : Alignment.center,
+      ),
+    );
+    return expanded ? SizedBox(width: double.infinity, child: button) : button;
+  }
+
+  /// Quick Actions row — wired to the same destinations the dashboard already
+  /// uses (tabs 1/4/8/11, ImportScreen for Scan Bill).
+  Widget _buildLedgerlyQuickActions() {
+    final actions =
+        <({IconData icon, String label, VoidCallback onTap, Color color})>[
+      (
+        icon: Icons.add_circle_outline_rounded,
+        label: 'Create Invoice',
+        onTap: () => widget.onCreateInvoice?.call(),
+        color: Theme.of(context).primaryColor,
+      ),
+      (
+        icon: Icons.payments_outlined,
+        label: 'Record Payment',
+        onTap: () => widget.onNavigateTab(4),
+        color: const Color(0xFF6A1B9A),
+      ),
+      (
+        icon: Icons.trending_down_outlined,
+        label: 'Add Expense',
+        onTap: () => widget.onNavigateTab(8),
+        color: const Color(0xFFE65100),
+      ),
+      (
+        icon: Icons.inventory_outlined,
+        label: 'Purchase Bill',
+        onTap: () => widget.onNavigateTab(11),
+        color: const Color(0xFF1565C0),
+      ),
+      (
+        icon: Icons.qr_code_scanner_rounded,
+        label: 'Scan Bill',
+        onTap: _openScanBill,
+        color: const Color(0xFF2E7D32),
+      ),
+    ];
+    return _ledgerlyPanel(
+      title: 'Quick Actions',
+      icon: Icons.bolt_outlined,
+      color: const Color(0xFF7C3AED),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          if (c.maxWidth < Breakpoints.compactMax) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < actions.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 8),
+                  _quickActionButton(actions[i], expanded: true),
+                ],
+              ],
+            );
+          }
+          return Row(
+            children: [
+              for (var i = 0; i < actions.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(
+                    child: _quickActionButton(actions[i], expanded: false)),
+              ],
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -3150,92 +4434,6 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               ),
             )),
       ],
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, Color color, IconData icon,
-      {String? subtitle, Color? subtitleColor}) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 19),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Title wraps naturally (up to 2 lines) instead of being
-                // squeezed beside the alert.
-                Text(
-                  title,
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
-                      height: 1.25),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface),
-                ),
-                // Alerts ("1 out of stock") get their own secondary line
-                // instead of competing with the title for width.
-                if (subtitle?.isNotEmpty ?? false) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.warning_amber_rounded,
-                          size: 11, color: subtitleColor ?? Colors.red),
-                      const SizedBox(width: 3),
-                      Flexible(
-                        child: Text(
-                          subtitle!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: subtitleColor ?? Colors.red,
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -4203,7 +5401,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           ),
           Expanded(
             flex: 2,
-            child: Text('$_currencySymbol ${_fmtAmt(inv.total)}',
+            child: Text('$_currencySymbol ${_fmtAmt(inv.payableTotal)}',
                 style:
                     const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                 textAlign: TextAlign.right,

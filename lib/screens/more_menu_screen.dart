@@ -7,6 +7,7 @@ import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
 import 'package:apexbooks/screens/import_screen.dart';
+import 'package:apexbooks/widgets/app/app.dart';
 
 /// Mobile "More" destination — grouped secondary navigation shown when the
 /// window is too narrow for the persistent sidebar (see mobile_plan.md).
@@ -178,18 +179,7 @@ class MoreMenuScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: theme.primaryColor,
-            ),
-          ),
-        ),
+        AppSectionHeader(title),
         Material(
           color: theme.cardColor,
           clipBehavior: Clip.antiAlias,
@@ -216,19 +206,7 @@ class MoreMenuScreen extends ConsumerWidget {
   }
 
   Widget _groupHeading(BuildContext context, String title) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-          color: theme.primaryColor,
-        ),
-      ),
-    );
+    return AppSectionHeader(title);
   }
 
   Widget _tile(BuildContext context, int tab, IconData icon, String label,

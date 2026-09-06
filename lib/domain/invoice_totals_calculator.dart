@@ -79,6 +79,19 @@ class InvoiceTotals {
 class InvoiceTotalsCalculator {
   const InvoiceTotalsCalculator._();
 
+  /// Round-off for an invoice total, rounded to paise. Returns 0 when
+  /// disabled. Positive means the customer pays slightly more than the
+  /// exact total (rounded up), negative the reverse.
+  static double roundOffAmount(double total, {required bool enabled}) {
+    if (!enabled) return 0.0;
+    final rounded = total.roundToDouble();
+    return ((rounded - total) * 100).roundToDouble() / 100;
+  }
+
+  /// Payable total: exact total plus round-off when enabled.
+  static double payableTotal(double total, {required bool enabled}) =>
+      total + roundOffAmount(total, enabled: enabled);
+
   /// Backs tax out of a tax-inclusive price. Returns [price] unchanged
   /// when the price is exclusive or tax rate is 0.
   static double netPrice({
@@ -182,11 +195,16 @@ class InvoiceTotalsCalculator {
     };
 
     final preDiscountTotal = subtotal + tax + additionalCostsTotal;
-    final invoiceDiscountAmount = invoiceDiscountValue <= 0
+    final normalizedDiscount = _normalizeInvoiceDiscount(
+      type: invoiceDiscountType,
+      value: invoiceDiscountValue,
+      preDiscountTotal: preDiscountTotal,
+    );
+    final invoiceDiscountAmount = normalizedDiscount <= 0
         ? 0.0
         : (invoiceDiscountType == InvoiceDiscountType.percent
-            ? preDiscountTotal * invoiceDiscountValue / 100
-            : invoiceDiscountValue);
+            ? preDiscountTotal * normalizedDiscount / 100
+            : normalizedDiscount);
 
     return InvoiceTotals(
       subtotal: subtotal,
@@ -196,5 +214,23 @@ class InvoiceTotalsCalculator {
       additionalCostsTotal: additionalCostsTotal,
       invoiceDiscountAmount: invoiceDiscountAmount,
     );
+  }
+
+  /// Stored discounts are untrusted: NaN/Infinity/negative normalize to 0,
+  /// percent clamps to 0..100, flat caps at [preDiscountTotal] so totals
+  /// can never go negative or NaN from a bad stored value.
+  static double _normalizeInvoiceDiscount({
+    required InvoiceDiscountType type,
+    required double value,
+    required double preDiscountTotal,
+  }) {
+    if (!value.isFinite || value <= 0) return 0.0;
+    final pre = (!preDiscountTotal.isFinite || preDiscountTotal < 0)
+        ? 0.0
+        : preDiscountTotal;
+    if (type == InvoiceDiscountType.percent) {
+      return value.clamp(0.0, 100.0).toDouble();
+    }
+    return value.clamp(0.0, pre).toDouble();
   }
 }

@@ -33,6 +33,13 @@ class OnboardingStepAppearance extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text(
+            'Choose how your printed bills look. You can change this later in Settings.',
+            style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
           DropdownButtonFormField<PageSize>(
             isExpanded: true,
             value: pageSize,

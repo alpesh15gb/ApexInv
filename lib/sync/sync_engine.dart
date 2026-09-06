@@ -376,6 +376,10 @@ class SyncEngine {
     payload['company_id'] = 'local';
     payload.remove('cloud_id'); // server rows are keyed by our pk here
 
+    // Forward-compat: strip keys unknown to this build's schema so a newer
+    // app's column cannot abort the whole pull txn (cursor included).
+    final stripped = await _stripUnknownPullColumns(txn, op.tableName, payload);
+
     final localUpdated = local.isEmpty
         ? null
         : DateTime.tryParse(local.first['updated_at'] as String? ?? '') ??
@@ -385,12 +389,36 @@ class SyncEngine {
     }
 
     if (local.isEmpty) {
-      await txn.insert(op.tableName, payload,
+      await txn.insert(op.tableName, stripped,
           conflictAlgorithm: ConflictAlgorithm.replace);
     } else {
-      await txn.update(op.tableName, payload,
+      await txn.update(op.tableName, stripped,
           where: 'id = ?', whereArgs: [op.rowPk]);
     }
+  }
+
+  /// Drops payload keys that are not columns of [table] (PRAGMA table_info
+  /// allowlist, same concept as the backup restore helper) + logs. Keeps a
+  /// newer app's unknown column from aborting the pull transaction.
+  Future<Map<String, dynamic>> _stripUnknownPullColumns(
+      DatabaseExecutor txn, String table, Map<String, dynamic> payload) async {
+    final cols = await txn.rawQuery('PRAGMA table_info($table)');
+    final known = {for (final c in cols) (c['name'] as String).toLowerCase()};
+    final stripped = <String, dynamic>{};
+    for (final e in payload.entries) {
+      if (known.contains(e.key.toLowerCase())) {
+        stripped[e.key] = e.value;
+      }
+    }
+    final dropped =
+        payload.keys.where((k) => !known.contains(k.toLowerCase())).toList();
+    if (dropped.isNotEmpty) {
+      AppLogger.w(_tag, 'Pull stripped unknown columns for $table: $dropped');
+    }
+    // 'id' is always a real column; if the table itself is unknown the
+    // payload degrades to just the key (insert still fails loudly, but a
+    // single unknown column can no longer starve the cursor).
+    return stripped;
   }
 
   // ── First link / baseline (dbplan §3.5) ──

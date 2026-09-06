@@ -57,6 +57,13 @@ class OnboardingStepCompany extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text(
+            'Your company name and logo appear on every bill you share.',
+            style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
           const LanguagePicker(),
           const SizedBox(height: 20),
           Text(l10n.commonTheme,

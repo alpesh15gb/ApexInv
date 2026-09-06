@@ -103,11 +103,16 @@ pw.MultiPage buildGridClassicTemplate(
   final hasPreviousBalance = previousBalanceDue > 0;
   final hasPaid = invoice.amountPaid > 0;
 
-  final rawNet = invoice.total + (hasPreviousBalance ? previousBalanceDue : 0);
-  final netTotal = roundNetTotal(rawNet);
-  final roundedNet = netTotal.rounded;
-  final roundOff = netTotal.roundOff;
-  final payableAmount = showRoundOff ? roundedNet : rawNet;
+  // Bottom-line is always the amount owed (payable + previous balance);
+  // rounding only when the invoice itself opts in (no phantom paise).
+  final pdfTotals =
+      pdfInvoiceTotals(invoice, previousBalanceDue: previousBalanceDue);
+  final roundedNet = pdfTotals.payableDue;
+  final roundOff = pdfTotals.roundOff;
+  final shouldRound =
+      shouldShowPdfRounding(invoice, showRoundOff) || invoice.roundOffEnabled;
+  // QR must encode the same bottom-line number.
+  final payableAmount = pdfTotals.payableDue;
 
   final totalQty = showTotalQuantity
       ? invoice.items.fold<double>(0, (s, i) => s + i.quantity)
@@ -380,11 +385,14 @@ pw.MultiPage buildGridClassicTemplate(
                     if (hasPreviousBalance) ...[
                       totalsRow('Previous Balance Due',
                           '$currencySymbol ${previousBalanceDue.toStringAsFixed(2)}'),
-                      totalsRow('Total Due',
-                          '$currencySymbol ${(invoice.total + previousBalanceDue).toStringAsFixed(2)}',
-                          bold: true),
+                      // When rounded, Net Amount below already equals the
+                      // amount owed; skip the duplicate Total Due row.
+                      if (!shouldRound)
+                        totalsRow('Total Due',
+                            '$currencySymbol ${pdfTotals.payableDue.toStringAsFixed(2)}',
+                            bold: true),
                     ],
-                    if (showRoundOff) ...[
+                    if (shouldRound) ...[
                       totalsRow('Round off',
                           '$currencySymbol ${roundOff.toStringAsFixed(2)}'),
                       pw.Divider(thickness: 0.5, color: borderColor, height: 5),
@@ -407,7 +415,7 @@ pw.MultiPage buildGridClassicTemplate(
           pw.SizedBox(height: 10 * fontScale),
 
           // ── Amount in words ──
-          if (showRoundOff)
+          if (shouldRound)
             pw.Text(
                 AmountInWords.amount(roundedNet,
                     indian: invoice.currencyCode == 'INR'),

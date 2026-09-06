@@ -104,7 +104,8 @@ class SqliteInvoiceRepository implements InvoiceRepository {
       InvoiceService.getTotalInvoiceCountIncludingTrashed();
   @override
   Future<({int count, double revenue, double outstanding})>
-      getDashboardFinancials() => InvoiceService.getDashboardFinancials();
+      getDashboardFinancials({String? currencyCode}) =>
+          InvoiceService.getDashboardFinancials(currencyCode: currencyCode);
   @override
   Future<List<Invoice>> getRecentInvoices({int limit = 5}) =>
       InvoiceService.getRecentInvoices(limit: limit);
@@ -122,11 +123,12 @@ class SqliteInvoiceRepository implements InvoiceRepository {
           {String? filterType}) =>
       InvoiceService.getCustomersWithInvoices(filterType: filterType);
   @override
-  Future<List<Map<String, dynamic>>> getMonthlyRevenue() =>
-      InvoiceService.getMonthlyRevenue();
+  Future<List<Map<String, dynamic>>> getMonthlyRevenue(
+          {String? currencyCode}) =>
+      InvoiceService.getMonthlyRevenue(currencyCode: currencyCode);
   @override
-  Future<List<Map<String, dynamic>>> getTopCustomers() =>
-      InvoiceService.getTopCustomers();
+  Future<List<Map<String, dynamic>>> getTopCustomers({String? currencyCode}) =>
+      InvoiceService.getTopCustomers(currencyCode: currencyCode);
   @override
   Future<List<Map<String, dynamic>>> getTopProducts() =>
       InvoiceService.getTopProducts();

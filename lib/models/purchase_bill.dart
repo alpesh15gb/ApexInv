@@ -53,7 +53,26 @@ class PurchaseBillItem {
     required bool interState,
     bool priceIncludesTax = false,
   }) {
+    if (!quantity.isFinite ||
+        !rate.isFinite ||
+        !taxRate.isFinite ||
+        !discount.isFinite) {
+      throw ArgumentError(
+          'Quantity, rate, tax and discount must be finite numbers');
+    }
+    if (quantity <= 0) {
+      throw ArgumentError('Quantity must be greater than zero');
+    }
+    if (rate < 0) throw ArgumentError('Rate cannot be negative');
+    if (taxRate < 0) throw ArgumentError('Tax cannot be negative');
+    if (discount < 0) throw ArgumentError('Discount cannot be negative');
     final gross = quantity * rate;
+    if (!gross.isFinite) {
+      throw ArgumentError('Quantity × rate is not a finite amount');
+    }
+    if (discount > gross) {
+      throw ArgumentError('Discount cannot exceed quantity × rate');
+    }
     final divisor =
         (priceIncludesTax && taxRate > 0) ? (1 + taxRate / 100) : 1.0;
     final taxable = ((gross - discount) / divisor).clamp(0.0, double.infinity);
@@ -226,8 +245,16 @@ class PurchaseBill {
   double get igstTotal => items.fold(0, (s, i) => s + i.igst);
   double get cgstTotal => items.fold(0, (s, i) => s + i.cgst);
   double get sgstTotal => items.fold(0, (s, i) => s + i.sgst);
+
+  /// What the supplier is actually owed. Under reverse charge the tax goes to
+  /// the government, not the supplier, so only the net (total − tax) is
+  /// payable — mirroring LedgerService's RC payable. Ineligible bills expense
+  /// the full total, so they owe the full total like normal bills.
+  double get payableTotal =>
+      (reverseCharge && itcEligible) ? (totalAmount - totalTax) : totalAmount;
+
   double get outstanding =>
-      (totalAmount - amountPaid).clamp(0.0, double.infinity);
+      (payableTotal - amountPaid).clamp(0.0, double.infinity);
 
   PurchaseBill copyWith({double? amountPaid, List<PurchaseBillItem>? items}) {
     return PurchaseBill(

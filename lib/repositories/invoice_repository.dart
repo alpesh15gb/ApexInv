@@ -58,7 +58,7 @@ abstract class InvoiceRepository {
   /// again at actual save time.
   Future<String> peekNextInvoiceNumber(String type);
   Future<({int count, double revenue, double outstanding})>
-      getDashboardFinancials();
+      getDashboardFinancials({String? currencyCode});
   Future<List<Invoice>> getRecentInvoices({int limit = 5});
   Future<List<Invoice>> getDueSoonInvoices();
   Future<List<Invoice>> getOverdueInvoices({int limit = 10});
@@ -75,7 +75,7 @@ abstract class InvoiceRepository {
   /// just won't match a real Customer record.
   Future<List<({String id, String name})>> getCustomersWithInvoices(
       {String? filterType});
-  Future<List<Map<String, dynamic>>> getMonthlyRevenue();
-  Future<List<Map<String, dynamic>>> getTopCustomers();
+  Future<List<Map<String, dynamic>>> getMonthlyRevenue({String? currencyCode});
+  Future<List<Map<String, dynamic>>> getTopCustomers({String? currencyCode});
   Future<List<Map<String, dynamic>>> getTopProducts();
 }

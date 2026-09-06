@@ -44,8 +44,14 @@ class _PosScreenState extends State<PosScreen> {
   // Cart-level GST interpretation: true → typed prices include GST.
   // Applies to every cart line, existing and subsequently added.
   bool _pricesIncludeTax = false;
+  // Cart-level round-off: true → the payable total rounds to the nearest
+  // rupee (recorded on the posted invoice).
+  bool _roundOff = false;
   bool _loading = true;
   bool _saving = false;
+  // E3a: synchronously-checked flag so a double-tap on Checkout cannot
+  // stack two payment dialogs (set before the first await/dialog open).
+  bool _checkoutDialogOpen = false;
   DateTime? _stockLoadedAt;
 
   Customer get _walkIn => Customer(
@@ -79,6 +85,7 @@ class _PosScreenState extends State<PosScreen> {
       SaleOrderService.getReservedQuantities(),
       SettingsService.getCurrency(),
       SettingsService.getDefaultPriceIncludesTax(),
+      SettingsService.getDefaultRoundOff(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -90,6 +97,7 @@ class _PosScreenState extends State<PosScreen> {
       _currencyCode = currency.code as String;
       _currencySymbol = currency.symbol as String;
       _pricesIncludeTax = results[5] as bool;
+      _roundOff = results[6] as bool;
       _customer ??= _walkIn;
       _loading = false;
       _stockLoadedAt = DateTime.now();
@@ -216,7 +224,9 @@ class _PosScreenState extends State<PosScreen> {
           height: 360,
           child: _heldCarts.isEmpty
               ? const AppEmptyState(
-                  icon: Icons.pause_circle_outline, title: 'No held carts')
+                  icon: Icons.pause_circle_outline,
+                  title: 'No held carts',
+                  subtitle: 'Use Hold to park the current sale.')
               : ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: _heldCarts.length,
@@ -354,320 +364,410 @@ class _PosScreenState extends State<PosScreen> {
         date: DateTime.now(),
         type: 'Invoice',
         taxMode: TaxMode.perItem,
+        roundOffEnabled: _roundOff,
       );
 
   double get _subtotal => _previewInvoice.subtotal;
   double get _tax => _previewInvoice.tax;
-  double get _total => _previewInvoice.total;
+  double get _roundOffAmount => _previewInvoice.roundOffAmount;
+  double get _total => _previewInvoice.payableTotal;
   int get _itemCount =>
       _cart.values.fold(0, (count, item) => count + item.quantity.round());
 
   Future<void> _checkout() async {
-    if (_cart.isEmpty || _saving) return;
-    // Trial/licence gate: new sales only.
-    if (!await LicenseGate.canCreate(context)) return;
-    if (_accounts.isEmpty) {
-      _error('Create a cash or bank account first.');
-      return;
-    }
-    final tenders = <_TenderDraft>[_TenderDraft('Cash', _total, _accounts)];
-    String? tenderError;
-    final notes = TextEditingController();
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => StatefulBuilder(
-            builder: (ctx, setDialogState) => AlertDialog(
-                  title: const Text('Complete sale'),
-                  content: SizedBox(
-                      width: 680,
-                      height: 480,
-                      child: Column(children: [
-                        Row(children: [
-                          const Text('Review payment',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          const Spacer(),
-                          Text('$_currencySymbol ${_total.toStringAsFixed(2)}',
-                              style: Theme.of(context).textTheme.titleLarge),
-                        ]),
-                        Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text('Sale total',
-                                style: Theme.of(context).textTheme.bodySmall)),
-                        const SizedBox(height: 8),
-                        Expanded(
-                            child: ListView.builder(
-                                itemCount: tenders.length,
-                                itemBuilder: (context, index) {
-                                  final tender = tenders[index];
-                                  final accountChoices = _accounts
-                                      .where((a) => tender.method == 'Cash'
-                                          ? a.type == 'cash'
-                                          : a.type == 'bank')
-                                      .toList();
-                                  if (accountChoices.isNotEmpty &&
-                                      !accountChoices.any(
-                                          (a) => a.id == tender.accountId)) {
-                                    tender.accountId = accountChoices.first.id;
-                                  }
-                                  return Card(
-                                      child: Padding(
-                                          padding: const EdgeInsets.all(10),
-                                          child: Column(children: [
-                                            Row(children: [
-                                              Expanded(
-                                                  child: DropdownButtonFormField<
-                                                          String>(
-                                                      value: tender.method,
-                                                      decoration:
-                                                          const InputDecoration(
-                                                              labelText:
-                                                                  'Method',
-                                                              isDense: true),
-                                                      items: const [
-                                                        'Cash',
-                                                        'Bank Transfer',
-                                                        'Online',
-                                                        'Check'
-                                                      ]
-                                                          .map((m) =>
-                                                              DropdownMenuItem(
-                                                                  value: m,
-                                                                  child:
-                                                                      Text(m)))
-                                                          .toList(),
-                                                      onChanged: (v) =>
-                                                          setDialogState(() =>
-                                                              tender.method =
-                                                                  v!))),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                  child: TextField(
-                                                      controller: tender.amount,
-                                                      onChanged: (_) =>
-                                                          setDialogState(() {}),
-                                                      keyboardType:
-                                                          const TextInputType
-                                                              .numberWithOptions(
-                                                              decimal: true),
-                                                      decoration:
-                                                          const InputDecoration(
-                                                              labelText:
-                                                                  'Amount',
-                                                              isDense: true))),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                  child: DropdownButtonFormField<
-                                                          String>(
-                                                      value: tender.accountId,
-                                                      decoration:
-                                                          const InputDecoration(
-                                                              labelText:
-                                                                  'Account',
-                                                              isDense: true),
-                                                      items: accountChoices
-                                                          .map((a) =>
-                                                              DropdownMenuItem(
-                                                                  value: a.id,
-                                                                  child: Text(
-                                                                      a.name)))
-                                                          .toList(),
-                                                      onChanged: (v) => tender
-                                                          .accountId = v)),
-                                              IconButton(
-                                                  onPressed: tenders.length == 1
-                                                      ? null
-                                                      : () =>
-                                                          setDialogState(() {
-                                                            tenders
-                                                                .removeAt(index)
-                                                                .dispose();
-                                                          }),
-                                                  icon: const Icon(
-                                                      Icons.delete_outline)),
-                                            ]),
-                                            if (tender.method == 'Check')
+    // E3a: synchronous pending flag BEFORE any await/dialog so a second tap
+    // while the licence check is in flight cannot open a second dialog.
+    if (_cart.isEmpty || _saving || _checkoutDialogOpen) return;
+    _checkoutDialogOpen = true;
+    try {
+      // Trial/licence gate: new sales only.
+      if (!await LicenseGate.canCreate(context)) return;
+      if (_accounts.isEmpty) {
+        _error('Create a cash or bank account first.');
+        return;
+      }
+      final tenders = <_TenderDraft>[_TenderDraft('Cash', _total, _accounts)];
+      String? tenderError;
+      // E3a: in-dialog guard — disables Finalize after the first tap so a
+      // double-tap cannot pop twice / double-finalize.
+      bool finalizing = false;
+      final notes = TextEditingController();
+      final ok = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => StatefulBuilder(
+              builder: (ctx, setDialogState) => AlertDialog(
+                    title: const Text('2 · Payment — Complete sale'),
+                    content: SizedBox(
+                        width: 680,
+                        height: 480,
+                        child: Column(children: [
+                          Row(children: [
+                            const Text(
+                                'Review payment — method, account, amount',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            const Spacer(),
+                            Text(
+                                '$_currencySymbol ${_total.toStringAsFixed(2)}',
+                                style: Theme.of(context).textTheme.titleLarge),
+                          ]),
+                          Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('Sale total',
+                                  style:
+                                      Theme.of(context).textTheme.bodySmall)),
+                          const Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                  'One row per payment — set method, account and amount for each.',
+                                  style: TextStyle(fontSize: 12))),
+                          const SizedBox(height: 8),
+                          Expanded(
+                              child: ListView.builder(
+                                  itemCount: tenders.length,
+                                  itemBuilder: (context, index) {
+                                    final tender = tenders[index];
+                                    final accountChoices = _accounts
+                                        .where((a) => tender.method == 'Cash'
+                                            ? a.type == 'cash'
+                                            : a.type == 'bank')
+                                        .toList();
+                                    if (accountChoices.isNotEmpty &&
+                                        !accountChoices.any(
+                                            (a) => a.id == tender.accountId)) {
+                                      tender.accountId =
+                                          accountChoices.first.id;
+                                    }
+                                    return Card(
+                                        child: Padding(
+                                            padding: const EdgeInsets.all(10),
+                                            child: Column(children: [
                                               Row(children: [
                                                 Expanded(
-                                                    child: TextField(
-                                                        controller:
-                                                            tender.chequeNumber,
+                                                    child: DropdownButtonFormField<
+                                                            String>(
+                                                        value: tender.method,
                                                         decoration:
                                                             const InputDecoration(
                                                                 labelText:
-                                                                    'Cheque number'))),
+                                                                    'Method',
+                                                                isDense: true),
+                                                        items: const [
+                                                          'Cash',
+                                                          'Bank Transfer',
+                                                          'Online',
+                                                          'Check'
+                                                        ]
+                                                            .map((m) =>
+                                                                DropdownMenuItem(
+                                                                    value: m,
+                                                                    child: Text(
+                                                                        m)))
+                                                            .toList(),
+                                                        onChanged: (v) =>
+                                                            setDialogState(() =>
+                                                                tender.method =
+                                                                    v!))),
                                                 const SizedBox(width: 8),
                                                 Expanded(
-                                                    child: ListTile(
-                                                        contentPadding:
-                                                            EdgeInsets.zero,
-                                                        title: const Text(
-                                                            'Cheque date'),
-                                                        subtitle: Text(tender
-                                                            .chequeDate
-                                                            .toLocal()
-                                                            .toString()
-                                                            .split(' ')
-                                                            .first),
-                                                        onTap: () async {
-                                                          final picked = await showDatePicker(
-                                                              context: ctx,
-                                                              initialDate: tender
-                                                                  .chequeDate,
-                                                              firstDate:
-                                                                  DateTime(
-                                                                      2000),
-                                                              lastDate: DateTime
-                                                                      .now()
-                                                                  .add(const Duration(
-                                                                      days:
-                                                                          730)));
-                                                          if (picked != null)
-                                                            setDialogState(() =>
-                                                                tender.chequeDate =
-                                                                    picked);
-                                                        })),
+                                                    child: TextField(
+                                                        controller:
+                                                            tender.amount,
+                                                        onChanged: (_) =>
+                                                            setDialogState(
+                                                                () {}),
+                                                        keyboardType:
+                                                            const TextInputType
+                                                                .numberWithOptions(
+                                                                decimal: true),
+                                                        decoration:
+                                                            const InputDecoration(
+                                                                labelText:
+                                                                    'Amount',
+                                                                isDense:
+                                                                    true))),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                    child: DropdownButtonFormField<
+                                                            String>(
+                                                        value: tender.accountId,
+                                                        decoration:
+                                                            const InputDecoration(
+                                                                labelText:
+                                                                    'Account',
+                                                                isDense: true),
+                                                        items: accountChoices
+                                                            .map((a) =>
+                                                                DropdownMenuItem(
+                                                                    value: a.id,
+                                                                    child: Text(a
+                                                                        .name)))
+                                                            .toList(),
+                                                        onChanged: (v) => tender
+                                                            .accountId = v)),
+                                                IconButton(
+                                                    onPressed: tenders.length ==
+                                                            1
+                                                        ? null
+                                                        : () =>
+                                                            setDialogState(() {
+                                                              tenders
+                                                                  .removeAt(
+                                                                      index)
+                                                                  .dispose();
+                                                            }),
+                                                    icon: const Icon(
+                                                        Icons.delete_outline)),
                                               ]),
-                                          ])));
-                                })),
-                        Row(children: [
-                          TextButton.icon(
-                              onPressed: () => setDialogState(() => tenders.add(
-                                  _TenderDraft('Bank Transfer', 0, _accounts))),
-                              icon: const Icon(Icons.add),
-                              label: const Text('Split tender')),
-                          const Spacer(),
-                          Text(
-                              'Tendered $_currencySymbol ${tenders.fold(0.0, (s, t) => s + (double.tryParse(t.amount.text) ?? 0)).toStringAsFixed(2)}'),
-                        ]),
-                        Builder(builder: (context) {
-                          final paid = tenders.fold<double>(
-                              0,
-                              (sum, tender) =>
-                                  sum +
-                                  (double.tryParse(tender.amount.text) ?? 0));
-                          final balance = _total - paid;
-                          final walkIn = _customer?.id == 'walk-in';
-                          final valid = paid > 0 &&
-                              balance >= -0.005 &&
-                              (!walkIn || balance <= 0.005) &&
-                              tenders
-                                  .every((tender) => tender.accountId != null);
-                          return Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(10),
-                            color: valid
-                                ? Colors.green.withValues(alpha: .08)
-                                : Colors.orange.withValues(alpha: .10),
-                            child: Row(children: [
-                              Icon(
-                                  valid
-                                      ? Icons.check_circle_outline
-                                      : Icons.info_outline,
-                                  color: valid ? Colors.green : Colors.orange),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                  child: Text(valid
-                                      ? balance > 0.005
-                                          ? 'Part payment. The remaining balance will stay on the account.'
-                                          : 'Payment covers the sale. Ready to post.'
-                                      : balance > 0.005
-                                          ? walkIn
-                                              ? 'Walk-in sales must be paid in full.'
-                                              : 'Remaining balance: $_currencySymbol ${balance.toStringAsFixed(2)}'
-                                          : 'Check tender amounts and account selection.')),
-                            ]),
-                          );
-                        }),
-                        if (tenderError != null)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(tenderError!,
-                                style: TextStyle(
-                                    color: Theme.of(ctx).colorScheme.error,
-                                    fontSize: 12)),
-                          ),
-                        TextField(
-                            controller: notes,
-                            decoration: const InputDecoration(
-                                labelText: 'Receipt notes')),
-                        if (_customer?.id == 'walk-in')
-                          const Padding(
-                              padding: EdgeInsets.only(top: 8),
-                              child: Text('Walk-in sales must be fully paid.',
-                                  style: TextStyle(color: Colors.orange))),
-                      ])),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel')),
-                    FilledButton(
-                        onPressed: () {
-                          final paid = tenders.fold<double>(
-                              0,
-                              (sum, tender) =>
-                                  sum +
-                                  (double.tryParse(tender.amount.text) ?? 0));
-                          final error = paid <= 0
-                              ? 'Enter a tender amount.'
-                              : paid > _total + 0.005
-                                  ? 'Tendered amount cannot exceed the sale total.'
-                                  : (_customer?.id == 'walk-in' &&
-                                          paid < _total - 0.005)
-                                      ? 'Walk-in sales must be fully paid.'
-                                      : tenders.any((tender) =>
-                                              tender.accountId == null)
-                                          ? 'Select an account for every tender.'
-                                          : null;
-                          if (error != null) {
-                            setDialogState(() => tenderError = error);
-                            return;
-                          }
-                          Navigator.pop(ctx, true);
-                        },
-                        child: const Text('Finalize & post')),
-                  ],
-                )));
-    if (ok != true) {
-      for (final t in tenders) {
-        t.dispose();
+                                              if (tender.method == 'Check')
+                                                Row(children: [
+                                                  Expanded(
+                                                      child: TextField(
+                                                          controller: tender
+                                                              .chequeNumber,
+                                                          decoration:
+                                                              const InputDecoration(
+                                                                  labelText:
+                                                                      'Cheque number'))),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: ListTile(
+                                                          contentPadding:
+                                                              EdgeInsets.zero,
+                                                          title: const Text(
+                                                              'Cheque date'),
+                                                          subtitle: Text(tender
+                                                              .chequeDate
+                                                              .toLocal()
+                                                              .toString()
+                                                              .split(' ')
+                                                              .first),
+                                                          onTap: () async {
+                                                            final picked = await showDatePicker(
+                                                                context: ctx,
+                                                                initialDate: tender
+                                                                    .chequeDate,
+                                                                firstDate:
+                                                                    DateTime(
+                                                                        2000),
+                                                                lastDate: DateTime
+                                                                        .now()
+                                                                    .add(const Duration(
+                                                                        days:
+                                                                            730)));
+                                                            if (picked != null)
+                                                              setDialogState(() =>
+                                                                  tender.chequeDate =
+                                                                      picked);
+                                                          })),
+                                                ]),
+                                            ])));
+                                  })),
+                          Row(children: [
+                            TextButton.icon(
+                                onPressed: () => setDialogState(() =>
+                                    tenders.add(_TenderDraft(
+                                        'Bank Transfer', 0, _accounts))),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Split tender')),
+                            const Spacer(),
+                            Text(
+                                'Tendered $_currencySymbol ${tenders.fold(0.0, (s, t) => s + (double.tryParse(t.amount.text) ?? 0)).toStringAsFixed(2)}'),
+                          ]),
+                          Builder(builder: (context) {
+                            final paid = tenders.fold<double>(
+                                0,
+                                (sum, tender) =>
+                                    sum +
+                                    (double.tryParse(tender.amount.text) ?? 0));
+                            final balance = _total - paid;
+                            final walkIn = _customer?.id == 'walk-in';
+                            final valid = paid.isFinite &&
+                                paid > 0 &&
+                                balance.isFinite &&
+                                balance >= -0.005 &&
+                                (!walkIn || balance <= 0.005) &&
+                                tenders.every(
+                                    (tender) => tender.accountId != null);
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              color: valid
+                                  ? Colors.green.withValues(alpha: .08)
+                                  : Colors.orange.withValues(alpha: .10),
+                              child: Row(children: [
+                                Icon(
+                                    valid
+                                        ? Icons.check_circle_outline
+                                        : Icons.info_outline,
+                                    color:
+                                        valid ? Colors.green : Colors.orange),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                    child: Text(valid
+                                        ? balance > 0.005
+                                            ? 'Part payment. The remaining balance will stay on the account.'
+                                            : 'Payment covers the sale. Ready to post.'
+                                        : balance > 0.005
+                                            ? walkIn
+                                                ? 'Walk-in sales must be paid in full.'
+                                                : 'Remaining balance: $_currencySymbol ${balance.toStringAsFixed(2)}'
+                                            : 'Check tender amounts and account selection.')),
+                              ]),
+                            );
+                          }),
+                          if (tenderError != null)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(tenderError!,
+                                  style: TextStyle(
+                                      color: Theme.of(ctx).colorScheme.error,
+                                      fontSize: 12)),
+                            ),
+                          TextField(
+                              controller: notes,
+                              decoration: const InputDecoration(
+                                  labelText: 'Receipt notes')),
+                          if (_customer?.id == 'walk-in')
+                            const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Text('Walk-in sales must be fully paid.',
+                                    style: TextStyle(color: Colors.orange))),
+                        ])),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel')),
+                      FilledButton(
+                          onPressed: finalizing
+                              ? null
+                              : () {
+                                  // Synchronous guard before any validation.
+                                  finalizing = true;
+                                  setDialogState(() {});
+                                  final amounts = tenders
+                                      .map((t) =>
+                                          double.tryParse(t.amount.text.trim()))
+                                      .toList();
+                                  if (amounts
+                                      .any((a) => a == null || !a.isFinite)) {
+                                    finalizing = false;
+                                    setDialogState(() => tenderError =
+                                        'Tender amounts must be valid finite numbers.');
+                                    return;
+                                  }
+                                  final paid = amounts.fold<double>(
+                                      0, (sum, a) => sum + (a ?? 0));
+                                  final error = paid <= 0
+                                      ? 'Enter a tender amount.'
+                                      : paid > _total + 0.005
+                                          ? 'Tendered amount cannot exceed the sale total.'
+                                          : (_customer?.id == 'walk-in' &&
+                                                  paid < _total - 0.005)
+                                              ? 'Walk-in sales must be fully paid.'
+                                              : tenders.any((tender) =>
+                                                      tender.accountId == null)
+                                                  ? 'Select an account for every tender.'
+                                                  : null;
+                                  if (error != null) {
+                                    finalizing = false;
+                                    setDialogState(() => tenderError = error);
+                                    return;
+                                  }
+                                  Navigator.pop(ctx, true);
+                                },
+                          child: const Text('Finalize & post')),
+                    ],
+                  )));
+      if (ok != true) {
+        for (final t in tenders) {
+          t.dispose();
+        }
+        notes.dispose();
+        return;
       }
-      notes.dispose();
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      final invoice = await PosService.finalize(
-          customer: _customer ?? _walkIn,
-          items: _cart.values.toList(),
-          tenders: tenders
-              .map((t) => PosTender(
-                  method: t.method,
-                  amount: double.tryParse(t.amount.text.trim()) ?? 0,
-                  accountId: t.accountId,
-                  chequeNumber:
-                      t.method == 'Check' ? t.chequeNumber.text.trim() : null,
-                  chequeDate: t.method == 'Check' ? t.chequeDate : null))
-              .toList(),
-          currencyCode: _currencyCode,
-          currencySymbol: _currencySymbol,
-          notes: notes.text.trim());
-      if (!mounted) return;
-      setState(() {
-        _cart.clear();
-        _customer = _walkIn;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Sale ${invoice.invoiceNumber} posted successfully.'),
-          backgroundColor: Colors.green));
-      await _load();
-    } catch (e) {
-      _error(e);
+      setState(() => _saving = true);
+      try {
+        final invoice = await PosService.finalize(
+            customer: _customer ?? _walkIn,
+            items: _cart.values.toList(),
+            tenders: tenders
+                .map((t) => PosTender(
+                    method: t.method,
+                    amount: double.tryParse(t.amount.text.trim()) ?? 0,
+                    accountId: t.accountId,
+                    chequeNumber:
+                        t.method == 'Check' ? t.chequeNumber.text.trim() : null,
+                    chequeDate: t.method == 'Check' ? t.chequeDate : null))
+                .toList(),
+            currencyCode: _currencyCode,
+            currencySymbol: _currencySymbol,
+            notes: notes.text.trim(),
+            roundOffEnabled: _roundOff);
+        if (!mounted) return;
+        final receiptLines = tenders.map((t) {
+          String accountName = 'Account';
+          for (final a in _accounts) {
+            if (a.id == t.accountId) {
+              accountName = a.name;
+              break;
+            }
+          }
+          final amountText =
+              (double.tryParse(t.amount.text.trim()) ?? 0).toStringAsFixed(2);
+          return '${t.method} via $accountName — $_currencySymbol $amountText';
+        }).toList();
+        final postedNumber = invoice.invoiceNumber ?? invoice.id;
+        final postedTotal = invoice.payableTotal;
+        setState(() {
+          _cart.clear();
+          _customer = _walkIn;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Sale $postedNumber posted successfully.'),
+            backgroundColor: Colors.green));
+        await _load();
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('3 · Done — Sale posted'),
+            content: SizedBox(
+              width: 440,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Receipt $postedNumber • $_currencySymbol ${postedTotal.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final line in receiptLines) Text('• $line'),
+                  const SizedBox(height: 8),
+                  const Text('Choose what to do next.'),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('New Sale'),
+              ),
+            ],
+          ),
+        );
+      } catch (e) {
+        _error(e);
+      } finally {
+        for (final t in tenders) {
+          t.dispose();
+        }
+        notes.dispose();
+        if (mounted) setState(() => _saving = false);
+      }
     } finally {
-      for (final t in tenders) {
-        t.dispose();
-      }
-      notes.dispose();
-      if (mounted) setState(() => _saving = false);
+      _checkoutDialogOpen = false;
     }
   }
 
@@ -764,7 +864,9 @@ class _PosScreenState extends State<PosScreen> {
             child: _filtered.isEmpty
                 ? const AppEmptyState(
                     icon: Icons.inventory_2_outlined,
-                    title: 'No products found')
+                    title: 'No products found',
+                    subtitle:
+                        'Try a different name or barcode. New products can be added from Products.')
                 : RefreshIndicator(
                     onRefresh: _load,
                     child: ListView(
@@ -859,7 +961,7 @@ class _PosScreenState extends State<PosScreen> {
         Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(children: [
-              Text('Current sale',
+              Text('1 · Cart — Current sale',
                   style: Theme.of(context).textTheme.titleMedium),
               const Spacer(),
               OutlinedButton.icon(
@@ -921,7 +1023,8 @@ class _PosScreenState extends State<PosScreen> {
             child: _cart.isEmpty
                 ? const AppEmptyState(
                     icon: Icons.shopping_cart_outlined,
-                    title: 'Tap a product to add it')
+                    title: 'Cart is empty',
+                    subtitle: 'Tap a product to add it to the sale.')
                 : ListView.separated(
                     itemCount: _cart.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
@@ -965,8 +1068,20 @@ class _PosScreenState extends State<PosScreen> {
                     _setPricesIncludeTax(selection.first),
               ),
               const SizedBox(height: 8),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment<bool>(value: false, label: Text('Exact')),
+                  ButtonSegment<bool>(value: true, label: Text('Rounded')),
+                ],
+                selected: {_roundOff},
+                onSelectionChanged: (selection) =>
+                    setState(() => _roundOff = selection.first),
+              ),
+              const SizedBox(height: 8),
               _summary('Subtotal', _subtotal),
               _summary('Tax', _tax),
+              if (_roundOffAmount.abs() >= 0.005)
+                _summary('Round Off', _roundOffAmount),
               const Divider(),
               _summary('Total', _total, bold: true),
               const SizedBox(height: 12),

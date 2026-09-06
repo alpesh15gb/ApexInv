@@ -61,10 +61,7 @@ flutter:
   generate: true
   assets:
    - assets/images/logo.png
-   - assets/images/logo_dark.png
-   - assets/images/logo.svg
-   - assets/images/logo_v.png
-   - assets/images/logo_v_dark.png
+   - assets/images/logo_b.svg
    - assets/fonts/
   fonts:
     - family: NotoSansDevanagari
@@ -81,7 +78,7 @@ flutter:
 flutter_launcher_icons:
   macos:
     generate: true
-    image_path: "assets/images/logo_v.png"
+    image_path: "assets/images/logo.png"
 
 package_rename_config:
   linux:

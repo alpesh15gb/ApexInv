@@ -191,8 +191,13 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.amber[50],
-                            border: Border.all(color: Colors.amber[300]!),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
@@ -277,8 +282,13 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.red[50],
-                              border: Border.all(color: Colors.red[200]!),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
+                              border: Border.all(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outlineVariant),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
@@ -304,6 +314,18 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                           expanded: true,
                           loading: _isLoading,
                         ),
+                        if (!widget.forced) ...[
+                          AppSpacing.hMedium,
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.arrow_back_rounded,
+                                  size: 18),
+                              label: const Text('Back to Login'),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

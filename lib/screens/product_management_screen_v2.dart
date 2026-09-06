@@ -16,6 +16,7 @@ import 'package:csv/csv.dart';
 
 import 'package:intl/intl.dart';
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/product.dart';
 import 'package:apexbooks/models/user.dart';
@@ -100,6 +101,12 @@ class _ProductManagementScreenV2State
   bool _showAddPanelV2 = false;
   bool _addAnotherAfterSavingV2 = false;
   bool _showStatsCardsV2 = true;
+
+  // ── Shared reference table state (presentation-only, in-memory) ──
+  // Row checkboxes + sortable headers + stock pills mirror the invoice
+  // reference design. Selection never touches queries/stock/CRUD — it only
+  // highlights already-loaded rows and drives the selected-count label.
+  final Set<String> _selectedIdsV2 = {};
 
   static const _csvMaxRows = 500;
   static const _csvHeaders = [
@@ -1587,6 +1594,8 @@ class _ProductManagementScreenV2State
       setState(() {
         _allProductsV2 = all;
         _productMetadataV2 = metadata;
+        // Presentation-only: drop checkbox state for rows that no longer exist.
+        _selectedIdsV2.removeWhere((id) => !all.any((p) => p.id == id));
       });
       _applyClientFilterV2();
     } catch (e) {
@@ -1750,6 +1759,198 @@ class _ProductManagementScreenV2State
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       );
+
+  // ── Shared reference helpers: selection (presentation-only) ──
+  bool _isAllPageSelectedV2(List<Product> pageItems) =>
+      pageItems.isNotEmpty &&
+      pageItems.every((p) => _selectedIdsV2.contains(p.id));
+
+  bool _isSomePageSelectedV2(List<Product> pageItems) =>
+      pageItems.any((p) => _selectedIdsV2.contains(p.id));
+
+  void _toggleSelectAllV2(List<Product> pageItems) {
+    if (!mounted) return;
+    setState(() {
+      if (_isAllPageSelectedV2(pageItems)) {
+        for (final p in pageItems) {
+          _selectedIdsV2.remove(p.id);
+        }
+      } else {
+        for (final p in pageItems) {
+          _selectedIdsV2.add(p.id);
+        }
+      }
+    });
+  }
+
+  void _toggleOneV2(String id) {
+    if (!mounted) return;
+    setState(() {
+      if (_selectedIdsV2.contains(id)) {
+        _selectedIdsV2.remove(id);
+      } else {
+        _selectedIdsV2.add(id);
+      }
+    });
+  }
+
+  // ── Shared reference helpers: sortable header cell ──
+  // Tapping reuses the existing in-memory sort (_sortBy/_isAscending via
+  // _onSortSelectionV2) — no query change, just presentation ordering.
+  Widget _sortableHeaderV2(String label, String field) {
+    final active = _sortBy == field;
+    return InkWell(
+      onTap: () => _onSortSelectionV2(field, active ? !_isAscending : true),
+      borderRadius: BorderRadius.circular(4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            !active
+                ? Icons.unfold_more
+                : (_isAscending ? Icons.arrow_upward : Icons.arrow_downward),
+            size: 13,
+            color: active ? Colors.white : Colors.white70,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Shared reference helpers: stock-status pill (in-memory only) ──
+  // Shows Low / Out pills from the already-loaded row; healthy stock shows
+  // no pill (same "— when fine" treatment as the invoice status column).
+  Widget? _stockPillV2(Product p) {
+    if (p.unlimitedStock) return null;
+    final l10n = AppLocalizations.of(context)!;
+    if (p.stock <= 0) {
+      return _pillV2(l10n.productMgmtOutOfStockLabel, Colors.red);
+    }
+    if (p.stock <= 10) {
+      return _pillV2(l10n.productMgmtLowStockLabel, Colors.orange);
+    }
+    return null;
+  }
+
+  Widget _pillV2(String label, MaterialColor color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w600, color: color.shade700),
+      ),
+    );
+  }
+
+  // ── Shared reference helpers: row ⋯ menu (reuses every existing action) ──
+  List<PopupMenuEntry<String>> _rowMenuItemsV2(Product p, bool isWide) {
+    // Wide shows View/Edit as quick icons, so the menu only needs Delete.
+    // Narrow carries everything in the menu.
+    final l10n = AppLocalizations.of(context)!;
+    return [
+      if (!isWide) ...[
+        PopupMenuItem(
+          value: 'view',
+          child: _menuRowV2(
+              Icons.visibility_outlined, l10n.actionView, Colors.green),
+        ),
+        PopupMenuItem(
+          value: 'edit',
+          child: _menuRowV2(Icons.edit_outlined, l10n.actionEdit, Colors.blue),
+        ),
+      ],
+      if (widget.user.isAdmin())
+        PopupMenuItem(
+          value: 'delete',
+          child:
+              _menuRowV2(Icons.delete_outline, l10n.actionDelete, Colors.red),
+        ),
+    ];
+  }
+
+  void _handleRowMenuV2(String action, Product p) {
+    switch (action) {
+      case 'view':
+        _viewProductV2(p);
+      case 'edit':
+        _editProductV2(p);
+      case 'delete':
+        if (widget.user.isAdmin()) _deleteProductV2(p);
+    }
+  }
+
+  Widget _menuRowV2(IconData icon, String label, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 10),
+        Text(label),
+      ],
+    );
+  }
+
+  Widget _rowActionsV2(Product p, bool isWide) {
+    final items = _rowMenuItemsV2(p, isWide);
+    // Wide shows View/Edit quick icons; the ⋯ menu only appears when it
+    // actually carries something (admin delete).
+    if (!isWide) {
+      return PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert, size: 20),
+        tooltip: AppLocalizations.of(context)!.invoiceMgmtMoreActionsTooltip,
+        padding: EdgeInsets.zero,
+        onSelected: (action) => _handleRowMenuV2(action, p),
+        itemBuilder: (ctx) => items,
+      );
+    }
+    final menu = items.isEmpty
+        ? const SizedBox.shrink()
+        : PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 20),
+            tooltip:
+                AppLocalizations.of(context)!.invoiceMgmtMoreActionsTooltip,
+            padding: EdgeInsets.zero,
+            onSelected: (action) => _handleRowMenuV2(action, p),
+            itemBuilder: (ctx) => items,
+          );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.visibility_outlined, size: 18),
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _viewProductV2(p),
+          tooltip: AppLocalizations.of(context)!.actionView,
+        ),
+        IconButton(
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _editProductV2(p),
+          tooltip: AppLocalizations.of(context)!.actionEdit,
+        ),
+        menu,
+      ],
+    );
+  }
 
   Widget _sectionLabelV2(String text) {
     return Padding(
@@ -1921,7 +2122,8 @@ class _ProductManagementScreenV2State
           Row(
             children: [
               Expanded(
-                child: FilledButton.icon(
+                child: AppPrimaryButton(
+                  expanded: true,
                   onPressed: () {
                     setState(() {
                       _showAddPanelV2 = true;
@@ -1929,12 +2131,6 @@ class _ProductManagementScreenV2State
                   },
                   icon: const Icon(Icons.add, size: 18),
                   label: Text(l10n.productMgmtNewProductButton),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppBorderRadius.xsmall)),
-                  ),
                 ),
               ),
               IconButton(
@@ -2054,7 +2250,7 @@ class _ProductManagementScreenV2State
                     : const Icon(Icons.refresh),
                 tooltip: AppLocalizations.of(context)!.actionRefresh,
               ),
-              FilledButton.icon(
+              AppPrimaryButton(
                 onPressed: () {
                   setState(() {
                     _showAddPanelV2 = true;
@@ -2063,13 +2259,6 @@ class _ProductManagementScreenV2State
                 icon: const Icon(Icons.add, size: 18),
                 label: Text(
                     AppLocalizations.of(context)!.productMgmtNewProductButton),
-                style: FilledButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppBorderRadius.xsmall)),
-                ),
               ),
             ],
           ),
@@ -2477,24 +2666,54 @@ class _ProductManagementScreenV2State
         _columnsConfig.productMetadata && _columnsConfig.metaExpiryDate;
     final expiryDate = showExpiry ? _expiryDateOfV2(p) : null;
     final isExpired = expiryDate != null && expiryDate.isBefore(DateTime.now());
+    // Shared reference: checkbox selection + zebra + stock pills + ⋯ menu.
+    // All actions reuse the existing view/edit/delete callbacks.
+    final isSelected = _selectedIdsV2.contains(p.id);
+    final isEven = index.isEven;
+    final stockPill = _stockPillV2(p);
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
       decoration: BoxDecoration(
+        color: isSelected
+            ? Theme.of(context).primaryColor.withValues(alpha: 0.08)
+            : (isEven
+                ? Theme.of(context).colorScheme.surfaceContainerHighest
+                : Theme.of(context).colorScheme.surfaceContainer),
         border: Border(
           bottom:
               BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+          left: isSelected
+              ? BorderSide(color: Theme.of(context).primaryColor, width: 3)
+              : BorderSide.none,
         ),
       ),
+      padding: const EdgeInsets.fromLTRB(8, 12, 4, 12),
       child: Row(
         children: [
           SizedBox(
+            width: 44,
+            child: Checkbox(
+              value: isSelected,
+              onChanged: (_) => _toggleOneV2(p.id),
+              activeColor: Theme.of(context).primaryColor,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          SizedBox(
             width: 56,
-            child: Text('$serial',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 12.5,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('$serial',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).primaryColor)),
+              ),
+            ),
           ),
           Expanded(
             flex: 3,
@@ -2565,7 +2784,21 @@ class _ProductManagementScreenV2State
                               Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
             ),
-          if (_columnsConfig.stock) Expanded(flex: 1, child: _stockCellV2(p)),
+          if (_columnsConfig.stock)
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _stockCellV2(p),
+                  if (stockPill != null) ...[
+                    const SizedBox(height: 4),
+                    stockPill,
+                  ],
+                ],
+              ),
+            ),
           if (_columnsConfig.taxRate)
             Expanded(flex: 1, child: Text('${p.tax_rate}%')),
           if (showExpiry)
@@ -2597,70 +2830,68 @@ class _ProductManagementScreenV2State
                     ),
             ),
           SizedBox(
-            width: 116,
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.visibility_outlined, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _viewProductV2(p),
-                  tooltip: AppLocalizations.of(context)!.actionView,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _editProductV2(p),
-                  tooltip: AppLocalizations.of(context)!.actionEdit,
-                ),
-                if (widget.user.isAdmin())
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    visualDensity: VisualDensity.compact,
-                    color: Theme.of(context).colorScheme.error,
-                    onPressed: () => _deleteProductV2(p),
-                    tooltip: AppLocalizations.of(context)!.actionDelete,
-                  ),
-              ],
-            ),
+            width: 120,
+            child: _rowActionsV2(p, true),
           ),
         ],
       ),
     );
   }
 
-  Widget _tableHeaderRowV2() {
+  Widget _tableHeaderRowV2([List<Product>? pageItems]) {
     final l10n = AppLocalizations.of(context)!;
-    TextStyle style = TextStyle(
-        fontSize: 11,
+    // Shared reference: dark gradient header with checkbox + sortable
+    // columns, matching the invoice list screen.
+    final items = pageItems ?? const <Product>[];
+    final allSelected = items.isNotEmpty && _isAllPageSelectedV2(items);
+    final someSelected =
+        items.isNotEmpty && _isSomePageSelectedV2(items) && !allSelected;
+    const style = TextStyle(
+        color: Colors.white,
+        fontSize: 12.5,
         fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: Theme.of(context).colorScheme.onSurfaceVariant);
+        letterSpacing: 0.4);
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant, width: 1.4),
-        ),
+        gradient: ProductManagementScreenColors.topBarBackgroundGradientColor,
+        borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(12), topRight: Radius.circular(12)),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         children: [
           SizedBox(
+            width: 44,
+            child: Checkbox(
+              value: allSelected,
+              tristate: someSelected,
+              onChanged:
+                  items.isEmpty ? null : (_) => _toggleSelectAllV2(items),
+              activeColor: Colors.white,
+              checkColor: Theme.of(context).primaryColor,
+              side: const BorderSide(color: Colors.white70, width: 2),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          SizedBox(
               width: 56, child: Text(l10n.productMgmtColSlNo, style: style)),
           Expanded(
-              flex: 3, child: Text(l10n.productMgmtColNameAlias, style: style)),
+              flex: 3,
+              child: _sortableHeaderV2(l10n.productMgmtColNameAlias, 'name')),
           if (_columnsConfig.hsncode)
             Expanded(
                 flex: 2, child: Text(l10n.productMgmtColHsnSac, style: style)),
           Expanded(
-              flex: 2, child: Text(l10n.productMgmtColPrice, style: style)),
+              flex: 2,
+              child: _sortableHeaderV2(l10n.productMgmtColPrice, 'price')),
           if (_columnsConfig.purchasePrice)
             Expanded(
                 flex: 2,
                 child: Text(l10n.productMgmtColPurchase, style: style)),
           if (_columnsConfig.stock)
             Expanded(
-                flex: 1, child: Text(l10n.productMgmtColStock, style: style)),
+                flex: 2,
+                child: _sortableHeaderV2(l10n.productMgmtColStock, 'stock')),
           if (_columnsConfig.taxRate)
             Expanded(
                 flex: 1,
@@ -2669,7 +2900,9 @@ class _ProductManagementScreenV2State
             Expanded(
                 flex: 2,
                 child: Text(l10n.productMgmtColExpiryDate, style: style)),
-          SizedBox(width: 116, child: Text('', style: style)),
+          SizedBox(
+              width: 120,
+              child: Text(l10n.customerMgmtColActions, style: style)),
         ],
       ),
     );
@@ -2721,7 +2954,45 @@ class _ProductManagementScreenV2State
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _tableHeaderRowV2(),
+          _tableHeaderRowV2(_products),
+          if (_selectedIdsV2.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withValues(alpha: 0.08),
+                border: Border(
+                  bottom: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: Theme.of(context).primaryColor,
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Text(
+                        AppLocalizations.of(context)!
+                            .invoiceMgmtSelectedCountLabel(
+                                _selectedIdsV2.length),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _selectedIdsV2.clear()),
+                    icon: const Icon(Icons.deselect, size: 16),
+                    label: Text(
+                        AppLocalizations.of(context)!.invoiceMgmtDeselectLabel),
+                  ),
+                ],
+              ),
+            ),
           _statsLoadingV2 && _allProductsV2.isEmpty
               ? const SizedBox(height: 240, child: AppLoadingState())
               : _products.isEmpty
@@ -2739,21 +3010,44 @@ class _ProductManagementScreenV2State
     );
   }
 
-  /// Compact-phone product card: name/type, price + stock meta, and the
-  /// primary actions inline.
+  /// Compact-phone product card: checkbox + name/type pills, price + stock
+  /// meta, and the primary actions inline with the rest in the ⋯ menu
+  /// (shared reference narrow pattern).
   Widget _productCardV2(Product p, int index) {
     final l10n = AppLocalizations.of(context)!;
     final serial = _currentPage * _pageSize + index + 1;
+    final isSelected = _selectedIdsV2.contains(p.id);
+    final stockPill = _stockPillV2(p);
     final stockLabel = p.unlimitedStock
         ? '∞'
         : p.stock.toStringAsFixed(p.stock == p.stock.roundToDouble() ? 0 : 2);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return Container(
+      decoration: BoxDecoration(
+        color: isSelected
+            ? Theme.of(context).primaryColor.withValues(alpha: 0.06)
+            : null,
+        borderRadius: BorderRadius.circular(8),
+        border: isSelected
+            ? Border.all(
+                color: Theme.of(context).primaryColor.withValues(alpha: 0.4))
+            : null,
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: Checkbox(
+                  value: isSelected,
+                  onChanged: (_) => _toggleOneV2(p.id),
+                  activeColor: Theme.of(context).primaryColor,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
               Container(
                 width: 34,
                 height: 34,
@@ -2775,26 +3069,13 @@ class _ProductManagementScreenV2State
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 14.5)),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: p.type == 'service'
-                      ? Colors.orange.withValues(alpha: 0.12)
-                      : Colors.blue.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  p.type == 'service' ? l10n.labelService : l10n.labelProduct,
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: p.type == 'service'
-                          ? Colors.orange[800]
-                          : Colors.blue[700]),
-                ),
-              ),
+              _typeTagV2(p.type),
             ],
           ),
+          if (stockPill != null) ...[
+            const SizedBox(height: 6),
+            stockPill,
+          ],
           const SizedBox(height: 8),
           Row(
             children: [
@@ -2855,12 +3136,11 @@ class _ProductManagementScreenV2State
                 onPressed: () => _editProductV2(p),
                 tooltip: l10n.actionEdit,
               ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18),
-                visualDensity: VisualDensity.compact,
-                color: Theme.of(context).colorScheme.error,
-                onPressed: () => _deleteProductV2(p),
-                tooltip: l10n.actionDelete,
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, size: 20),
+                tooltip: l10n.invoiceMgmtMoreActionsTooltip,
+                onSelected: (action) => _handleRowMenuV2(action, p),
+                itemBuilder: (ctx) => _rowMenuItemsV2(p, false),
               ),
             ],
           ),
@@ -3942,7 +4222,17 @@ class _ProductManagementScreenV2State
   }
 
   Widget _buildV2(BuildContext context) {
+    // Shared reference narrow pattern: cards + FAB for creating.
+    final isNarrowOuter = context.isCompact;
     return Scaffold(
+      floatingActionButton: isNarrowOuter && !_showAddPanelV2
+          ? FloatingActionButton(
+              onPressed: () => setState(() => _showAddPanelV2 = true),
+              tooltip:
+                  AppLocalizations.of(context)!.productMgmtNewProductButton,
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -3975,9 +4265,10 @@ class _ProductManagementScreenV2State
                               _statCardsRowV2(),
                               const SizedBox(height: 12),
                             ],
-                            Container(
+                            // Shared reference: search + group chips live in one
+                            // card (AppCard reuse keeps light/dark correct).
+                            AppCard(
                               padding: const EdgeInsets.all(12),
-                              decoration: _flatCardDecorationV2(context),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -4135,12 +4426,21 @@ class _ProductManagementScreenV2State
 
   Widget _buildEmptyState() {
     final l10n = AppLocalizations.of(context)!;
+    // Shared reference empty state keeps the guidance subtitle and offers
+    // the primary create action when nothing is filtering the list.
     return AppEmptyState(
       icon: Icons.inventory_2_outlined,
       title: l10n.createInvoiceNoProductsFoundMessage,
       subtitle: _searchQuery.isEmpty
           ? l10n.productMgmtAddFirstProductSubtitle
           : l10n.customerMgmtTryAdjustingSearchSubtitle,
+      action: _searchQuery.isEmpty
+          ? AppPrimaryButton(
+              onPressed: () => setState(() => _showAddPanelV2 = true),
+              icon: const Icon(Icons.add),
+              label: Text(l10n.productMgmtNewProductButton),
+            )
+          : null,
     );
   }
 }

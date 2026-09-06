@@ -68,7 +68,8 @@ Invoice _sampleInvoice() {
     type: 'Invoice',
     taxRate: 0.18,
     taxMode: TaxMode.perItem,
-    notes: 'Here is a short sample of structured \nstudy notes based on a basic topic,\nplant photosynthesis. You can use this clean layout for school or work',
+    notes:
+        'Here is a short sample of structured \nstudy notes based on a basic topic,\nplant photosynthesis. You can use this clean layout for school or work',
   );
 }
 
@@ -102,8 +103,8 @@ PageSize _pageSizeFor(InvoiceTemplate template) => switch (template) {
     };
 
 const _logoVariants = {
-  'square': 'assets/images/demo_logo.png',
-  'wide': 'assets/images/wide_logo.png',
+  'square': 'assets/images/logo.png',
+  'wide': 'assets/images/logo.png',
 };
 
 void main() {
@@ -116,10 +117,10 @@ void main() {
         final pageSize = _pageSizeFor(template);
         final pdfTheme = await TestPdfFontService.loadTheme();
         final watermarkBytes =
-            await File('assets/images/watermark.png').readAsBytes();
+            await File('assets/images/logo.png').readAsBytes();
         final logoBytes = await File(logoVariant.value).readAsBytes();
         final signatureBytes =
-            await File('assets/images/sig.jpeg').readAsBytes();
+            await File('assets/images/logo.png').readAsBytes();
         final settings = PdfGenerationSettings(
           company: _company,
           template: template,

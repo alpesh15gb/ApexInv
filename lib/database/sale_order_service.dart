@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:apexbooks/models/sale_order.dart';
 import 'database_helper.dart';
 import 'invoice_service.dart';
+import 'settings_service.dart';
 
 class SaleOrderService {
   static final _dbHelper = DatabaseHelper();
@@ -191,6 +192,9 @@ class SaleOrderService {
     final invoiceId = await InvoiceService.generateNextId();
     final invoiceNumber =
         await InvoiceService.generateNextInvoiceNumber('Invoice');
+    // Converted invoices follow the global round-off default (orders carry
+    // no per-document flag).
+    final roundOff = await SettingsService.getDefaultRoundOff();
     final db = await _dbHelper.database;
     await db.transaction((txn) async {
       for (final entry in selected.entries) {
@@ -210,6 +214,18 @@ class SaleOrderService {
         }
       }
 
+      // E2: preserve the customer's business name for the invoice snapshot
+      // (sale_orders carry no business-name column) and carry the expected
+      // date as the invoice due date. is_interstate has no sale-order source
+      // flag, so converted invoices stay intrastate (0).
+      final businessNameRows = await txn.query('customers',
+          columns: ['business_name'],
+          where: 'id = ?',
+          whereArgs: [order.customerId],
+          limit: 1);
+      final businessName = businessNameRows.isEmpty
+          ? ''
+          : (businessNameRows.first['business_name'] as String? ?? '');
       await txn.insert('invoices', {
         'id': invoiceId,
         'invoice_number': invoiceNumber,
@@ -219,14 +235,16 @@ class SaleOrderService {
         'customer_phone': order.customerPhone,
         'customer_address': order.customerAddress,
         'customer_gstin': order.customerGstin,
-        'customer_business_name': '',
+        'customer_business_name': businessName,
         'date': DateTime.now().toIso8601String(),
+        'due_date': order.expectedDate?.toIso8601String(),
         'notes': order.notes,
         'tax_rate': 0,
         'type': 'Invoice',
         'currency_code': order.currencyCode,
         'currency_symbol': order.currencySymbol,
         'tax_mode': 'per_item',
+        'round_off': roundOff ? 1 : 0,
         'additional_costs': jsonEncode(<Object>[]),
         'invoice_discount_type': 'percent',
         'invoice_discount_value': 0,
@@ -248,7 +266,10 @@ class SaleOrderService {
           'product_name': item.productName,
           'product_description': item.description,
           'product_price': item.unitPrice,
-          'product_tax_rate': item.taxRate.round(),
+          // E2: preserve the exact rate. invoice_items.product_tax_rate has
+          // INTEGER affinity but SQLite keeps fractional REALs as REAL
+          // (verified by regression test), so no .round() and no migration.
+          'product_tax_rate': item.taxRate,
           'product_hsn_code': product['hsncode'] as String? ?? '',
           'quantity': entry.value,
           'discount': item.quantity <= 0

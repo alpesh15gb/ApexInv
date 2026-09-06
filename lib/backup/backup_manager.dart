@@ -9,6 +9,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:crypto/crypto.dart';
 
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/models/backup_info.dart';
@@ -67,15 +68,34 @@ class BackupManager {
   };
 
   // Restore order ensures parent tables are inserted before child tables,
-  // preventing foreign-key constraint violations.
+  // preventing foreign-key constraint violations. Covers ALL restorable
+  // tables; JSON restore clears in reverse order so a missing section in
+  // the file deletes (replaces) rather than merges.
   static const List<String> _restoreTableOrder = [
+    'company_info',
     'customers',
     'products',
-    'company_info',
+    'product_metadata',
+    'batch_info',
+    'custom_fields',
+    'expense_categories',
+    'financial_accounts',
     'settings',
     'invoices',
+    'sale_orders',
+    'purchase_orders',
+    'purchase_bills',
+    'loan_accounts',
+    'cheques',
+    'expenses',
     'invoice_items',
     'invoice_payments',
+    'purchase_order_items',
+    'purchase_bill_items',
+    'purchase_bill_payments',
+    'sale_order_items',
+    'financial_transactions',
+    'loan_movements',
   ];
 
   // Create backup of the entire database
@@ -120,8 +140,98 @@ class BackupManager {
     final backupPath = join(backupDir, '$backupName$_backupExtension');
     final db = await DatabaseHelper().database;
     await db.execute("VACUUM INTO '${backupPath.replaceAll("'", "''")}'");
+    // SHA-256 sidecar manifest: restore verifies before touching live.
+    await writeManifest(backupPath);
 
     return backupPath;
+  }
+
+  /// Sidecar manifest path for a `.invoicedb` backup.
+  static String manifestPathFor(String backupPath) => '$backupPath.sha256';
+
+  /// Hex SHA-256 of [bytes] (unit-testable pure helper).
+  static String sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
+
+  /// Hex SHA-256 of the file at [path].
+  static Future<String> computeFileSha256(String path) async {
+    return sha256Hex(await File(path).readAsBytes());
+  }
+
+  /// Writes the SHA-256 sidecar for [backupPath].
+  static Future<void> writeManifest(String backupPath) async {
+    final hex = await computeFileSha256(backupPath);
+    await File(manifestPathFor(backupPath)).writeAsString('$hex\n');
+  }
+
+  /// Verifies the SHA-256 sidecar when present. Missing sidecar (legacy
+  /// backups) passes; present-but-mismatched fails.
+  static Future<bool> verifyManifest(String backupPath) async {
+    final manifest = File(manifestPathFor(backupPath));
+    if (!await manifest.exists()) return true;
+    final expected = (await manifest.readAsString()).trim().toLowerCase();
+    if (expected.isEmpty) return true;
+    final actual = (await computeFileSha256(backupPath)).toLowerCase();
+    return expected == actual;
+  }
+
+  /// Known tables for `.invoicedb` schema gating (restorable + credentials,
+  /// sync protocol, audit/migration logs). Anything else aborts the restore
+  /// before the live file is touched.
+  static const Set<String> _dbSchemaAllowlist = {
+    'company_info',
+    'customers',
+    'products',
+    'product_metadata',
+    'batch_info',
+    'custom_fields',
+    'invoices',
+    'invoice_items',
+    'invoice_payments',
+    'expense_categories',
+    'expenses',
+    'purchase_orders',
+    'purchase_order_items',
+    'purchase_bills',
+    'purchase_bill_items',
+    'purchase_bill_payments',
+    'financial_accounts',
+    'financial_transactions',
+    'sale_orders',
+    'sale_order_items',
+    'cheques',
+    'loan_accounts',
+    'loan_movements',
+    'settings',
+    'users',
+    'audit_log',
+    'payment_terms',
+    '_sync_outbox',
+    '_sync_state',
+    '_migration_log',
+  };
+
+  /// Integrity + schema gate for a staged temp database file. Throws on
+  /// failure; unit-testable without touching the live database.
+  static Future<void> verifyTempDatabase(String tempPath) async {
+    final tempDb = await openDatabase(tempPath, readOnly: true);
+    try {
+      final integrity = await tempDb.rawQuery('PRAGMA integrity_check');
+      if (integrity.isEmpty || integrity.first.values.first != 'ok') {
+        throw StateError('Staged database failed integrity_check');
+      }
+      final tables = await tempDb.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+      final names = {for (final t in tables) t['name'] as String};
+      if (!names.contains('invoices')) {
+        throw StateError('Staged database missing core table: invoices');
+      }
+      final unknown = names.difference(_dbSchemaAllowlist);
+      if (unknown.isNotEmpty) {
+        throw StateError('Staged database has unknown tables: $unknown');
+      }
+    } finally {
+      await tempDb.close();
+    }
   }
 
   // Create JSON export backup (excludes sensitive tables such as 'users')
@@ -224,17 +334,18 @@ class BackupManager {
   }
 
   // Restore from database backup.
-  // The singleton is closed BEFORE any file copy: copying a live WAL-mode
-  // database can miss WAL pages, so both the safety copy and the replacement
-  // happen with no open handle. Stale -wal/-shm/-journal sidecars belong to
-  // the pre-restore file and are deleted so they can never replay onto the
-  // restored copy. The restored file must pass PRAGMA integrity_check before
-  // it is accepted — on failure the safety copy is restored instead, and the
-  // safety copy is deleted only on success (it is the operator's last resort
-  // after a failed restore, so a failure path must never remove it).
+  // Crash-atomic staging: the backup is copied to a temp file beside the
+  // live database, gated there by manifest + integrity_check + schema
+  // allowlist, and only then atomically renamed over live. The live file is
+  // never overwritten by an unverified copy, so a crash mid-restore cannot
+  // leave a half-written database. The singleton is closed BEFORE any file
+  // copy (WAL-mode safety); stale sidecars are deleted so they can never
+  // replay onto the restored copy. The safety copy is restored on failure
+  // and deleted only on success.
   Future<void> _restoreFromDatabaseBackup(String backupPath) async {
     final dbPath = DatabaseHelper.path!;
     final safetyPath = '$dbPath.pre_restore_backup';
+    final tempPath = '$dbPath.restore_tmp';
     var restored = false;
 
     // Close singleton and null its reference first (see above).
@@ -246,8 +357,23 @@ class BackupManager {
     }
 
     try {
-      // Replace the database file on disk
-      await File(backupPath).copy(dbPath);
+      // Manifest gate before touching live (mismatch → abort).
+      if (!await verifyManifest(backupPath)) {
+        throw StateError('Backup manifest mismatch (file modified?)');
+      }
+
+      // Stage to temp beside live (same filesystem for atomic rename).
+      if (await File(tempPath).exists()) await File(tempPath).delete();
+      await _deleteDbSidecars(tempPath);
+      await File(backupPath).copy(tempPath);
+
+      // Gate the staged copy before it touches live.
+      await verifyTempDatabase(tempPath);
+
+      // Atomic-ish swap over live.
+      await _deleteDbSidecars(dbPath);
+      if (await File(dbPath).exists()) await File(dbPath).delete();
+      await File(tempPath).rename(dbPath);
 
       await _deleteDbSidecars(dbPath);
 
@@ -260,6 +386,11 @@ class BackupManager {
       }
       restored = true;
     } catch (e) {
+      // Drop a failed staging file; never leave it beside live.
+      try {
+        if (await File(tempPath).exists()) await File(tempPath).delete();
+        await _deleteDbSidecars(tempPath);
+      } catch (_) {}
       // Restore safety copy on failure
       try {
         await DatabaseHelper().close();
@@ -327,7 +458,9 @@ class BackupManager {
     final database = await DatabaseHelper().database;
 
     await database.transaction((txn) async {
-      // Clear existing data in reverse FK order
+      // Replace semantics: clear ALL restorable tables in reverse FK order
+      // first, so a section missing from the file ends up empty (not merged
+      // with pre-restore rows). Insert in FK-safe order below.
       for (final tableName in _restoreTableOrder.reversed) {
         await txn.delete(tableName);
       }
@@ -526,10 +659,10 @@ class BackupManager {
       final extension = backupPath.split('.').last;
 
       if (extension == _backupExtension.replaceAll('.', '')) {
-        final tempDb = await openDatabase(backupPath, readOnly: true);
-        final integrity = await tempDb.rawQuery('PRAGMA integrity_check');
-        await tempDb.close();
-        return integrity.isNotEmpty && integrity.first.values.first == 'ok';
+        // Manifest gate first (mismatch → invalid before touching live).
+        if (!await verifyManifest(backupPath)) return false;
+        await verifyTempDatabase(backupPath);
+        return true;
       } else if (extension == _jsonExtension.replaceAll('.', '')) {
         final content = await file.readAsString();
         jsonDecode(content);

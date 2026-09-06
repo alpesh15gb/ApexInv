@@ -21,9 +21,25 @@ class SaleOrdersScreen extends StatefulWidget {
 }
 
 class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
-  List<SaleOrder> _orders = const [];
+  List<SaleOrder> _allOrders = const [];
   String? _status;
   bool _loading = true;
+  String _search = '';
+  DateTime? _fromDate;
+  DateTime? _toDate;
+  String _sortField = 'date'; // 'number' | 'date' | 'customer' | 'total'
+  bool _sortAsc = false;
+  int _page = 0;
+  int _pageSize = 10;
+  final TextEditingController _searchController = TextEditingController();
+
+  static const List<String> _statuses = [
+    'draft',
+    'confirmed',
+    'partial',
+    'fulfilled',
+    'cancelled',
+  ];
 
   @override
   void initState() {
@@ -31,14 +47,111 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
-    final rows = await SaleOrderService.getOrders(status: _status);
-    if (mounted)
+    // Reference-design revamp: the full set is loaded with the existing
+    // query (no new query semantics) and status/search/date are applied in
+    // memory below, so the chips show LIVE counts from already-loaded rows.
+    final rows = await SaleOrderService.getOrders();
+    if (mounted) {
       setState(() {
-        _orders = rows;
+        _allOrders = rows;
         _loading = false;
+        _clampPage();
       });
+    }
+  }
+
+  void _clampPage() {
+    final pages = _totalPages;
+    if (pages <= 0) {
+      _page = 0;
+    } else if (_page >= pages) {
+      _page = pages - 1;
+    }
+  }
+
+  static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// Search + date context (status-independent): the rows the chip counts
+  /// aggregate over.
+  List<SaleOrder> get _contextOrders {
+    final q = _search.trim().toLowerCase();
+    return _allOrders.where((o) {
+      if (q.isNotEmpty &&
+          !o.orderNumber.toLowerCase().contains(q) &&
+          !o.customerName.toLowerCase().contains(q)) {
+        return false;
+      }
+      if (_fromDate != null && _day(o.date).isBefore(_day(_fromDate!))) {
+        return false;
+      }
+      if (_toDate != null && _day(o.date).isAfter(_day(_toDate!))) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  Map<String, int> get _statusCounts {
+    final context = _contextOrders;
+    final counts = <String, int>{'all': context.length};
+    for (final s in _statuses) {
+      counts[s] = 0;
+    }
+    for (final o in context) {
+      counts[o.status] = (counts[o.status] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /// Visible rows: status chip + in-memory sort. Same rows the old
+  /// status-filtered query returned, minus any query round-trip.
+  List<SaleOrder> get _visibleOrders {
+    Iterable<SaleOrder> rows = _contextOrders;
+    if (_status != null) {
+      rows = rows.where((o) => o.status == _status);
+    }
+    final list = rows.toList();
+    list.sort((a, b) {
+      final int c;
+      switch (_sortField) {
+        case 'number':
+          c = a.orderNumber.compareTo(b.orderNumber);
+        case 'customer':
+          c = a.customerName.toLowerCase().compareTo(
+                b.customerName.toLowerCase(),
+              );
+        case 'total':
+          c = a.displayTotal.compareTo(b.displayTotal);
+        default:
+          c = a.date.compareTo(b.date);
+      }
+      return _sortAsc ? c : -c;
+    });
+    return list;
+  }
+
+  int get _totalCount => _visibleOrders.length;
+
+  int get _totalPages => (_totalCount / _pageSize).ceil();
+
+  void _changeSort(String field) {
+    setState(() {
+      if (_sortField == field) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortField = field;
+        _sortAsc = field == 'number' || field == 'customer';
+      }
+      _page = 0;
+    });
   }
 
   Future<void> _openForm([SaleOrder? existing]) async {
@@ -571,7 +684,7 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
                     child: const Text('Cancel')),
                 FilledButton(
                     onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Create invoice')),
+                    child: const Text('Convert to Invoice')),
               ],
             ));
     if (ok != true) {
@@ -627,100 +740,753 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
         backgroundColor: Colors.red));
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Sale Orders'), actions: [
-          FilledButton.icon(
-              onPressed: () => _openForm(),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('New Order')),
-          const SizedBox(width: 8),
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
-          const SizedBox(width: 8),
-        ]),
-        body: Column(children: [
-          SizedBox(
-              height: 58,
-              child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  children: [
-                    null,
-                    'draft',
-                    'confirmed',
-                    'partial',
-                    'fulfilled',
-                    'cancelled'
-                  ]
-                      .map((status) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                              selected: _status == status,
-                              label: Text(status == null
-                                  ? 'All'
-                                  : '${status[0].toUpperCase()}${status.substring(1)}'),
-                              onSelected: (_) {
-                                setState(() => _status = status);
-                                _load();
-                              })))
-                      .toList())),
-          const Divider(height: 1),
-          Expanded(
-              child: _loading
-                  ? const AppLoadingState()
-                  : _orders.isEmpty
-                      ? const AppEmptyState(
-                          icon: Icons.shopping_bag_outlined,
-                          title: 'No sale orders in this view.')
-                      : ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _orders.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8),
-                          itemBuilder: (context, index) =>
-                              _card(_orders[index]))),
-        ]),
-      );
+  static Color _statusColor(String status) => switch (status) {
+        'fulfilled' => Colors.green,
+        'confirmed' => Colors.blue,
+        'partial' => Colors.deepOrange,
+        'cancelled' => Colors.red,
+        _ => Colors.orange,
+      };
 
-  Widget _card(SaleOrder order) {
-    final color = switch (order.status) {
-      'fulfilled' => Colors.green,
-      'confirmed' => Colors.blue,
-      'partial' => Colors.deepOrange,
-      'cancelled' => Colors.red,
-      _ => Colors.orange,
-    };
-    return AppListRow(
-      leading: AppRowIcon(Icons.shopping_bag_outlined, color: color),
-      title: '${order.orderNumber} • ${order.customerName}',
-      subtitle: '${order.date.toLocal().toString().split(' ').first} • '
-          '${order.items.length} item(s) • ${order.status}',
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        AppMoney(
-          order.displayTotal,
-          currencySymbol: order.currencySymbol,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+  String _dateLabel(DateTime? d) =>
+      d == null ? 'Any date' : d.toLocal().toString().split(' ').first;
+
+  String get _rangeLabel {
+    if (_fromDate == null && _toDate == null) return 'Any date';
+    return '${_dateLabel(_fromDate)} – ${_dateLabel(_toDate)}';
+  }
+
+  Future<void> _pickRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDateRange: (_fromDate != null || _toDate != null)
+          ? DateTimeRange(
+              start: _fromDate ?? _toDate!,
+              end: _toDate ?? _fromDate!,
+            )
+          : null,
+    );
+    if (picked == null) return;
+    setState(() {
+      _fromDate = picked.start;
+      _toDate = picked.end;
+      _page = 0;
+    });
+  }
+
+  void _clearRange() => setState(() {
+        _fromDate = null;
+        _toDate = null;
+        _page = 0;
+      });
+
+  int get _activeFilterCount =>
+      (_status != null ? 1 : 0) +
+      ((_fromDate != null || _toDate != null) ? 1 : 0);
+
+  Future<void> _showFilterDialog() async {
+    String? tempStatus = _status;
+    DateTime? tempFrom = _fromDate;
+    DateTime? tempTo = _toDate;
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(builder: (dialogContext, setDialogState) {
+          String cap(String s) => '${s[0].toUpperCase()}${s.substring(1)}';
+          Widget dateBox(String label, DateTime? value, bool isFrom) {
+            return OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: dialogContext,
+                  initialDate: value ?? DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100),
+                );
+                if (picked != null) {
+                  setDialogState(() {
+                    if (isFrom) {
+                      tempFrom = picked;
+                    } else {
+                      tempTo = picked;
+                    }
+                  });
+                }
+              },
+              icon: const Icon(Icons.calendar_today_outlined, size: 16),
+              label: Text(value == null
+                  ? label
+                  : value.toLocal().toString().split(' ').first),
+            );
+          }
+
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Filter Sale Orders'),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Status',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('All'),
+                        selected: tempStatus == null,
+                        onSelected: (_) =>
+                            setDialogState(() => tempStatus = null),
+                      ),
+                      for (final s in _statuses)
+                        ChoiceChip(
+                          label: Text(cap(s)),
+                          selected: tempStatus == s,
+                          onSelected: (_) =>
+                              setDialogState(() => tempStatus = s),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('Order date range',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: dateBox('From', tempFrom, true)),
+                      const SizedBox(width: 12),
+                      Expanded(child: dateBox('To', tempTo, false)),
+                    ],
+                  ),
+                  if (tempFrom != null || tempTo != null) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => setDialogState(() {
+                        tempFrom = null;
+                        tempTo = null;
+                      }),
+                      icon: const Icon(Icons.clear, size: 16),
+                      label: const Text('Clear dates'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => setDialogState(() {
+                  tempStatus = null;
+                  tempFrom = null;
+                  tempTo = null;
+                }),
+                child: const Text('Reset'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  setState(() {
+                    _status = tempStatus;
+                    _fromDate = tempFrom;
+                    _toDate = tempTo;
+                    _page = 0;
+                  });
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  /// Reference-design header: title + live subtitle, primary Create on wide
+  /// (narrow uses the FAB and the existing AppBar action). Labels unchanged.
+  Widget _header(bool isWide, int total) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Sale Orders',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text('$total sale orders',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ],
+          ),
         ),
-        PopupMenuButton<String>(
-            onSelected: (v) => _act(order, v),
-            itemBuilder: (_) => [
-                  if (order.status == 'draft')
-                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                  if (order.status == 'draft')
-                    const PopupMenuItem(
-                        value: 'confirm', child: Text('Confirm & reserve')),
-                  if (order.status == 'confirmed' || order.status == 'partial')
-                    const PopupMenuItem(
-                        value: 'fulfill',
-                        child: Text('Create invoice / fulfill')),
-                  if (order.status != 'fulfilled' &&
-                      order.status != 'cancelled')
-                    const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
-                  if (order.status == 'draft' || order.status == 'cancelled')
-                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                ]),
-      ]),
+        if (isWide)
+          AppPrimaryButton(
+            onPressed: () => _openForm(),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('New Order'),
+          ),
+      ],
+    );
+  }
+
+  /// Status filter chips with LIVE counts aggregated from the loaded rows.
+  Widget _chips(Map<String, int> counts) {
+    String cap(String s) => '${s[0].toUpperCase()}${s.substring(1)}';
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _statusChip(null, 'All', counts['all'] ?? 0, Colors.grey),
+        for (final s in _statuses)
+          _statusChip(s, cap(s), counts[s] ?? 0, _statusColor(s)),
+      ],
+    );
+  }
+
+  Widget _statusChip(String? value, String label, int count, Color color) {
+    final selected = _status == value;
+    return ChoiceChip(
+      label: Text('$label ($count)'),
+      selected: selected,
+      onSelected: (_) => setState(() {
+        _status = value;
+        _page = 0;
+      }),
+      selectedColor: color.withValues(alpha: 0.18),
+      labelStyle: TextStyle(
+        color: selected ? color.withValues(alpha: 0.95) : null,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      ),
+    );
+  }
+
+  /// Reference filter row: search + date-range picker + Filter button.
+  Widget _toolbar(bool isWide) {
+    final searchField = TextField(
+      controller: _searchController,
+      decoration: InputDecoration(
+        hintText: 'Search by order no. or customer…',
+        prefixIcon: const Icon(Icons.search, size: 20),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        suffixIcon: _search.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear, size: 18),
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() {
+                    _search = '';
+                    _page = 0;
+                  });
+                },
+              )
+            : null,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide:
+              BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide:
+              BorderSide(color: Theme.of(context).primaryColor, width: 2),
+        ),
+      ),
+      onChanged: (v) => setState(() {
+        _search = v;
+        _page = 0;
+      }),
+    );
+    final hasRange = _fromDate != null || _toDate != null;
+    final rangeButton = hasRange
+        ? InputChip(
+            avatar: const Icon(Icons.calendar_today_outlined, size: 16),
+            label:
+                Text(_rangeLabel, overflow: TextOverflow.ellipsis, maxLines: 1),
+            onPressed: _pickRange,
+            onDeleted: _clearRange,
+          )
+        : AppSecondaryButton(
+            onPressed: _pickRange,
+            icon: const Icon(Icons.calendar_today_outlined, size: 18),
+            label: Text(_rangeLabel),
+          );
+    final filterButton = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        AppSecondaryButton(
+          onPressed: _showFilterDialog,
+          icon: const Icon(Icons.filter_list, size: 18),
+          label: const Text('Filter'),
+        ),
+        if (_activeFilterCount > 0)
+          Positioned(
+            right: -6,
+            top: -6,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+                shape: BoxShape.circle,
+              ),
+              child: Text('$_activeFilterCount',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold)),
+            ),
+          ),
+      ],
+    );
+    if (isWide) {
+      return Row(
+        children: [
+          Expanded(
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: searchField)),
+          const SizedBox(width: 12),
+          rangeButton,
+          const SizedBox(width: 8),
+          filterButton,
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        searchField,
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [rangeButton, filterButton],
+        ),
+      ],
+    );
+  }
+
+  Widget _sortHead(String label, String field, TextStyle style) {
+    final active = _sortField == field;
+    return InkWell(
+      onTap: () => _changeSort(field),
+      borderRadius: BorderRadius.circular(4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(label, overflow: TextOverflow.ellipsis, style: style),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            !active
+                ? Icons.unfold_more
+                : (_sortAsc ? Icons.arrow_upward : Icons.arrow_downward),
+            size: 14,
+            color: active ? Colors.white : Colors.white70,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ordersTable(List<SaleOrder> items) {
+    const headerStyle = TextStyle(
+        color: Colors.white,
+        fontSize: 12.5,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.4);
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Container(
+            color: Theme.of(context).colorScheme.primary,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: _sortHead('Order', 'number', headerStyle),
+                  ),
+                ),
+                SizedBox(
+                    width: 110, child: _sortHead('Date', 'date', headerStyle)),
+                Expanded(
+                  flex: 2,
+                  child: _sortHead('Customer', 'customer', headerStyle),
+                ),
+                const SizedBox(
+                    width: 64, child: Text('Items', style: headerStyle)),
+                Expanded(child: _sortHead('Total', 'total', headerStyle)),
+                const SizedBox(
+                    width: 110, child: Text('Status', style: headerStyle)),
+                const SizedBox(
+                  width: 56,
+                  child: Icon(Icons.more_vert, color: Colors.white, size: 18),
+                ),
+              ],
+            ),
+          ),
+          ...items.asMap().entries.map((e) => _orderRow(e.value, e.key.isEven)),
+        ],
+      ),
+    );
+  }
+
+  Widget _orderRow(SaleOrder order, bool isEven) {
+    final color = _statusColor(order.status);
+    return Container(
+      decoration: BoxDecoration(
+        color: isEven
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
+            : Theme.of(context).colorScheme.surfaceContainer,
+        border: Border(
+          bottom:
+              BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(order.orderNumber,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 14.5, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          SizedBox(
+            width: 110,
+            child: Text(order.date.toLocal().toString().split(' ').first,
+                style: const TextStyle(fontSize: 13)),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(order.customerName,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13)),
+          ),
+          SizedBox(
+            width: 64,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('${order.items.length}',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue[700])),
+              ),
+            ),
+          ),
+          Expanded(
+            child: AppMoney(
+              order.displayTotal,
+              currencySymbol: order.currencySymbol,
+              bold: true,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+          SizedBox(
+            width: 110,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _statusPill(order.status, color),
+            ),
+          ),
+          SizedBox(width: 56, child: _orderMenu(order)),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(String status, Color color) {
+    final label = '${status[0].toUpperCase()}${status.substring(1)}';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+
+  /// Row overflow menu — the exact same actions the list rows always had.
+  Widget _orderMenu(SaleOrder order) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 20),
+      tooltip: 'More actions',
+      padding: EdgeInsets.zero,
+      onSelected: (v) => _act(order, v),
+      itemBuilder: (_) => [
+        if (order.status == 'draft')
+          const PopupMenuItem(value: 'edit', child: Text('Edit')),
+        if (order.status == 'draft')
+          const PopupMenuItem(
+              value: 'confirm', child: Text('Confirm & reserve')),
+        if (order.status == 'confirmed' || order.status == 'partial')
+          const PopupMenuItem(
+              value: 'fulfill', child: Text('Convert to Invoice')),
+        if (order.status != 'fulfilled' && order.status != 'cancelled')
+          const PopupMenuItem(value: 'cancel', child: Text('Cancel')),
+        if (order.status == 'draft' || order.status == 'cancelled')
+          const PopupMenuItem(value: 'delete', child: Text('Delete')),
+      ],
+    );
+  }
+
+  Widget _footer(
+      int start, int end, int total, int pages, int safePage, bool isWide) {
+    final left = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Showing $start–$end of $total',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 16),
+        const Text('Rows per page:', style: TextStyle(fontSize: 13)),
+        const SizedBox(width: 8),
+        DropdownButton<int>(
+          value: _pageSize,
+          underline: const SizedBox(),
+          items: [10, 25, 50]
+              .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
+              .toList(),
+          onChanged: (n) {
+            if (n == null) return;
+            setState(() {
+              _pageSize = n;
+              _page = 0;
+            });
+          },
+        ),
+      ],
+    );
+    final right = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OutlinedButton.icon(
+          onPressed:
+              safePage > 0 ? () => setState(() => _page = safePage - 1) : null,
+          icon: const Icon(Icons.chevron_left, size: 18),
+          label: const Text('Previous'),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+                color: Theme.of(context).primaryColor.withValues(alpha: 0.3)),
+          ),
+          child: Text('Page ${safePage + 1} of ${pages > 0 ? pages : 1}',
+              style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).primaryColor)),
+        ),
+        const SizedBox(width: 12),
+        OutlinedButton.icon(
+          onPressed: (safePage + 1 < pages)
+              ? () => setState(() => _page = safePage + 1)
+              : null,
+          icon: const Icon(Icons.chevron_right, size: 18),
+          label: const Text('Next'),
+        ),
+      ],
+    );
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+      child: isWide
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [left, right])
+          : Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 10,
+              children: [left, right],
+            ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      LayoutBuilder(builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 1000;
+        final useCards = constraints.maxWidth < 700;
+        final counts = _statusCounts;
+        final visible = _visibleOrders;
+        final total = visible.length;
+        final pages = (total / _pageSize).ceil();
+        final safePage = pages == 0 ? 0 : _page.clamp(0, pages - 1);
+        final items = total == 0
+            ? const <SaleOrder>[]
+            : visible.sublist(safePage * _pageSize,
+                (safePage * _pageSize + _pageSize).clamp(0, total));
+        final start = total == 0 ? 0 : safePage * _pageSize + 1;
+        final end = total == 0 ? 0 : safePage * _pageSize + items.length;
+        return Scaffold(
+          appBar: AppBar(title: const Text('Sale Orders'), actions: [
+            FilledButton.icon(
+                onPressed: () => _openForm(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('New Order')),
+            const SizedBox(width: 8),
+            IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+            const SizedBox(width: 8),
+          ]),
+          floatingActionButton: useCards
+              ? FloatingActionButton(
+                  onPressed: () => _openForm(),
+                  tooltip: 'New Order',
+                  child: const Icon(Icons.add),
+                )
+              : null,
+          body: Column(children: [
+            Container(
+              color: Theme.of(context).colorScheme.surfaceContainer,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _header(isWide, total),
+                  const SizedBox(height: 12),
+                  _chips(counts),
+                  const SizedBox(height: 12),
+                  _toolbar(isWide),
+                ],
+              ),
+            ),
+            Expanded(
+                child: _loading
+                    ? const AppLoadingState()
+                    : visible.isEmpty
+                        ? AppEmptyState(
+                            icon: Icons.shopping_bag_outlined,
+                            title: 'No sale orders in this view.',
+                            subtitle: _status == null &&
+                                    _search.trim().isEmpty &&
+                                    _fromDate == null &&
+                                    _toDate == null
+                                ? 'Create your first sale order to get started.'
+                                : 'Try a different search or status filter, or create a new order.',
+                            action: AppPrimaryButton(
+                              onPressed: () => _openForm(),
+                              icon: const Icon(Icons.add),
+                              label: const Text('New Sale Order'),
+                            ),
+                          )
+                        : useCards
+                            ? ListView.separated(
+                                padding: const EdgeInsets.all(16),
+                                itemCount: items.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 8),
+                                itemBuilder: (context, index) =>
+                                    _card(items[index]),
+                              )
+                            : SingleChildScrollView(
+                                padding: const EdgeInsets.all(16),
+                                child: _ordersTable(items),
+                              )),
+            if (!_loading && visible.isNotEmpty)
+              _footer(start, end, total, pages, safePage, isWide),
+          ]),
+        );
+      });
+
+  /// Compact-phone card in the reference style: number + amount + overflow
+  /// menu, party + status pill, then date + item count. Every row action
+  /// stays available in the overflow menu.
+  Widget _card(SaleOrder order) {
+    final color = _statusColor(order.status);
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(order.orderNumber,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14.5, fontWeight: FontWeight.w700)),
+              ),
+              AppMoney(
+                order.displayTotal,
+                currencySymbol: order.currencySymbol,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              _orderMenu(order),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(order.customerName,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 13.5, fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 8),
+              _statusPill(order.status, color),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${order.date.toLocal().toString().split(' ').first} • '
+            '${order.items.length} item(s)',
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
     );
   }
 }

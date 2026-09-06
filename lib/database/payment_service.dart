@@ -1,3 +1,4 @@
+import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:apexbooks/domain/invoice_calculator.dart';
@@ -15,6 +16,16 @@ class PaymentService {
   static final _dbHelper = DatabaseHelper();
   static const _uuid = Uuid();
 
+  /// True when [e] is a UNIQUE failure on the receipt-number index (concurrent
+  /// MAX-suffix reads picked the same next suffix). Callers retry the whole
+  /// transaction so the loser re-reads MAX and takes the next suffix.
+  static bool _isReceiptNumberConflict(Object e) {
+    if (e is! DatabaseException) return false;
+    final msg = e.toString();
+    return msg.contains('UNIQUE constraint failed') &&
+        msg.contains('receipt_number');
+  }
+
   // ─────────────────────────────────────────────
   // Add a payment — all snapshot fields computed inside a transaction.
   // Returns the fully populated InvoicePayment that was persisted.
@@ -28,112 +39,128 @@ class PaymentService {
     DateTime? chequeDate,
     String? accountId,
   }) async {
+    if (!amountPaid.isFinite) {
+      throw ArgumentError('Payment amount must be a finite number');
+    }
     final db = await _dbHelper.database;
-    late InvoicePayment saved;
+    // Retry on receipt-number UNIQUE conflicts: two concurrent txns can read
+    // the same MAX suffix and pick the same next number; the loser re-reads
+    // MAX and takes the next suffix. Bounded so a real bug still surfaces.
+    for (var attempt = 0;; attempt++) {
+      try {
+        late InvoicePayment saved;
 
-    await db.transaction((txn) async {
-      // 1. Snapshot: total already paid before this installment
-      final sumResult = await txn.rawQuery(
-        "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
-        [invoice.id],
-      );
-      final previouslyPaid = (sumResult.first['total'] as num).toDouble();
+        await db.transaction((txn) async {
+          // 1. Snapshot: total already paid before this installment
+          final sumResult = await txn.rawQuery(
+            "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
+            [invoice.id],
+          );
+          final previouslyPaid = (sumResult.first['total'] as num).toDouble();
 
-      // 2. Determine next receipt suffix using MAX to avoid reuse after deletions
-      final suffixResult = await txn.rawQuery(
-        'SELECT receipt_number FROM invoice_payments WHERE invoice_id = ?',
-        [invoice.id],
-      );
-      final receiptNumber = PaymentReceiptNumbers.nextReceiptNumber(
-        invoiceId: invoice.id,
-        existingReceiptNumbers:
-            suffixResult.map((row) => row['receipt_number'] as String?),
-      );
+          // 2. Determine next receipt suffix using MAX to avoid reuse after deletions
+          final suffixResult = await txn.rawQuery(
+            'SELECT receipt_number FROM invoice_payments WHERE invoice_id = ?',
+            [invoice.id],
+          );
+          final receiptNumber = PaymentReceiptNumbers.nextReceiptNumber(
+            invoiceId: invoice.id,
+            existingReceiptNumbers:
+                suffixResult.map((row) => row['receipt_number'] as String?),
+          );
 
-      // 3. Compute tax portion proportionally
-      final taxAmountPaid = invoice.total > 0
-          ? (amountPaid * (invoice.tax / invoice.total))
-          : 0.0;
+          // Payable (rounded when the invoice opts in) is what the customer
+          // owes; the tax split stays proportional to exact figures.
+          final payable = invoice.payableTotal;
+          // 3. Compute tax portion proportionally
+          final taxAmountPaid = invoice.total > 0
+              ? (amountPaid * (invoice.tax / invoice.total))
+              : 0.0;
 
-      // 4. Snapshot: balance remaining after this installment
-      final balanceAfter = InvoiceCalculator.outstanding(
-        total: invoice.total,
-        paid: previouslyPaid + amountPaid,
-      );
+          // 4. Snapshot: balance remaining after this installment
+          final balanceAfter = InvoiceCalculator.outstanding(
+            total: payable,
+            paid: previouslyPaid + amountPaid,
+          );
 
-      if (amountPaid <= InvoiceCalculator.moneyEpsilon ||
-          amountPaid >
-              invoice.total - previouslyPaid + InvoiceCalculator.moneyEpsilon) {
-        throw StateError('Payment must be within the outstanding balance');
-      }
-      final paymentId = _uuid.v4();
-      final isCheque = paymentMethod == 'Check';
-      String? resolvedAccountId;
-      String? chequeId;
-      if (isCheque) {
-        if ((chequeNumber?.trim().isEmpty ?? true) || chequeDate == null) {
-          throw StateError('Cheque number and cheque date are required');
-        }
-        if (accountId != null) {
-          resolvedAccountId = await AccountingService.resolveAccountId(txn,
-              requestedAccountId: accountId,
-              paymentMethod: 'Bank Transfer',
-              currencyCode: invoice.currencyCode,
-              currencySymbol: invoice.currencySymbol);
-        }
-        chequeId = await AccountingService.createCheque(txn,
-            direction: 'received',
-            partyName: invoice.customer.name,
-            amount: amountPaid,
-            chequeNumber: chequeNumber!,
-            chequeDate: chequeDate,
-            sourceType: 'invoice_payment',
-            sourceId: paymentId,
-            currencyCode: invoice.currencyCode,
-            currencySymbol: invoice.currencySymbol,
-            notes: notes ?? '');
-      } else {
-        resolvedAccountId = await AccountingService.resolveAccountId(txn,
-            requestedAccountId: accountId,
+          if (amountPaid <= InvoiceCalculator.moneyEpsilon ||
+              amountPaid >
+                  payable - previouslyPaid + InvoiceCalculator.moneyEpsilon) {
+            throw StateError('Payment must be within the outstanding balance');
+          }
+          final paymentId = _uuid.v4();
+          final isCheque = paymentMethod == 'Check';
+          String? resolvedAccountId;
+          String? chequeId;
+          if (isCheque) {
+            if ((chequeNumber?.trim().isEmpty ?? true) || chequeDate == null) {
+              throw StateError('Cheque number and cheque date are required');
+            }
+            if (accountId != null) {
+              resolvedAccountId = await AccountingService.resolveAccountId(txn,
+                  requestedAccountId: accountId,
+                  paymentMethod: 'Bank Transfer',
+                  currencyCode: invoice.currencyCode,
+                  currencySymbol: invoice.currencySymbol);
+            }
+            chequeId = await AccountingService.createCheque(txn,
+                direction: 'received',
+                partyName: invoice.customer.name,
+                amount: amountPaid,
+                chequeNumber: chequeNumber!,
+                chequeDate: chequeDate,
+                sourceType: 'invoice_payment',
+                sourceId: paymentId,
+                currencyCode: invoice.currencyCode,
+                currencySymbol: invoice.currencySymbol,
+                notes: notes ?? '');
+          } else {
+            resolvedAccountId = await AccountingService.resolveAccountId(txn,
+                requestedAccountId: accountId,
+                paymentMethod: paymentMethod,
+                currencyCode: invoice.currencyCode,
+                currencySymbol: invoice.currencySymbol);
+            await AccountingService.insertMovement(txn,
+                accountId: resolvedAccountId,
+                kind: 'customer_receipt',
+                amount: amountPaid,
+                date: datePaid,
+                sourceType: 'invoice_payment',
+                sourceId: paymentId,
+                reference: receiptNumber,
+                notes: notes ?? '');
+          }
+
+          saved = InvoicePayment(
+            id: paymentId,
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber ?? invoice.id,
+            receiptNumber: receiptNumber,
+            amountPaid: amountPaid,
+            taxAmountPaid: taxAmountPaid,
+            previouslyPaid: previouslyPaid,
+            balanceAfter: balanceAfter,
+            datePaid: datePaid,
             paymentMethod: paymentMethod,
-            currencyCode: invoice.currencyCode,
-            currencySymbol: invoice.currencySymbol);
-        await AccountingService.insertMovement(txn,
+            notes: notes,
+            chequeNumber: chequeNumber,
+            chequeDate: chequeDate,
+            chequeCleared: false,
             accountId: resolvedAccountId,
-            kind: 'customer_receipt',
-            amount: amountPaid,
-            date: datePaid,
-            sourceType: 'invoice_payment',
-            sourceId: paymentId,
-            reference: receiptNumber,
-            notes: notes ?? '');
+            chequeId: chequeId,
+            chequeStatus: isCheque ? 'pending' : 'none',
+          );
+
+          await txn.insert('invoice_payments', saved.toMap());
+          AppLogger.d(
+              _tag, 'Payment added: ${saved.receiptNumber} — ₹$amountPaid');
+        });
+
+        return saved;
+      } on DatabaseException catch (e) {
+        if (attempt >= 4 || !_isReceiptNumberConflict(e)) rethrow;
       }
-
-      saved = InvoicePayment(
-        id: paymentId,
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber ?? invoice.id,
-        receiptNumber: receiptNumber,
-        amountPaid: amountPaid,
-        taxAmountPaid: taxAmountPaid,
-        previouslyPaid: previouslyPaid,
-        balanceAfter: balanceAfter,
-        datePaid: datePaid,
-        paymentMethod: paymentMethod,
-        notes: notes,
-        chequeNumber: chequeNumber,
-        chequeDate: chequeDate,
-        chequeCleared: false,
-        accountId: resolvedAccountId,
-        chequeId: chequeId,
-        chequeStatus: isCheque ? 'pending' : 'none',
-      );
-
-      await txn.insert('invoice_payments', saved.toMap());
-      AppLogger.d(_tag, 'Payment added: ${saved.receiptNumber} — ₹$amountPaid');
-    });
-
-    return saved;
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -150,66 +177,73 @@ class PaymentService {
       throw StateError('Record cheque payments individually');
     }
     final db = await _dbHelper.database;
-    int count = 0;
-    await db.transaction((txn) async {
-      for (final invoice in invoices) {
-        final paidResult = await txn.rawQuery(
-          "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
-          [invoice.id],
-        );
-        final previouslyPaid = (paidResult.first['total'] as num).toDouble();
-        final amountPaid = InvoiceCalculator.outstanding(
-            total: invoice.total, paid: previouslyPaid);
-        if (amountPaid <= InvoiceCalculator.moneyEpsilon) continue;
+    for (var attempt = 0;; attempt++) {
+      try {
+        int count = 0;
+        await db.transaction((txn) async {
+          for (final invoice in invoices) {
+            final paidResult = await txn.rawQuery(
+              "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
+              [invoice.id],
+            );
+            final previouslyPaid =
+                (paidResult.first['total'] as num).toDouble();
+            final amountPaid = InvoiceCalculator.outstanding(
+                total: invoice.payableTotal, paid: previouslyPaid);
+            if (amountPaid <= InvoiceCalculator.moneyEpsilon) continue;
 
-        final suffixResult = await txn.rawQuery(
-          'SELECT receipt_number FROM invoice_payments WHERE invoice_id = ?',
-          [invoice.id],
-        );
-        final receiptNumber = PaymentReceiptNumbers.nextReceiptNumber(
-          invoiceId: invoice.id,
-          existingReceiptNumbers:
-              suffixResult.map((row) => row['receipt_number'] as String?),
-        );
+            final suffixResult = await txn.rawQuery(
+              'SELECT receipt_number FROM invoice_payments WHERE invoice_id = ?',
+              [invoice.id],
+            );
+            final receiptNumber = PaymentReceiptNumbers.nextReceiptNumber(
+              invoiceId: invoice.id,
+              existingReceiptNumbers:
+                  suffixResult.map((row) => row['receipt_number'] as String?),
+            );
 
-        final taxAmountPaid = invoice.total > 0
-            ? (amountPaid * (invoice.tax / invoice.total))
-            : 0.0;
+            final taxAmountPaid = invoice.total > 0
+                ? (amountPaid * (invoice.tax / invoice.total))
+                : 0.0;
 
-        final payment = InvoicePayment(
-          id: _uuid.v4(),
-          invoiceId: invoice.id,
-          invoiceNumber: invoice.invoiceNumber ?? invoice.id,
-          receiptNumber: receiptNumber,
-          amountPaid: amountPaid,
-          taxAmountPaid: taxAmountPaid,
-          previouslyPaid: previouslyPaid,
-          balanceAfter: 0.0,
-          datePaid: datePaid,
-          paymentMethod: paymentMethod,
-          notes: notes,
-          accountId: await AccountingService.resolveAccountId(txn,
-              requestedAccountId: accountId,
+            final payment = InvoicePayment(
+              id: _uuid.v4(),
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.invoiceNumber ?? invoice.id,
+              receiptNumber: receiptNumber,
+              amountPaid: amountPaid,
+              taxAmountPaid: taxAmountPaid,
+              previouslyPaid: previouslyPaid,
+              balanceAfter: 0.0,
+              datePaid: datePaid,
               paymentMethod: paymentMethod,
-              currencyCode: invoice.currencyCode,
-              currencySymbol: invoice.currencySymbol),
-        );
+              notes: notes,
+              accountId: await AccountingService.resolveAccountId(txn,
+                  requestedAccountId: accountId,
+                  paymentMethod: paymentMethod,
+                  currencyCode: invoice.currencyCode,
+                  currencySymbol: invoice.currencySymbol),
+            );
 
-        await txn.insert('invoice_payments', payment.toMap());
-        await AccountingService.insertMovement(txn,
-            accountId: payment.accountId!,
-            kind: 'customer_receipt',
-            amount: amountPaid,
-            date: datePaid,
-            sourceType: 'invoice_payment',
-            sourceId: payment.id,
-            reference: receiptNumber,
-            notes: notes ?? '');
-        count++;
+            await txn.insert('invoice_payments', payment.toMap());
+            await AccountingService.insertMovement(txn,
+                accountId: payment.accountId!,
+                kind: 'customer_receipt',
+                amount: amountPaid,
+                date: datePaid,
+                sourceType: 'invoice_payment',
+                sourceId: payment.id,
+                reference: receiptNumber,
+                notes: notes ?? '');
+            count++;
+          }
+        });
+        AppLogger.d(_tag, 'Batch payment: $count invoice(s) marked as paid.');
+        return count;
+      } on DatabaseException catch (e) {
+        if (attempt >= 4 || !_isReceiptNumberConflict(e)) rethrow;
       }
-    });
-    AppLogger.d(_tag, 'Batch payment: $count invoice(s) marked as paid.');
-    return count;
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -229,77 +263,87 @@ class PaymentService {
       throw StateError('Record cheque payments individually');
     }
     final db = await _dbHelper.database;
-    final saved = <InvoicePayment>[];
-    await db.transaction((txn) async {
-      for (final a in allocations) {
-        final invoice = a.invoice;
-        final amountPaid = a.amount;
-        if (amountPaid <= InvoiceCalculator.moneyEpsilon) continue;
+    for (var attempt = 0;; attempt++) {
+      try {
+        final saved = <InvoicePayment>[];
+        await db.transaction((txn) async {
+          for (final a in allocations) {
+            final invoice = a.invoice;
+            final amountPaid = a.amount;
+            if (!amountPaid.isFinite) {
+              throw ArgumentError('Payment amount must be a finite number');
+            }
+            if (amountPaid <= InvoiceCalculator.moneyEpsilon) continue;
 
-        final sumResult = await txn.rawQuery(
-          "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
-          [invoice.id],
-        );
-        final previouslyPaid = (sumResult.first['total'] as num).toDouble();
-        final outstanding = InvoiceCalculator.outstanding(
-            total: invoice.total, paid: previouslyPaid);
-        if (amountPaid > outstanding + InvoiceCalculator.moneyEpsilon) {
-          throw StateError('Payment must be within the outstanding balance');
-        }
+            final sumResult = await txn.rawQuery(
+              "SELECT COALESCE(SUM(amount_paid), 0.0) AS total FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
+              [invoice.id],
+            );
+            final previouslyPaid = (sumResult.first['total'] as num).toDouble();
+            final outstanding = InvoiceCalculator.outstanding(
+                total: invoice.payableTotal, paid: previouslyPaid);
+            if (amountPaid > outstanding + InvoiceCalculator.moneyEpsilon) {
+              throw StateError(
+                  'Payment must be within the outstanding balance');
+            }
 
-        final suffixResult = await txn.rawQuery(
-          'SELECT receipt_number FROM invoice_payments WHERE invoice_id = ?',
-          [invoice.id],
-        );
-        final receiptNumber = PaymentReceiptNumbers.nextReceiptNumber(
-          invoiceId: invoice.id,
-          existingReceiptNumbers:
-              suffixResult.map((row) => row['receipt_number'] as String?),
-        );
+            final suffixResult = await txn.rawQuery(
+              'SELECT receipt_number FROM invoice_payments WHERE invoice_id = ?',
+              [invoice.id],
+            );
+            final receiptNumber = PaymentReceiptNumbers.nextReceiptNumber(
+              invoiceId: invoice.id,
+              existingReceiptNumbers:
+                  suffixResult.map((row) => row['receipt_number'] as String?),
+            );
 
-        final taxAmountPaid = invoice.total > 0
-            ? (amountPaid * (invoice.tax / invoice.total))
-            : 0.0;
+            final taxAmountPaid = invoice.total > 0
+                ? (amountPaid * (invoice.tax / invoice.total))
+                : 0.0;
 
-        final balanceAfter = InvoiceCalculator.outstanding(
-          total: invoice.total,
-          paid: previouslyPaid + amountPaid,
-        );
+            final balanceAfter = InvoiceCalculator.outstanding(
+              total: invoice.payableTotal,
+              paid: previouslyPaid + amountPaid,
+            );
 
-        final payment = InvoicePayment(
-          id: _uuid.v4(),
-          invoiceId: invoice.id,
-          invoiceNumber: invoice.invoiceNumber ?? invoice.id,
-          receiptNumber: receiptNumber,
-          amountPaid: amountPaid,
-          taxAmountPaid: taxAmountPaid,
-          previouslyPaid: previouslyPaid,
-          balanceAfter: balanceAfter,
-          datePaid: datePaid,
-          paymentMethod: paymentMethod,
-          notes: notes,
-          accountId: await AccountingService.resolveAccountId(txn,
-              requestedAccountId: accountId,
+            final payment = InvoicePayment(
+              id: _uuid.v4(),
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.invoiceNumber ?? invoice.id,
+              receiptNumber: receiptNumber,
+              amountPaid: amountPaid,
+              taxAmountPaid: taxAmountPaid,
+              previouslyPaid: previouslyPaid,
+              balanceAfter: balanceAfter,
+              datePaid: datePaid,
               paymentMethod: paymentMethod,
-              currencyCode: invoice.currencyCode,
-              currencySymbol: invoice.currencySymbol),
-        );
+              notes: notes,
+              accountId: await AccountingService.resolveAccountId(txn,
+                  requestedAccountId: accountId,
+                  paymentMethod: paymentMethod,
+                  currencyCode: invoice.currencyCode,
+                  currencySymbol: invoice.currencySymbol),
+            );
 
-        await txn.insert('invoice_payments', payment.toMap());
-        await AccountingService.insertMovement(txn,
-            accountId: payment.accountId!,
-            kind: 'customer_receipt',
-            amount: amountPaid,
-            date: datePaid,
-            sourceType: 'invoice_payment',
-            sourceId: payment.id,
-            reference: receiptNumber,
-            notes: notes ?? '');
-        saved.add(payment);
+            await txn.insert('invoice_payments', payment.toMap());
+            await AccountingService.insertMovement(txn,
+                accountId: payment.accountId!,
+                kind: 'customer_receipt',
+                amount: amountPaid,
+                date: datePaid,
+                sourceType: 'invoice_payment',
+                sourceId: payment.id,
+                reference: receiptNumber,
+                notes: notes ?? '');
+            saved.add(payment);
+          }
+        });
+        AppLogger.d(_tag, 'Applied payment across ${saved.length} invoice(s).');
+        return saved;
+      } on DatabaseException catch (e) {
+        if (attempt >= 4 || !_isReceiptNumberConflict(e)) rethrow;
       }
-    });
-    AppLogger.d(_tag, 'Applied payment across ${saved.length} invoice(s).');
-    return saved;
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -351,44 +395,68 @@ class PaymentService {
   // ─────────────────────────────────────────────
   // Delete a single payment (admin action). The cash/bank effect is reversed
   // first, so removing a receipt can never leave the account register stale.
+  // Single transaction throughout (mirrors PurchaseBillService.deletePayment):
+  // a crash between the reversal and the row delete can no longer orphan
+  // cash movements. Bounced/cancelled cheques are terminal in the state
+  // machine, so their delete skips the cheque transition (safe no-op) and
+  // only reverses the cash leg once + deletes the row.
   static Future<void> deletePayment(String paymentId) async {
     final db = await _dbHelper.database;
-    final rows = await db.query('invoice_payments',
-        columns: ['cheque_id', 'cheque_status'],
-        where: 'id = ?',
-        whereArgs: [paymentId],
-        limit: 1);
-    if (rows.isEmpty) return;
-    final chequeId = rows.first['cheque_id'] as String?;
-    if (chequeId != null && chequeId.isNotEmpty) {
-      final wasCleared = rows.first['cheque_status'] == 'cleared';
-      await AccountingService.transitionCheque(
-          chequeId: chequeId,
-          status: wasCleared ? 'bounced' : 'cancelled',
-          notes: 'Payment removed by administrator');
-    } else {
-      await AccountingService.reverseSource(
-          sourceType: 'invoice_payment',
-          sourceId: paymentId,
-          reason: 'Payment removed by administrator');
-    }
-    await db
-        .delete('invoice_payments', where: 'id = ?', whereArgs: [paymentId]);
+    await db.transaction((txn) async {
+      final rows = await txn.query('invoice_payments',
+          columns: ['cheque_id', 'cheque_status'],
+          where: 'id = ?',
+          whereArgs: [paymentId],
+          limit: 1);
+      if (rows.isEmpty) return;
+      final chequeId = rows.first['cheque_id'] as String?;
+      final chequeStatus = (rows.first['cheque_status'] as String?) ?? 'none';
+      if (chequeId != null && chequeId.isNotEmpty) {
+        if (chequeStatus == 'bounced' || chequeStatus == 'cancelled') {
+          await AccountingService.reverseSourceInTransaction(txn,
+              sourceType: 'invoice_payment',
+              sourceId: paymentId,
+              reason: 'Payment removed by administrator');
+        } else {
+          await AccountingService.cancelChequeInTransaction(txn, chequeId,
+              reason: 'Payment removed by administrator');
+          // Legacy cleared cheques posted a customer_receipt under
+          // invoice_payment (not a cheque movement); reversing it here nets
+          // cash exactly once (no-op for new cheque rows that post none).
+          await AccountingService.reverseSourceInTransaction(txn,
+              sourceType: 'invoice_payment',
+              sourceId: paymentId,
+              reason: 'Payment removed by administrator');
+        }
+      } else {
+        await AccountingService.reverseSourceInTransaction(txn,
+            sourceType: 'invoice_payment',
+            sourceId: paymentId,
+            reason: 'Payment removed by administrator');
+      }
+      await txn
+          .delete('invoice_payments', where: 'id = ?', whereArgs: [paymentId]);
+    });
     AppLogger.d(_tag, 'Payment deleted: $paymentId');
   }
 
   // ─────────────────────────────────────────────
-  // Reporting: all payments in a date range
+  // Reporting: all payments in a date range. Inclusive day bounds via
+  // substr(date, 1, 10): invoice_payments mixes date-only rows (PaymentService)
+  // and full-ISO rows (Vyapar import), so a plain dateKey upper bound drops
+  // same-day ISO rows while a plain dateKeyStart lower bound drops date-only
+  // rows. Comparing the 10-char date part is the Start/End day-range
+  // equivalent that covers both formats.
   static Future<List<InvoicePayment>> getAllPaymentsBetween(
       DateTime from, DateTime to) async {
     final db = await _dbHelper.database;
     final rows = await db.query(
       'invoice_payments',
       where:
-          "date_paid >= ? AND date_paid <= ? AND cheque_status NOT IN ('bounced', 'cancelled')",
+          "substr(date_paid, 1, 10) >= substr(?, 1, 10) AND substr(date_paid, 1, 10) <= substr(?, 1, 10) AND cheque_status NOT IN ('bounced', 'cancelled')",
       whereArgs: [
-        AppDate.dateKey(from),
-        AppDate.dateKey(to),
+        AppDate.dateKeyStart(from),
+        AppDate.dateKeyEnd(to),
       ],
       orderBy: 'date_paid ASC',
     );
@@ -401,10 +469,10 @@ class PaymentService {
     final result = await db.rawQuery(
       'SELECT COALESCE(SUM(tax_amount_paid), 0.0) AS total '
       'FROM invoice_payments '
-      "WHERE date_paid >= ? AND date_paid <= ? AND cheque_status NOT IN ('bounced', 'cancelled')",
+      "WHERE substr(date_paid, 1, 10) >= substr(?, 1, 10) AND substr(date_paid, 1, 10) <= substr(?, 1, 10) AND cheque_status NOT IN ('bounced', 'cancelled')",
       [
-        AppDate.dateKey(from),
-        AppDate.dateKey(to),
+        AppDate.dateKeyStart(from),
+        AppDate.dateKeyEnd(to),
       ],
     );
     return (result.first['total'] as num).toDouble();

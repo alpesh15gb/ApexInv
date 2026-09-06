@@ -18,7 +18,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 51;
+  final dbVersion = 54;
 
   /// Emits when the sync engine finishes applying pulled remote rows, so the
   /// UI layer can refresh its lists. Write-side signaling needs no stream:
@@ -158,7 +158,8 @@ class DatabaseHelper {
         recurring_frequency TEXT,
         recurring_next_date TEXT,
         sales_channel TEXT DEFAULT 'invoice',
-        source_order_id TEXT
+        source_order_id TEXT,
+        round_off INTEGER DEFAULT 0
       )
     ''');
 
@@ -279,6 +280,16 @@ class DatabaseHelper {
         'CREATE INDEX idx_payments_invoice ON invoice_payments(invoice_id)');
     await db.execute(
         'CREATE INDEX idx_payments_date ON invoice_payments(date_paid)');
+    // B3: UNIQUE guard so concurrent MAX-suffix reads cannot commit duplicate
+    // receipt numbers; losers retry with the next suffix (see PaymentService).
+    await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_receipt_unique ON invoice_payments(receipt_number)');
+    // E5: UNIQUE guard for the display invoice_number so concurrent MAX+1
+    // reads cannot commit duplicates; losers retry with the next number
+    // (see InvoiceService.insertInvoice). Partial index — legacy NULLs stay
+    // allowed.
+    await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_number_unique ON invoices(invoice_number) WHERE invoice_number IS NOT NULL');
 
     // Insert dummy company info
     await db.insert('company_info', {
@@ -785,8 +796,25 @@ class DatabaseHelper {
     final expenses = await db.query('expenses');
     for (final row in expenses) {
       final method = row['payment_method'] as String? ?? 'Cash';
+      // Only default to INR when the expense has no account; otherwise reuse
+      // the linked account's currency so foreign-currency expenses keep
+      // their register.
+      var code = 'INR';
+      var symbol = '₹';
+      final existingAccountId = row['account_id'] as String?;
+      if (existingAccountId != null && existingAccountId.isNotEmpty) {
+        final accRows = await db.query('financial_accounts',
+            columns: ['currency_code', 'currency_symbol'],
+            where: 'id = ?',
+            whereArgs: [existingAccountId],
+            limit: 1);
+        if (accRows.isNotEmpty) {
+          code = accRows.first['currency_code'] as String? ?? 'INR';
+          symbol = accRows.first['currency_symbol'] as String? ?? '₹';
+        }
+      }
       final accountId =
-          await ensureAccount(method == 'Cash' ? 'cash' : 'bank', 'INR', '₹');
+          await ensureAccount(method == 'Cash' ? 'cash' : 'bank', code, symbol);
       await db.update('expenses', {'account_id': accountId},
           where: 'id = ?', whereArgs: [row['id']]);
       await db.insert(
@@ -1707,6 +1735,126 @@ class DatabaseHelper {
             'ALTER TABLE $table ADD COLUMN price_includes_tax INTEGER DEFAULT 0',
           );
         }
+      });
+    }
+    if (oldVersion < 52) {
+      // Per-invoice round-off flag. Existing rows default to off (0), so
+      // every stored total keeps its exact figure; only newly enabled
+      // invoices round their payable total.
+      await _runMigrationStep(db, 52, 'add_round_off_to_invoices', () async {
+        final cols = await db.rawQuery('PRAGMA table_info(invoices)');
+        if (cols.any((c) => c['name'] == 'round_off')) return;
+        await db.execute(
+          'ALTER TABLE invoices ADD COLUMN round_off INTEGER DEFAULT 0',
+        );
+      });
+    }
+    if (oldVersion < 53) {
+      // B3: prevent duplicate receipt numbers from concurrent MAX-suffix
+      // reads. Deduplicate legacy rows first (keep earliest, suffix the rest
+      // with a short id fragment so every value is unique), then enforce
+      // UNIQUE(receipt_number) for all future writes.
+      await _runMigrationStep(db, 53, 'deduplicate_receipt_numbers', () async {
+        final tables = await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='invoice_payments'");
+        if (tables.isEmpty) return;
+        final taken = <String>{};
+        for (final r in await db.query('invoice_payments',
+            columns: ['receipt_number'], where: 'receipt_number IS NOT NULL')) {
+          final n = r['receipt_number'] as String?;
+          if (n != null) taken.add(n);
+        }
+        final dupGroups = await db.rawQuery(
+            'SELECT receipt_number FROM invoice_payments GROUP BY receipt_number HAVING COUNT(*) > 1');
+        for (final g in dupGroups) {
+          final receipt = g['receipt_number'] as String?;
+          if (receipt == null || receipt.isEmpty) continue;
+          final rows = await db.query('invoice_payments',
+              columns: ['id'],
+              where: 'receipt_number = ?',
+              whereArgs: [receipt],
+              orderBy: 'rowid ASC');
+          for (var i = 1; i < rows.length; i++) {
+            final id = rows[i]['id'] as String;
+            final cleaned = id.replaceAll('-', '');
+            final frag =
+                cleaned.length >= 8 ? cleaned.substring(0, 8) : cleaned;
+            var candidate = '$receipt-dup-$frag';
+            var n = 2;
+            while (!taken.add(candidate)) {
+              candidate = '$receipt-dup-$frag-$n';
+              n++;
+            }
+            await db.update('invoice_payments', {'receipt_number': candidate},
+                where: 'id = ?', whereArgs: [id]);
+          }
+        }
+      });
+      await _runMigrationStep(db, 53, 'add_unique_receipt_index', () async {
+        await db.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_receipt_unique ON invoice_payments(receipt_number)');
+      });
+    }
+    if (oldVersion < 54) {
+      // E5: prevent duplicate display numbers from concurrent MAX+1 reads
+      // (generateNextInvoiceNumber) and preview-then-save TOCTOU. Deduplicate
+      // legacy rows first (keep earliest rowid, bump the rest to the next
+      // free padded number), then enforce a partial UNIQUE index. NULL
+      // invoice_numbers (pre-migration legacy) stay allowed.
+      await _runMigrationStep(db, 54, 'deduplicate_invoice_numbers', () async {
+        final tables = await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='invoices'");
+        if (tables.isEmpty) return;
+        // All taken numbers up front: the old code guessed MAX(t digits)+1
+        // per row, which collides with existing rows when numbering schemes
+        // mix (prefixes, slashes, bare numbers) and bricks startup on retry.
+        final taken = <String>{};
+        var maxNumeric = 0;
+        for (final r in await db.query('invoices',
+            columns: ['invoice_number'], where: 'invoice_number IS NOT NULL')) {
+          final n = r['invoice_number'] as String?;
+          if (n == null) continue;
+          taken.add(n);
+          final digits = int.tryParse(n.replaceAll(RegExp(r'\D'), ''));
+          if (digits != null && digits > maxNumeric) maxNumeric = digits;
+        }
+        var next = maxNumeric + 1;
+        String claimNumber() {
+          while (true) {
+            final candidate = next.toString().padLeft(8, '0');
+            next++;
+            if (taken.add(candidate)) return candidate;
+          }
+        }
+
+        final dupGroups = await db.rawQuery(
+            'SELECT invoice_number FROM invoices WHERE invoice_number IS NOT NULL GROUP BY invoice_number HAVING COUNT(*) > 1');
+        for (final g in dupGroups) {
+          final number = g['invoice_number'] as String?;
+          if (number == null || number.isEmpty) continue;
+          final rows = await db.query('invoices',
+              columns: ['id'],
+              where: 'invoice_number = ?',
+              whereArgs: [number],
+              orderBy: 'rowid ASC');
+          for (var i = 1; i < rows.length; i++) {
+            final id = rows[i]['id'] as String;
+            await db.update('invoices', {'invoice_number': claimNumber()},
+                where: 'id = ?', whereArgs: [id]);
+          }
+        }
+        // Never proceed to the UNIQUE index with dupes still present.
+        final remaining = await db.rawQuery(
+            'SELECT invoice_number FROM invoices WHERE invoice_number IS NOT NULL GROUP BY invoice_number HAVING COUNT(*) > 1 LIMIT 1');
+        if (remaining.isNotEmpty) {
+          throw StateError(
+              'deduplicate_invoice_numbers: unresolved duplicate ${remaining.first['invoice_number']}');
+        }
+      });
+      await _runMigrationStep(db, 54, 'add_unique_invoice_number_index',
+          () async {
+        await db.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_number_unique ON invoices(invoice_number) WHERE invoice_number IS NOT NULL');
       });
     }
   }

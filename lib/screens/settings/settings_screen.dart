@@ -141,8 +141,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.add_circle_outline,
-                  size: 64, color: Colors.blueGrey),
+              Icon(Icons.add_circle_outline,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
               AppSpacing.hMedium,
               Text(
                   AppLocalizations.of(context)!

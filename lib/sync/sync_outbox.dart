@@ -22,9 +22,12 @@ class SyncOutbox {
   /// Collapsed pending ops in insertion order (parents precede children —
   /// outbox rows are captured in commit order, and [syncTableOrder] keeps
   /// baseline/pull ordering deterministic).
+  /// Each entry carries its snapshot [OutboxEntry.seq] (the outbox seq at
+  /// capture time) so [markPushed] can mark only rows that were actually
+  /// sent — rows written during the push (higher seq) stay pending.
   Future<List<OutboxEntry>> pendingCoalesced({int limit = 500}) async {
     final rows = await db.rawQuery('''
-      SELECT o.table_name, o.row_pk, o.op, o.changed_at
+      SELECT o.table_name, o.row_pk, o.op, o.changed_at, o.seq
       FROM _sync_outbox o
       JOIN (
         SELECT table_name, row_pk, MAX(seq) AS max_seq
@@ -45,6 +48,7 @@ class SyncOutbox {
               rowPk: r['row_pk'] as String,
               op: r['op'] as String,
               changedAt: DateTime.parse(r['changed_at'] as String),
+              seq: (r['seq'] as int?) ?? 0,
             ))
         .toList();
   }
@@ -63,8 +67,8 @@ class SyncOutbox {
       rows = await db.query(table,
           where: 'id = ?', whereArgs: [int.tryParse(rowPk) ?? -1], limit: 1);
     } else {
-      rows = await db.query(table,
-          where: '$pk = ?', whereArgs: [rowPk], limit: 1);
+      rows =
+          await db.query(table, where: '$pk = ?', whereArgs: [rowPk], limit: 1);
     }
     if (rows.isEmpty) return null;
     final row = Map<String, dynamic>.from(rows.first);
@@ -72,17 +76,20 @@ class SyncOutbox {
     return row;
   }
 
-  /// Marks all ops for the given (table, pk) pairs as pushed, inside the
-  /// caller's transaction. Rows are retained for 7 days of diagnostics
-  /// (pruned by [prunePushed]).
+  /// Marks only the snapshot's ops as pushed, inside the caller's
+  /// transaction. The `seq <= ?` guard keeps rows written during the push
+  /// (higher seq, never sent) pending — without it a seconds-long push
+  /// would sweep concurrent edits into "pushed" and lose them.
+  /// Rows are retained for 7 days of diagnostics (pruned by [prunePushed]).
   Future<void> markPushed(DatabaseExecutor txn, List<OutboxEntry> entries,
       String pushedAtIso) async {
     for (final e in entries) {
       await txn.update(
         '_sync_outbox',
         {'pushed_at': pushedAtIso},
-        where: 'table_name = ? AND row_pk = ? AND pushed_at IS NULL',
-        whereArgs: [e.tableName, e.rowPk],
+        where:
+            'table_name = ? AND row_pk = ? AND pushed_at IS NULL AND seq <= ?',
+        whereArgs: [e.tableName, e.rowPk, e.seq],
       );
     }
   }
@@ -103,10 +110,17 @@ class OutboxEntry {
   final String op;
   final DateTime changedAt;
 
+  /// Outbox seq captured in the push snapshot ([pendingCoalesced]).
+  /// Entries constructed by hand (tests) default to a very large seq so
+  /// [markPushed] keeps its historical "mark all pending for this row"
+  /// behaviour unless a snapshot seq is supplied.
+  final int seq;
+
   const OutboxEntry({
     required this.tableName,
     required this.rowPk,
     required this.op,
     required this.changedAt,
+    this.seq = 1 << 62,
   });
 }

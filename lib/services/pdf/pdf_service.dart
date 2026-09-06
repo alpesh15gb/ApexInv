@@ -219,6 +219,10 @@ class PDFService {
     // Interstate supply → one IGST line; else the CGST/SGST 50/50 split.
     final showIgst = gstSplitOn && invoice.isInterState;
     final effectiveShowCgstSgst = gstSplitOn && !invoice.isInterState;
+    // Invoices that round their payable show the Round Off row; the global
+    // toggle alone must never fabricate rounding on exact docs (phantom
+    // paise). Rounded docs always show even when the global setting is off.
+    final effectiveShowRoundOff = invoice.roundOffEnabled;
 
     String? effectiveUpiId = invoice.upiId;
     if (effectiveUpiId == null || effectiveUpiId.trim().isEmpty) {
@@ -285,7 +289,7 @@ class PDFService {
           watermarkOpacity: s.watermarkOpacity,
           showCgstSgst: effectiveShowCgstSgst,
           showIgst: showIgst,
-          showRoundOff: s.showRoundOff,
+          showRoundOff: effectiveShowRoundOff,
           showLeadingZeros: s.showLeadingZeros,
           showPhone: s.showPhone,
           showEmail: s.showEmail,
@@ -337,7 +341,7 @@ class PDFService {
           watermarkOpacity: s.watermarkOpacity,
           showCgstSgst: effectiveShowCgstSgst,
           showIgst: showIgst,
-          showRoundOff: s.showRoundOff,
+          showRoundOff: effectiveShowRoundOff,
           showLeadingZeros: s.showLeadingZeros,
           showPhone: s.showPhone,
           showEmail: s.showEmail,
@@ -389,7 +393,7 @@ class PDFService {
           watermarkOpacity: s.watermarkOpacity,
           showCgstSgst: effectiveShowCgstSgst,
           showIgst: showIgst,
-          showRoundOff: s.showRoundOff,
+          showRoundOff: effectiveShowRoundOff,
           showLeadingZeros: s.showLeadingZeros,
           showPhone: s.showPhone,
           showEmail: s.showEmail,
@@ -441,7 +445,7 @@ class PDFService {
           watermarkOpacity: s.watermarkOpacity,
           showCgstSgst: effectiveShowCgstSgst,
           showIgst: showIgst,
-          showRoundOff: s.showRoundOff,
+          showRoundOff: effectiveShowRoundOff,
           showLeadingZeros: s.showLeadingZeros,
           showPhone: s.showPhone,
           showEmail: s.showEmail,
@@ -492,7 +496,7 @@ class PDFService {
           watermarkOpacity: s.watermarkOpacity,
           showCgstSgst: effectiveShowCgstSgst,
           showIgst: showIgst,
-          showRoundOff: s.showRoundOff,
+          showRoundOff: effectiveShowRoundOff,
           showLeadingZeros: s.showLeadingZeros,
           showPhone: s.showPhone,
           showCompanyName: s.showCompanyName,
@@ -526,7 +530,7 @@ class PDFService {
           pageSize: s.pageSize,
           pdfTheme: pdfTheme,
           itemLayout: s.thermalItemLayout,
-          showRoundOff: s.showRoundOff,
+          showRoundOff: effectiveShowRoundOff,
           showLeadingZeros: s.showLeadingZeros,
           showPhone: s.showPhone,
           showCompanyName: s.showCompanyName,
@@ -574,7 +578,7 @@ class PDFService {
           watermarkOpacity: s.watermarkOpacity,
           showCgstSgst: effectiveShowCgstSgst,
           showIgst: showIgst,
-          showRoundOff: s.showRoundOff,
+          showRoundOff: effectiveShowRoundOff,
           showLeadingZeros: s.showLeadingZeros,
           showPhone: s.showPhone,
           showCompanyName: s.showCompanyName,

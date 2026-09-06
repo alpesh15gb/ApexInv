@@ -69,6 +69,7 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
     final confirmed = await _showConfirmDialog(
       l10n.backupRestoreConfirmTitle,
       l10n.backupRestoreConfirmBody,
+      danger: true,
     );
 
     if (!confirmed) return;
@@ -263,6 +264,13 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
                       ? AppEmptyState(
                           icon: Icons.backup_outlined,
                           title: l10n.backupNoBackupsFoundMessage,
+                          subtitle:
+                              'Create your first backup to protect this workspace. You can restore it any time from here.',
+                          action: AppPrimaryButton(
+                            onPressed: () => _createBackup(BackupType.database),
+                            icon: const Icon(Icons.backup),
+                            label: Text(l10n.backupCreateDbButton),
+                          ),
                         )
                       : Center(
                           child: ConstrainedBox(
@@ -396,13 +404,15 @@ class _BackupManagementScreenState extends State<BackupManagementScreen> {
         ));
   }
 
-  Future<bool> _showConfirmDialog(String title, String message) async {
+  Future<bool> _showConfirmDialog(String title, String message,
+      {bool danger = false}) async {
     final l10n = AppLocalizations.of(context)!;
     return AppConfirmDialog.show(
       context,
       title: title,
       message: message,
       confirmLabel: l10n.actionConfirm,
+      danger: danger,
     );
   }
 

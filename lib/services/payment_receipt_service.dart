@@ -245,7 +245,8 @@ class PaymentReceiptService {
           ),
           child: pw.Column(
             children: [
-              _summaryRow('Invoice Total', '$sym ${_fmt(invoice.total)}'),
+              _summaryRow(
+                  'Invoice Total', '$sym ${_fmt(invoice.payableTotal)}'),
               _summaryRow(
                   'Previously Paid', '$sym ${_fmt(payment.previouslyPaid)}'),
               _summaryRow('This Payment', '$sym ${_fmt(payment.amountPaid)}',

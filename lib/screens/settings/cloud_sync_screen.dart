@@ -302,19 +302,53 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
                   style: theme.textTheme.bodyMedium
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
+                const SizedBox(height: 12),
+                Text(
+                  'How it works: 1 — Sign in, 2 — Link this device, 3 — Stay synced.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 24),
-                if (linked)
+                if (linked) ...[
+                  Text('Step 3 — Linked and syncing',
+                      style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(
+                    'This device is linked. New changes sync automatically — use Sync now to push them immediately.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
                   _StatusCard(
                     status: status,
                     onSyncNow: _syncNow,
                     onUnlink: _unlink,
-                  )
-                else if (_needsCompany)
+                  ),
+                ] else if (_needsCompany) ...[
+                  Text('Step 2 — Link this device',
+                      style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Sign-in worked. Name the cloud company to finish linking this device.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
                   _CompanyStep(
                     company: _company,
                     onCreate: _createCompany,
-                  )
-                else
+                  ),
+                ] else ...[
+                  Text('Step 1 — Sign in or create an account',
+                      style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Creating an account links this device to a new cloud company. Signing in links it to your existing company.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
                   _AuthCard(
                     email: _email,
                     password: _password,
@@ -324,6 +358,7 @@ class _CloudSyncScreenState extends ConsumerState<CloudSyncScreen> {
                     onRegister: _register,
                     onLogin: _login,
                   ),
+                ],
                 if (_error != null) ...[
                   const SizedBox(height: 16),
                   Text(

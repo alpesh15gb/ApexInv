@@ -5,8 +5,12 @@ class Product {
   double price;
   num stock;
   String hsncode;
+  // E2: fractional GST rates (e.g. 12.5%) must survive sale-order →
+  // invoice conversion. Stored as REAL in an INTEGER-affinity column
+  // (SQLite preserves fractional REALs); kept as num so both legacy int
+  // rows and fractional doubles decode without a migration.
   // ignore: non_constant_identifier_names
-  int tax_rate;
+  num tax_rate;
   String type; // 'product' or 'service'
   double defaultDiscount;
   double purchasePrice;

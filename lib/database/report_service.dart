@@ -138,6 +138,7 @@ class ReportService {
         'invoice_discount_value',
         'currency_code',
         'currency_symbol',
+        'round_off',
       ],
       where: sb.toString(),
       whereArgs: args,
@@ -194,7 +195,10 @@ class ReportService {
         invoiceDiscountValue:
             (inv['invoice_discount_value'] as num?)?.toDouble() ?? 0.0,
       );
-      final total = totals.total;
+      // Billed/outstanding settle at the payable total so reports agree
+      // with the printed bill when round-off is enabled.
+      final total = InvoiceTotalsCalculator.payableTotal(totals.total,
+          enabled: (inv['round_off'] as int?) == 1);
       final outstanding =
           InvoiceCalculator.outstanding(total: total, paid: paid);
 
@@ -322,12 +326,14 @@ class ReportService {
     ];
 
     // Collected grouped by payment date (more accurate for cash-flow view)
+    // Bounced/cancelled cheques never count as cash collected.
     final collectedRows = await db.rawQuery(
       "SELECT strftime('%Y-%m', ip.date_paid) AS month, "
       "COALESCE(SUM(ip.amount_paid), 0.0) AS collected "
       "FROM invoice_payments ip "
       "JOIN invoices i ON ip.invoice_id = i.id "
       "WHERE i.deleted_at IS NULL AND i.type = 'Invoice' "
+      "AND ip.cheque_status NOT IN ('bounced', 'cancelled') "
       "$currencyFilter"
       "AND ip.date_paid >= ? AND ip.date_paid <= ? "
       "GROUP BY month ORDER BY month",
@@ -513,16 +519,18 @@ class ReportService {
 
     final buckets = <double, double>{};
 
-    // Per-item mode: tax computed per line item's product_tax_rate
+    // Per-item mode: tax computed per line item's product_tax_rate.
+    // Credit notes net off (negative), debit notes add like invoices.
     final perItemRows = await db.rawQuery(
       "SELECT ii.product_tax_rate AS rate, "
-      "SUM(CASE WHEN ii.product_price_includes_tax = 1 "
+      "SUM(CASE WHEN i.type = 'Credit Note' THEN -1 ELSE 1 END * "
+      "CASE WHEN ii.product_price_includes_tax = 1 "
       "THEN $_invoiceItemNetSql * ii.product_tax_rate / (100 + ii.product_tax_rate) "
       "ELSE $_invoiceItemNetSql * ii.product_tax_rate / 100 "
       "END) AS tax_amount "
       "FROM invoice_items ii "
       "JOIN invoices i ON i.id = ii.invoice_id "
-      "WHERE i.deleted_at IS NULL AND i.type = 'Invoice' "
+      "WHERE i.deleted_at IS NULL AND i.type IN ('Invoice', 'Credit Note', 'Debit Note') "
       "AND i.tax_mode = 'per_item' "
       "$ccFilter"
       "AND i.date >= ? AND i.date <= ? "
@@ -538,9 +546,9 @@ class ReportService {
 
     // Global mode: single tax rate applied to the invoice subtotal
     final globalInvRows = await db.rawQuery(
-      "SELECT i.id, i.tax_rate, i.additional_costs "
+      "SELECT i.id, i.tax_rate, i.additional_costs, i.type "
       "FROM invoices i "
-      "WHERE i.deleted_at IS NULL AND i.type = 'Invoice' "
+      "WHERE i.deleted_at IS NULL AND i.type IN ('Invoice', 'Credit Note', 'Debit Note') "
       "AND i.tax_mode = 'global' AND i.tax_rate > 0 "
       "$ccFilter"
       "AND i.date >= ? AND i.date <= ?",
@@ -573,9 +581,11 @@ class ReportService {
           globalTaxRate: taxRate,
           globalTaxRateFormat: TaxRateFormat.fraction,
         );
-        final tax = totals.tax;
+        final sign =
+            (inv['type'] as String? ?? 'Invoice') == 'Credit Note' ? -1.0 : 1.0;
+        final tax = totals.tax * sign;
         final ratePercent = taxRate * 100;
-        if (tax > 0) {
+        if (tax != 0) {
           buckets[ratePercent] = (buckets[ratePercent] ?? 0) + tax;
         }
       }
@@ -700,6 +710,8 @@ class ReportService {
       double overdue = 0;
 
       for (final invoice in currencyRows) {
+        // _InvRow.total already settles at the payable total (rounded when
+        // the invoice opts in), so statements agree with the printed bill.
         if (invoice.date.compareTo(f) < 0) {
           opening += invoice.total;
         } else if (invoice.date.compareTo(t) <= 0) {
@@ -1214,15 +1226,16 @@ class ReportService {
     final rows = <DayBookEntry>[];
 
     final payRows = await db.rawQuery('''
-      SELECT date_paid AS d, invoice_number, customer_name,
+      SELECT date_paid AS d, MAX(i.invoice_number) AS invoice_number,
+             MAX(i.customer_name) AS customer_name,
              SUM(amount_paid) AS amt
       FROM invoice_payments
       JOIN invoices i ON i.id = invoice_payments.invoice_id
-      WHERE i.deleted_at IS NULL AND i.type = 'Invoice'
+      WHERE i.deleted_at IS NULL AND i.type IN ('Invoice', 'Credit Note', 'Debit Note')
         AND invoice_payments.cheque_status NOT IN ('bounced', 'cancelled')
         AND date_paid >= ? AND date_paid <= ?
         ${currencyCode == null ? '' : 'AND i.currency_code = ?'}
-      GROUP BY substr(date_paid, 1, 10), invoice_number
+      GROUP BY substr(date_paid, 1, 10), invoice_payments.invoice_id
       ORDER BY d
     ''', [
       from.toIso8601String(),
@@ -1264,6 +1277,7 @@ class ReportService {
       FROM purchase_bill_payments p
       JOIN purchase_bills b ON b.id = p.purchase_bill_id
       WHERE p.date_paid >= ? AND p.date_paid <= ?
+        AND COALESCE(p.cheque_status, 'none') NOT IN ('bounced', 'cancelled')
         ${currencyCode == null ? '' : 'AND b.currency_code = ?'}
       ORDER BY p.date_paid
     ''', [
@@ -1290,6 +1304,7 @@ class ReportService {
   /// Credit Note in the period; `purchases` is bill net (total − total_tax)
   /// for ITC-eligible bills (RC uses net too — its tax is a self-assessed
   /// Input/Output pair) or the full total for ITC-ineligible bills.
+  /// `expenses` includes operating expenses plus loan interest/fees (6100/6110).
   /// `collected` (invoice receipts incl. note-linked payments) and `paid`
   /// (purchase-bill payments) are cash memo fields, excluded from profit.
   static Future<PnlSummary> getPnl(DateTime from, DateTime to,
@@ -1299,14 +1314,17 @@ class ReportService {
     // accrual revenue here always agrees with ledger Sales.
     final allInvoices = await InvoiceService.getAllInvoices();
     double revenue = 0;
+    double roundOff = 0;
     for (final inv in allInvoices) {
       if (inv.date.isBefore(from) || inv.date.isAfter(to)) continue;
       if (currencyCode != null && inv.currencyCode != currencyCode) continue;
       final net = inv.total - inv.tax;
       if (inv.type == 'Invoice' || inv.type == 'Debit Note') {
         revenue += net;
+        roundOff += inv.roundOffAmount;
       } else if (inv.type == 'Credit Note') {
         revenue -= net;
+        roundOff -= inv.roundOffAmount;
       }
     }
     final expRes = await db.rawQuery(
@@ -1365,7 +1383,22 @@ class ReportService {
         if (currencyCode != null) currencyCode
       ],
     );
-    final expenses = (expRes.first['v'] as num?)?.toDouble() ?? 0;
+    // Loan borrowing costs (interest + bank/loan fees) are P&L expenses,
+    // matching the ledger's 6100/6110 postings so profit == netProfit.
+    final loanRes = await db.rawQuery(
+      "SELECT COALESCE(SUM(m.interest_amount + m.fee_amount), 0) AS v "
+      "FROM loan_movements m "
+      "JOIN loan_accounts l ON l.id = m.loan_id "
+      "WHERE m.voided_at IS NULL AND m.date >= ? AND m.date <= ? "
+      "${currencyCode == null ? '' : 'AND l.currency_code = ?'}",
+      [
+        from.toIso8601String(),
+        to.toIso8601String(),
+        if (currencyCode != null) currencyCode
+      ],
+    );
+    final expenses = ((expRes.first['v'] as num?)?.toDouble() ?? 0) +
+        ((loanRes.first['v'] as num?)?.toDouble() ?? 0);
     final paid = (pbRes.first['v'] as num?)?.toDouble() ?? 0;
     final collected = (collectedRes.first['v'] as num?)?.toDouble() ?? 0;
     return PnlSummary(
@@ -1374,6 +1407,7 @@ class ReportService {
       purchases: purchases,
       collected: collected,
       paid: paid,
+      roundOff: roundOff,
     );
   }
 
@@ -1476,16 +1510,21 @@ class PnlSummary {
 
   /// Cash memo: purchase-bill payments paid.
   final double paid;
+
+  /// Round-off paise net (credit − debit), matching the ledger Round Off
+  /// account. Excluded from revenue; added back in [profit].
+  final double roundOff;
   const PnlSummary({
     required this.revenue,
     required this.expenses,
     required this.purchases,
     required this.collected,
     this.paid = 0,
+    this.roundOff = 0,
   });
 
   /// Accrual profit, equals LedgerService BalanceSheet.netProfit.
-  double get profit => revenue - expenses - purchases;
+  double get profit => revenue - expenses - purchases + roundOff;
 }
 
 class ChequeEntry {

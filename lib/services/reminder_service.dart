@@ -2,7 +2,11 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/database/database_helper.dart';
+import 'package:apexbooks/domain/invoice_calculator.dart';
+import 'package:apexbooks/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/models/additional_cost.dart';
 
 /// Payment-collection helpers: WhatsApp/SMS reminder deep links, UPI payment
 /// links, and the overdue list that backs the reminders UI.
@@ -10,36 +14,98 @@ class ReminderService {
   static final dbHelper = DatabaseHelper();
 
   /// Invoices with outstanding balance, most-overdue first.
+  /// Totals are computed with the shared engine (lines via
+  /// [InvoiceTotalsCalculator.lineFromDbRow] + [InvoiceTotalsCalculator.totals]
+  /// + payable total minus live payments), matching report/invoice services.
   static Future<List<OverdueInvoice>> getOverdue({int limit = 200}) async {
     final db = await dbHelper.database;
-    final rows = await db.rawQuery('''
-      SELECT i.id, i.invoice_number, i.customer_name, i.customer_phone,
-             i.total, i.due_date, i.currency_symbol,
-             (i.total - COALESCE((SELECT SUM(p.amount_paid)
-                FROM invoice_payments p WHERE p.invoice_id = i.id
-                  AND p.cheque_status NOT IN ('bounced', 'cancelled')), 0))
-              AS outstanding
-      FROM invoices i
-      WHERE i.deleted_at IS NULL AND i.type = 'Invoice'
-        AND i.due_date IS NOT NULL
-        AND i.due_date < ?
-      HAVING outstanding > 0.005
-      ORDER BY i.due_date ASC
-      LIMIT $limit
-    ''', [DateTime.now().toIso8601String()]);
-    return rows.map((r) {
-      final due = DateTime.tryParse(r['due_date'] as String? ?? '');
-      return OverdueInvoice(
-        id: r['id'] as String,
-        invoiceNumber: r['invoice_number'] as String? ?? '',
-        customerName: r['customer_name'] as String? ?? '',
-        phone: r['customer_phone'] as String? ?? '',
-        total: (r['total'] as num?)?.toDouble() ?? 0,
-        outstanding: (r['outstanding'] as num?)?.toDouble() ?? 0,
-        dueDate: due,
-        currencySymbol: r['currency_symbol'] as String? ?? '₹',
+    final nowIso = DateTime.now().toIso8601String();
+    final invRows = await db.query(
+      'invoices',
+      columns: [
+        'id',
+        'invoice_number',
+        'customer_name',
+        'customer_phone',
+        'due_date',
+        'currency_symbol',
+        'tax_rate',
+        'tax_mode',
+        'additional_costs',
+        'invoice_discount_type',
+        'invoice_discount_value',
+        'round_off',
+      ],
+      where: "deleted_at IS NULL AND type = 'Invoice' "
+          'AND due_date IS NOT NULL AND due_date < ?',
+      whereArgs: [nowIso],
+      orderBy: 'due_date ASC',
+    );
+    if (invRows.isEmpty) return [];
+    final ids = invRows.map((r) => r['id'] as String).toList();
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final itemRows = await db.rawQuery(
+      'SELECT invoice_id, unit_price, product_price, quantity, discount, '
+      'discount_per_unit, extra_cost, product_tax_rate, '
+      'product_price_includes_tax FROM invoice_items '
+      'WHERE invoice_id IN ($placeholders)',
+      ids,
+    );
+    final payRows = await db.rawQuery(
+      'SELECT invoice_id, COALESCE(SUM(amount_paid), 0.0) AS paid '
+      'FROM invoice_payments WHERE invoice_id IN ($placeholders) '
+      "AND cheque_status NOT IN ('bounced', 'cancelled') GROUP BY invoice_id",
+      ids,
+    );
+    final itemsByInv = <String, List<Map<String, dynamic>>>{};
+    for (final r in itemRows) {
+      (itemsByInv[r['invoice_id'] as String] ??= [])
+          .add(r as Map<String, dynamic>);
+    }
+    final paidByInv = <String, double>{
+      for (final r in payRows)
+        r['invoice_id'] as String: (r['paid'] as num).toDouble()
+    };
+    final result = <OverdueInvoice>[];
+    for (final inv in invRows) {
+      final id = inv['id'] as String;
+      final taxMode = TaxModeExtension.fromKey(inv['tax_mode'] as String?);
+      final taxRate = (inv['tax_rate'] as num?)?.toDouble() ?? 0.0;
+      final addTotal =
+          AdditionalCost.listFromJson(inv['additional_costs'] as String?)
+              .fold(0.0, (s, c) => s + c.amount);
+      final totals = InvoiceTotalsCalculator.totals(
+        lines: (itemsByInv[id] ?? []).map((r) =>
+            InvoiceTotalsCalculator.lineFromDbRow(r,
+                taxMode: taxMode, globalTaxRatePercent: taxRate * 100)),
+        taxMode: taxMode,
+        globalTaxRate: taxRate,
+        globalTaxRateFormat: TaxRateFormat.fraction,
+        additionalCostsTotal: addTotal,
+        invoiceDiscountType: InvoiceDiscountTypeExtension.fromKey(
+            inv['invoice_discount_type'] as String?),
+        invoiceDiscountValue:
+            (inv['invoice_discount_value'] as num?)?.toDouble() ?? 0.0,
       );
-    }).toList();
+      final payable = InvoiceTotalsCalculator.payableTotal(totals.total,
+          enabled: (inv['round_off'] as int?) == 1);
+      final outstanding = InvoiceCalculator.outstanding(
+          total: payable, paid: paidByInv[id] ?? 0.0);
+      if (outstanding <= InvoiceCalculator.moneyEpsilon) continue;
+      final due = DateTime.tryParse(inv['due_date'] as String? ?? '');
+      result.add(OverdueInvoice(
+        id: id,
+        invoiceNumber: inv['invoice_number'] as String? ?? '',
+        customerName: inv['customer_name'] as String? ?? '',
+        phone: inv['customer_phone'] as String? ?? '',
+        total: payable,
+        outstanding: outstanding,
+        dueDate: due,
+        currencySymbol: inv['currency_symbol'] as String? ?? '₹',
+      ));
+      if (result.length >= limit) break;
+    }
+    return result;
   }
 
   /// wa.me deep link with a prefilled payment reminder.

@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/domain/invoice_calculator.dart';
-import 'package:apexbooks/common/invoiso_colors.dart';
+import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/invoice.dart';
@@ -22,6 +22,7 @@ import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/common/breakpoints.dart';
+import 'package:apexbooks/database/payment_service.dart';
 import 'package:apexbooks/widgets/adaptive/entity_card.dart';
 import 'package:apexbooks/widgets/customer_info_button.dart';
 import 'package:apexbooks/utils/formatters.dart';
@@ -77,6 +78,20 @@ class _InvoiceManagementScreenV2State
   final ScrollController _statsBarScrollController = ScrollController();
   Timer? _searchDebounce;
 
+  /// Quick status chips (All / Paid / Pending / Overdue). Buckets are
+  /// aggregated in memory from the already-loaded rows inside [_loadPage] —
+  /// no per-status queries. Paid = fully paid; Overdue = outstanding and
+  /// past due; Pending = everything else outstanding. The buckets are
+  /// mutually exclusive so the counts always sum to All, on every doc-type
+  /// tab (each tab's real per-row derivation).
+  String _statusChip = 'all'; // 'all' | 'paid' | 'pending' | 'overdue'
+  Map<String, int> _statusChipCounts = const {
+    'all': 0,
+    'paid': 0,
+    'pending': 0,
+    'overdue': 0,
+  };
+
   /// Shared column widths used by both the header table and every row table so
   /// they always align pixel-perfectly.
   static const List<(String, Color)> _dueDateFilterOptions = [
@@ -123,13 +138,10 @@ class _InvoiceManagementScreenV2State
   // ─── Data loading ──────────────────────────────────────────────────────────
 
   Future<void> _loadPage() async {
-    final needsFullScan = _hidePaid ||
-        _dueDateFilter != 'all' ||
-        _paymentStatusFilterV2 != 'all' ||
-        _invoiceDateFrom != null ||
-        _invoiceDateTo != null ||
-        _idRangeFrom != null ||
-        _idRangeTo != null;
+    // Status chips aggregate LIVE counts in memory from the loaded rows, so
+    // the complete result set for this type/search/customer is always
+    // fetched here and the page is sliced in Dart below. The query itself
+    // (filters, ordering, count) is unchanged — only the window is widened.
     setState(() {
       _isLoadingPage = true;
       _selectedIds.clear(); // selection reset on every page/search change
@@ -141,7 +153,7 @@ class _InvoiceManagementScreenV2State
               // These filters are applied in Dart, so fetch the complete
               // result before filtering instead of silently filtering only
               // the currently visible page.
-              pageSize: needsFullScan ? 100000 : _pageSize,
+              pageSize: 100000,
               searchQuery: _searchQuery,
               filterType: widget.filterType,
               orderBy: _sortField,
@@ -230,17 +242,35 @@ class _InvoiceManagementScreenV2State
             return true;
           }).toList();
         }
-        final filteredCount = pageInvoices.length;
-        if (needsFullScan) {
-          final start = _currentPage * _pageSize;
-          pageInvoices = start >= filteredCount
-              ? <Invoice>[]
-              : pageInvoices.sublist(start,
-                  (start + _pageSize).clamp(start, filteredCount).toInt());
+        // In-memory status-chip aggregation over the loaded rows: computed
+        // after the advanced (dialog) filters but before the chip filter
+        // itself, so the LIVE counts reflect the current filter context and
+        // stay stable while switching chips.
+        final chipCounts = <String, int>{
+          'all': pageInvoices.length,
+          'paid': 0,
+          'pending': 0,
+          'overdue': 0,
+        };
+        for (final inv in pageInvoices) {
+          final bucket = _statusBucket(inv);
+          chipCounts[bucket] = (chipCounts[bucket] ?? 0) + 1;
         }
+        if (_statusChip != 'all') {
+          pageInvoices = pageInvoices
+              .where((inv) => _statusBucket(inv) == _statusChip)
+              .toList();
+        }
+        final filteredCount = pageInvoices.length;
+        final start = _currentPage * _pageSize;
+        pageInvoices = start >= filteredCount
+            ? <Invoice>[]
+            : pageInvoices.sublist(
+                start, (start + _pageSize).clamp(start, filteredCount).toInt());
         setState(() {
           _pageInvoices = pageInvoices;
-          _totalCount = needsFullScan ? filteredCount : results[1] as int;
+          _totalCount = filteredCount;
+          _statusChipCounts = chipCounts;
           _isLoadingPage = false;
         });
       }
@@ -336,6 +366,17 @@ class _InvoiceManagementScreenV2State
 
   Future<void> _softDelete(Invoice invoice) async {
     final l10n = AppLocalizations.of(context)!;
+    // A trashed invoice leaves the books while its payments stay posted,
+    // stranding cash — check first and explain the way out.
+    final paid = await PaymentService.getTotalPaidForInvoice(invoice.id);
+    if (!mounted) return;
+    if (paid > 0.005) {
+      AppError.show(
+        context,
+        'This invoice has payments. Delete its payments first, or permanently delete it (which reverses the payments) instead of moving it to trash.',
+      );
+      return;
+    }
     final confirmed = await AppError.confirm(
       context,
       title: l10n.invoiceMgmtMoveToTrashTitle,
@@ -346,7 +387,13 @@ class _InvoiceManagementScreenV2State
     );
     if (!confirmed) return;
 
-    await ref.read(invoiceRepositoryProvider).softDeleteInvoice(invoice.id);
+    try {
+      await ref.read(invoiceRepositoryProvider).softDeleteInvoice(invoice.id);
+    } catch (e) {
+      if (!mounted) return;
+      AppError.show(context, e.toString());
+      return;
+    }
     ref.read(invoicesProvider.notifier).refresh();
     await _loadPage();
     if (mounted) {
@@ -548,6 +595,19 @@ class _InvoiceManagementScreenV2State
   Future<void> _bulkSoftDelete() async {
     final l10n = AppLocalizations.of(context)!;
     final count = _selectedIds.length;
+    // Same cash-stranding guard as the single trash flow: warn up front
+    // which selection can't move while live payments exist.
+    final ids = List<String>.from(_selectedIds);
+    final paidById = await PaymentService.getTotalPaidBatch(ids);
+    if (!mounted) return;
+    final paidCount = ids.where((id) => (paidById[id] ?? 0) > 0.005).length;
+    if (paidCount > 0) {
+      AppError.show(
+        context,
+        '$paidCount selected invoice(s) have payments. Delete their payments first, or permanently delete them (which reverses the payments) instead of moving them to trash.',
+      );
+      return;
+    }
     final confirmed = await AppError.confirm(
       context,
       title: l10n.invoiceMgmtMoveToTrashTitle,
@@ -1186,6 +1246,20 @@ class _InvoiceManagementScreenV2State
     {'value': 'unpaid', 'color': Colors.red},
   ];
 
+  /// In-memory status bucket for the quick chips (see [_statusChip]): paid
+  /// first, then overdue (outstanding + past due), everything else
+  /// outstanding is pending. Pure Dart over already-loaded rows.
+  static String _statusBucket(Invoice invoice) {
+    if (invoice.paymentStatus == PaymentStatus.paid) return 'paid';
+    if (InvoiceCalculator.isOverdue(
+      dueDate: invoice.dueDate,
+      outstanding: invoice.outstandingBalance,
+    )) {
+      return 'overdue';
+    }
+    return 'pending';
+  }
+
   static String _paymentStatusFilterLabel(AppLocalizations l10n, String value) {
     return switch (value) {
       'paid' => l10n.paymentStatusPaid,
@@ -1615,6 +1689,166 @@ class _InvoiceManagementScreenV2State
     );
   }
 
+  /// Reference-design header: title + live subtitle on the left, the primary
+  /// per-tab Create action on the right (wide only — narrow uses the FAB and
+  /// the existing AppBar action). The `New <Type>` labeling contract is kept.
+  Widget _listHeaderV2(bool isWide) {
+    final l10n = AppLocalizations.of(context)!;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.invoiceMgmtManagementTitle(widget.filterType),
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$_totalCount ${widget.filterType.toLowerCase()}s',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+        if (isWide)
+          AppPrimaryButton(
+            onPressed: widget.onCreateInvoice,
+            icon: const Icon(Icons.add, size: 18),
+            label: Text('New ${widget.filterType}'),
+          ),
+      ],
+    );
+  }
+
+  /// Status filter chips with LIVE counts aggregated from the loaded rows.
+  /// Tapping a chip narrows the list in memory (same client-side approach as
+  /// the existing dialog filters) — no query changes.
+  Widget _statusChipsRowV2() {
+    final l10n = AppLocalizations.of(context)!;
+    final defs = <(String, String, Color)>[
+      ('all', l10n.invoiceMgmtStatusAllLabel, Colors.grey),
+      ('paid', l10n.paymentStatusPaid, Colors.green),
+      // No localized 'Pending' key exists; pending = outstanding, not overdue.
+      ('pending', 'Pending', Colors.orange),
+      ('overdue', l10n.invoiceMgmtOverdueBadge, Colors.red),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final def in defs)
+          ChoiceChip(
+            label: Text('${def.$2} (${_statusChipCounts[def.$1] ?? 0})'),
+            selected: _statusChip == def.$1,
+            onSelected: (_) {
+              if (_statusChip == def.$1) return;
+              setState(() {
+                _statusChip = def.$1;
+                _currentPage = 0;
+              });
+              _loadPage();
+            },
+            selectedColor: def.$3.withValues(alpha: 0.18),
+            labelStyle: TextStyle(
+              color:
+                  _statusChip == def.$1 ? def.$3.withValues(alpha: 0.95) : null,
+              fontWeight:
+                  _statusChip == def.$1 ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _dateRangeLabelV2() {
+    if (_invoiceDateFrom == null && _invoiceDateTo == null) {
+      return AppLocalizations.of(context)!.invoiceMgmtAnyDateLabel;
+    }
+    final fmt = DateFormat(_datePattern);
+    final from = _invoiceDateFrom == null ? '…' : fmt.format(_invoiceDateFrom!);
+    final to = _invoiceDateTo == null ? '…' : fmt.format(_invoiceDateTo!);
+    return '$from – $to';
+  }
+
+  /// Inline date-range picker driving the same [_invoiceDateFrom]/[_to]
+  /// state the Filter dialog uses — presentation only, no new semantics.
+  Future<void> _pickDateRangeV2() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDateRange: (_invoiceDateFrom != null || _invoiceDateTo != null)
+          ? DateTimeRange(
+              start: _invoiceDateFrom ?? _invoiceDateTo!,
+              end: _invoiceDateTo ?? _invoiceDateFrom!,
+            )
+          : null,
+    );
+    if (picked == null) return;
+    setState(() {
+      _invoiceDateFrom = picked.start;
+      _invoiceDateTo = picked.end;
+      _currentPage = 0;
+    });
+    _loadPage();
+  }
+
+  void _clearDateRangeV2() {
+    setState(() {
+      _invoiceDateFrom = null;
+      _invoiceDateTo = null;
+      _currentPage = 0;
+    });
+    _loadPage();
+  }
+
+  /// Header sorting reusing the existing [_sortField]/[_sortAscending] query
+  /// ordering — tapping a sortable column header just changes the order-by.
+  void _changeSortV2(String field) {
+    setState(() {
+      if (_sortField == field) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortField = field;
+        // Match the list defaults: newest/creation first, names A–Z.
+        _sortAscending = field == 'customer_name';
+      }
+      _currentPage = 0;
+    });
+    _loadPage();
+  }
+
+  Widget _sortableHeaderCellV2(String label, String field, TextStyle style) {
+    final active = _sortField == field;
+    return InkWell(
+      onTap: () => _changeSortV2(field),
+      borderRadius: BorderRadius.circular(4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(label, overflow: TextOverflow.ellipsis, style: style),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            !active
+                ? Icons.unfold_more
+                : (_sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
+            size: 14,
+            color: active ? Colors.white : Colors.white70,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _searchFilterRowV2(bool isWide) {
     final searchField = TextField(
       controller: _searchController,
@@ -1662,7 +1896,7 @@ class _InvoiceManagementScreenV2State
     );
 
     final customerButton = _selectedCustomerId == null
-        ? OutlinedButton.icon(
+        ? AppSecondaryButton(
             onPressed: _pickCustomerFilterV2,
             icon: const Icon(Icons.person_outline, size: 18),
             label: const Text('Customer'),
@@ -1680,7 +1914,7 @@ class _InvoiceManagementScreenV2State
         : Stack(
             clipBehavior: Clip.none,
             children: [
-              OutlinedButton.icon(
+              AppSecondaryButton(
                 onPressed: _showFilterDialogV2,
                 icon: const Icon(Icons.filter_list, size: 18),
                 label:
@@ -1706,11 +1940,28 @@ class _InvoiceManagementScreenV2State
             ],
           );
 
-    final sortButton = OutlinedButton.icon(
+    final sortButton = AppSecondaryButton(
       onPressed: _showSortDialogV2,
       icon: const Icon(Icons.sort, size: 18),
       label: Text(AppLocalizations.of(context)!.invoiceMgmtSortLabel),
     );
+
+    // Inline date-range picker for the reference filter row; drives the same
+    // invoice-date state the Filter dialog edits.
+    final hasDateRange = _invoiceDateFrom != null || _invoiceDateTo != null;
+    final dateRangeButton = hasDateRange
+        ? InputChip(
+            avatar: const Icon(Icons.calendar_today_outlined, size: 16),
+            label: Text(_dateRangeLabelV2(),
+                overflow: TextOverflow.ellipsis, maxLines: 1),
+            onPressed: _pickDateRangeV2,
+            onDeleted: _clearDateRangeV2,
+          )
+        : AppSecondaryButton(
+            onPressed: _pickDateRangeV2,
+            icon: const Icon(Icons.calendar_today_outlined, size: 18),
+            label: Text(_dateRangeLabelV2()),
+          );
 
     final statText = Text(
       AppLocalizations.of(context)!.invoiceMgmtTotalPageStatusLabel(
@@ -1729,6 +1980,8 @@ class _InvoiceManagementScreenV2State
                   constraints: const BoxConstraints(maxWidth: 480),
                   child: searchField)),
           const SizedBox(width: 12),
+          dateRangeButton,
+          const SizedBox(width: 8),
           customerButton,
           const SizedBox(width: 8),
           filterButton,
@@ -1751,6 +2004,7 @@ class _InvoiceManagementScreenV2State
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            dateRangeButton,
             customerButton,
             filterButton,
             if (widget.filterType == 'Invoice') sortButton,
@@ -1861,6 +2115,13 @@ class _InvoiceManagementScreenV2State
                     : Colors.purple),
           ),
       ],
+      // Quotation → Invoice is the key sales step: a dedicated entry reusing
+      // the existing clone editor route, labelled like Sale Orders.
+      if (widget.filterType == 'Quotation')
+        PopupMenuItem(
+            value: 'convert',
+            child: _MenuRow(
+                Icons.swap_horiz_outlined, 'Convert to Invoice', Colors.blue)),
       PopupMenuItem(
           value: 'duplicate',
           child: _MenuRow(
@@ -1895,6 +2156,8 @@ class _InvoiceManagementScreenV2State
         widget.onEditInvoice(invoice);
       case 'pay':
         _showApplyPaymentDialog(invoice);
+      case 'convert':
+        widget.onCloneInvoice(invoice, 'Invoice');
       case 'duplicate':
         _showCloneDialog(invoice);
       case 'preview':
@@ -1987,17 +2250,23 @@ class _InvoiceManagementScreenV2State
             ),
           ),
           SizedBox(
-              width: 60, child: Text(l10n.invoiceMgmtColSlNo, style: style)),
+              width: 60,
+              child:
+                  _sortableHeaderCellV2(l10n.invoiceMgmtColSlNo, 'id', style)),
           Expanded(
               flex: 3,
               child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  child:
-                      Text(l10n.invoiceMgmtColInvoiceCustomer, style: style))),
+                  child: _sortableHeaderCellV2(
+                      l10n.invoiceMgmtColInvoiceCustomer,
+                      'customer_name',
+                      style))),
           if (widget.filterType == 'Invoice' && isWide)
             Expanded(child: Text(l10n.invoiceMgmtColTitle, style: style)),
           SizedBox(
-              width: 110, child: Text(l10n.invoiceMgmtColDate, style: style)),
+              width: 110,
+              child: _sortableHeaderCellV2(
+                  l10n.invoiceMgmtColDate, 'date', style)),
           if (isWide)
             SizedBox(
                 width: 56, child: Text(l10n.invoiceMgmtColItems, style: style)),
@@ -2135,7 +2404,7 @@ class _InvoiceManagementScreenV2State
             ),
           Expanded(
             child: AppMoney(
-              invoice.total,
+              invoice.payableTotal,
               currencySymbol: invoice.currencySymbol,
               bold: true,
               style: const TextStyle(fontSize: 14.5, color: Colors.green),
@@ -2177,9 +2446,19 @@ class _InvoiceManagementScreenV2State
 
   Widget _paginationV2(bool isWide) {
     final l10n = AppLocalizations.of(context)!;
+    // Reference footer: "Showing 1–10 of N" next to the existing controls.
+    final start = _totalCount == 0 ? 0 : _currentPage * _pageSize + 1;
+    final end =
+        (_currentPage * _pageSize + _pageInvoices.length).clamp(0, _totalCount);
     final left = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Text('Showing $start–$end of $_totalCount',
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w600)),
+        const SizedBox(width: 16),
         Text(l10n.invoiceMgmtRowsPerPageLabel,
             style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurface, fontSize: 13)),
@@ -2273,10 +2552,12 @@ class _InvoiceManagementScreenV2State
               widget.filterType.toLowerCase())
           : l10n.invoiceMgmtTryAdjustingFiltersMessage,
       action: _searchQuery.isEmpty
-          ? FilledButton.icon(
+          ? AppPrimaryButton(
               onPressed: widget.onCreateInvoice,
               icon: const Icon(Icons.add),
-              label: Text(l10n.navNewInvoice),
+              // The callback already opens this tab's document type
+              // (dashboard wires each tab separately) — label it honestly.
+              label: Text('New ${widget.filterType}'),
             )
           : null,
     );
@@ -2289,7 +2570,7 @@ class _InvoiceManagementScreenV2State
         FilledButton.icon(
           onPressed: widget.onCreateInvoice,
           icon: const Icon(Icons.add, size: 18),
-          label: Text(l10n.navNewInvoice),
+          label: Text('New ${widget.filterType}'),
         ),
         const SizedBox(width: 8),
         if (_isBulkLoading)
@@ -2335,7 +2616,7 @@ class _InvoiceManagementScreenV2State
       IconButton(
         icon: const Icon(Icons.add),
         onPressed: widget.onCreateInvoice,
-        tooltip: l10n.navNewInvoice,
+        tooltip: 'New ${widget.filterType}',
       ),
       if (_isBulkLoading)
         const Padding(
@@ -2404,12 +2685,31 @@ class _InvoiceManagementScreenV2State
           centerTitle: false,
           actions: [..._headerBarV2(isWide), const SizedBox(width: 8)],
         ),
+        // Narrow layouts get a Create FAB (the header Create button only
+        // shows on wide); every AppBar action above keeps working as before.
+        floatingActionButton: useCards
+            ? FloatingActionButton(
+                onPressed: widget.onCreateInvoice,
+                tooltip: 'New ${widget.filterType}',
+                child: const Icon(Icons.add),
+              )
+            : null,
         body: Column(
           children: [
             Container(
               color: Theme.of(context).colorScheme.surfaceContainer,
               padding: const EdgeInsets.all(20),
-              child: _searchFilterRowV2(isWide),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _listHeaderV2(isWide),
+                  const SizedBox(height: 12),
+                  _statusChipsRowV2(),
+                  const SizedBox(height: 12),
+                  _searchFilterRowV2(isWide),
+                ],
+              ),
             ),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
@@ -2498,11 +2798,10 @@ class _InvoiceManagementScreenV2State
     });
   }
 
-  /// Compact-phone invoice card: number + status, customer, date, totals and
-  /// the primary actions. Less-common actions live in the overflow menu
-  /// (reuse of the narrow-mode popup from the table rows).
+  /// Compact-phone card in the reference style: number + amount + overflow
+  /// menu on top, party + status pill, then date + outstanding. View/edit and
+  /// every other row action stay available in the overflow menu.
   Widget _invoiceCardV2(Invoice invoice, int globalIndex) {
-    final l10n = AppLocalizations.of(context)!;
     final isSelected = _selectedIds.contains(invoice.id);
     final outstanding = invoice.outstandingBalance;
     final hasOutstanding = invoice.paymentStatus != PaymentStatus.paid;
@@ -2532,13 +2831,19 @@ class _InvoiceManagementScreenV2State
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  '#${invoice.invoiceNumber ?? invoice.id} · #$globalIndex',
+                  '#${invoice.invoiceNumber ?? invoice.id}',
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                       fontSize: 14.5, fontWeight: FontWeight.w700),
                 ),
               ),
-              _buildPaymentStatusChip(invoice.paymentStatus),
+              AppMoney(
+                invoice.payableTotal,
+                currencySymbol: invoice.currencySymbol,
+                bold: true,
+                style: const TextStyle(fontSize: 14.5, color: Colors.green),
+              ),
+              menu,
             ],
           ),
           const SizedBox(height: 6),
@@ -2548,96 +2853,44 @@ class _InvoiceManagementScreenV2State
                   size: 14,
                   color: Theme.of(context).colorScheme.onSurfaceVariant),
               const SizedBox(width: 4),
-              Flexible(
+              Expanded(
                 child: Text(invoice.customer.name,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontSize: 13.5, fontWeight: FontWeight.w600)),
               ),
               CustomerInfoButton(customer: invoice.customer),
+              if (widget.filterType == 'Invoice') ...[
+                const SizedBox(width: 8),
+                _buildPaymentStatusChip(invoice.paymentStatus),
+              ],
             ],
           ),
           const SizedBox(height: 4),
-          _buildDateCell(invoice),
-          const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(l10n.fieldTotalLabel,
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant)),
-                    const SizedBox(height: 2),
-                    AppMoney(
-                      invoice.total,
-                      currencySymbol: invoice.currencySymbol,
-                      bold: true,
-                      style:
-                          const TextStyle(fontSize: 14.5, color: Colors.green),
-                    ),
-                  ],
-                ),
-              ),
+              Expanded(child: _buildDateCell(invoice)),
               if (widget.filterType == 'Invoice')
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(l10n.invoiceMgmtColOutstanding,
-                          style: TextStyle(
-                              fontSize: 11.5,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant)),
-                      const SizedBox(height: 2),
-                      hasOutstanding
-                          ? AppMoney(
-                              outstanding,
-                              currencySymbol: invoice.currencySymbol,
-                              style: TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w600,
-                                color: invoice.paymentStatus ==
-                                        PaymentStatus.partial
-                                    ? Colors.orange[700]
-                                    : Colors.red[700],
-                              ),
-                            )
-                          : Text(
-                              '—',
-                              style: TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w600,
-                                color: invoice.paymentStatus ==
-                                        PaymentStatus.partial
-                                    ? Colors.orange[700]
-                                    : Colors.red[700],
-                              ),
-                            ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _buildActionButton(
-                  Icons.visibility_outlined,
-                  Colors.green,
-                  l10n.actionView,
-                  () =>
-                      InvoicePdfServices.showInvoiceDetails(context, invoice)),
-              const SizedBox(width: 6),
-              _buildActionButton(Icons.edit_outlined, Colors.blue,
-                  l10n.actionEdit, () => widget.onEditInvoice(invoice)),
-              const Spacer(),
-              menu,
+                hasOutstanding
+                    ? AppMoney(
+                        outstanding,
+                        currencySymbol: invoice.currencySymbol,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: invoice.paymentStatus == PaymentStatus.partial
+                              ? Colors.orange[700]
+                              : Colors.red[700],
+                        ),
+                      )
+                    : Text(
+                        '—',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
             ],
           ),
         ],

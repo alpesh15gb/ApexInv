@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:apexbooks/models/custom_field.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import 'database_helper.dart';
 
 class CustomFieldService {
@@ -28,7 +28,7 @@ class CustomFieldService {
 
   static Future<List<CustomField>> getAllCustomFields() async {
     final db = await dbHelper.database;
-    final maps = await db.query('custom_fields', orderBy: 'id ASC');
+    final maps = await db.query('custom_fields', orderBy: 'rowid ASC');
     return maps.map((m) => CustomField.fromMap(m)).toList();
   }
 
@@ -37,12 +37,10 @@ class CustomFieldService {
     await db.delete('custom_fields', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// UUID mint (was MAX+1 'cf-N'): cross-device creation cannot collide
+  /// on the sync wire. Legacy 'cf-N' ids remain readable.
   static Future<String> generateNextId() async {
-    final db = await dbHelper.database;
-    final result = await db.rawQuery(
-        "SELECT MAX(CAST(REPLACE(id, 'cf-', '') AS INTEGER)) FROM custom_fields WHERE id LIKE 'cf-%'");
-    final maxId = Sqflite.firstIntValue(result) ?? 0;
-    return 'cf-${maxId + 1}';
+    return const Uuid().v4();
   }
 
   // ── Invoice custom field values (stored as JSON in invoice row) ───

@@ -116,7 +116,7 @@ class VyaparImportService {
     Function(String)? onProgress,
   }) async {
     final vyaparDb = await openReadOnlyDatabase(vypPath);
-    final invoisoDb = await DatabaseHelper().database;
+    final targetDb = await DatabaseHelper().database;
     final warnings = <String>[];
     var customersImported = 0, customersSkipped = 0;
     var productsImported = 0, productsSkipped = 0;
@@ -171,7 +171,7 @@ class VyaparImportService {
         final firms = await vyaparDb.query('kb_firms', limit: 1);
         if (firms.isNotEmpty) {
           final firm = firms.first;
-          await invoisoDb.update(
+          await targetDb.update(
               'company_info',
               {
                 'name': _text(firm['firm_name']),
@@ -209,12 +209,12 @@ class VyaparImportService {
         final targetId = 'vy-customer-${_stableId(sourceId)}';
         customerIdBySourceId[sourceId] = targetId;
         customerBySourceId[sourceId] = row;
-        if (await _exists(invoisoDb, 'customers', targetId)) {
+        if (await _exists(targetDb, 'customers', targetId)) {
           customersSkipped++;
           continue;
         }
         try {
-          await invoisoDb.insert('customers', {
+          await targetDb.insert('customers', {
             'id': targetId,
             'name': name,
             'email': _text(row['email']),
@@ -248,14 +248,14 @@ class VyaparImportService {
         final targetId = 'vy-product-${_stableId(sourceId)}';
         productIdBySourceId[sourceId] = targetId;
         productBySourceId[sourceId] = row;
-        if (await _exists(invoisoDb, 'products', targetId)) {
+        if (await _exists(targetDb, 'products', targetId)) {
           productsSkipped++;
           continue;
         }
         try {
           final stock = _number(row['item_stock_quantity']) ?? 0;
           final taxRate = taxRates[_sourceId(row['item_tax_id'])] ?? 0;
-          await invoisoDb.insert('products', {
+          await targetDb.insert('products', {
             'id': targetId,
             'name': name,
             'description': _text(row['item_description']),
@@ -353,7 +353,7 @@ class VyaparImportService {
           continue;
         }
         final invoiceId = 'vy-invoice-${_stableId(sourceId)}';
-        if (await _exists(invoisoDb, 'invoices', invoiceId)) {
+        if (await _exists(targetDb, 'invoices', invoiceId)) {
           invoicesSkipped++;
           continue;
         }
@@ -403,7 +403,7 @@ class VyaparImportService {
         }
 
         try {
-          await invoisoDb.transaction((target) async {
+          await targetDb.transaction((target) async {
             await target.insert('invoices', {
               'id': invoiceId,
               'invoice_number': _text(txn['txn_ref_number_char']),
@@ -497,7 +497,7 @@ class VyaparImportService {
           quotationsSkipped++;
           continue;
         }
-        if (await _exists(invoisoDb, 'invoices', quotationId!)) {
+        if (await _exists(targetDb, 'invoices', quotationId!)) {
           quotationsSkipped++;
           continue;
         }
@@ -512,7 +512,7 @@ class VyaparImportService {
             nameSourceId == null ? null : customerBySourceId[nameSourceId];
         final date = _transactionDate(txn);
         try {
-          await invoisoDb.transaction((target) async {
+          await targetDb.transaction((target) async {
             await target.insert('invoices', {
               'id': quotationId,
               'invoice_number': _text(txn['txn_ref_number_char']),
@@ -568,7 +568,7 @@ class VyaparImportService {
           purchaseOrdersSkipped++;
           continue;
         }
-        if (await _exists(invoisoDb, 'purchase_orders', orderId!)) {
+        if (await _exists(targetDb, 'purchase_orders', orderId!)) {
           purchaseOrdersSkipped++;
           continue;
         }
@@ -581,7 +581,7 @@ class VyaparImportService {
         final vendor = vendorBySourceId[_sourceId(txn['txn_name_id'])];
         final date = _transactionDate(txn);
         try {
-          await invoisoDb.transaction((target) async {
+          await targetDb.transaction((target) async {
             await target.insert('purchase_orders', {
               'id': orderId,
               'order_number': _text(txn['txn_ref_number_char']),
@@ -629,7 +629,7 @@ class VyaparImportService {
           purchaseBillsSkipped++;
           continue;
         }
-        if (await _exists(invoisoDb, 'purchase_bills', billId!)) {
+        if (await _exists(targetDb, 'purchase_bills', billId!)) {
           purchaseBillsSkipped++;
           continue;
         }
@@ -651,7 +651,7 @@ class VyaparImportService {
               'Purchase bill #$sourceId has a malformed payment; no payment was imported.');
         }
         try {
-          await invoisoDb.transaction((target) async {
+          await targetDb.transaction((target) async {
             await target.insert('purchase_bills', {
               'id': billId,
               'bill_number': _text(txn['txn_ref_number_char']),
@@ -734,17 +734,17 @@ class VyaparImportService {
           }
           final invoiceId = 'vy-invoice-${_stableId(saleId)}';
           final paymentId = 'vy-linked-payment-${_stableId(linkId)}';
-          if (!await _exists(invoisoDb, 'invoices', invoiceId) ||
-              await _exists(invoisoDb, 'invoice_payments', paymentId)) {
+          if (!await _exists(targetDb, 'invoices', invoiceId) ||
+              await _exists(targetDb, 'invoice_payments', paymentId)) {
             continue;
           }
-          final previouslyPaidResult = await invoisoDb.rawQuery(
+          final previouslyPaidResult = await targetDb.rawQuery(
               'SELECT COALESCE(SUM(amount_paid), 0) AS total FROM invoice_payments WHERE invoice_id = ?',
               [invoiceId]);
           final previouslyPaid =
               _number(previouslyPaidResult.first['total']) ?? 0;
           final originalBalance = _number(sale?['txn_balance_amount']) ?? 0;
-          final priorLinkedResult = await invoisoDb.rawQuery(
+          final priorLinkedResult = await targetDb.rawQuery(
               '''SELECT COALESCE(SUM(p.amount_paid), 0) AS total
                      FROM invoice_payments p
                      WHERE p.invoice_id = ? AND p.id LIKE 'vy-linked-payment-%' ''',
@@ -752,7 +752,7 @@ class VyaparImportService {
           final priorLinked = _number(priorLinkedResult.first['total']) ?? 0;
           final receiptDate =
               DateTime.tryParse(_text(receipt?['txn_date'])) ?? DateTime.now();
-          await invoisoDb.insert('invoice_payments', {
+          await targetDb.insert('invoice_payments', {
             'id': paymentId,
             'invoice_id': invoiceId,
             'invoice_number': _text(sale?['txn_ref_number_char']),

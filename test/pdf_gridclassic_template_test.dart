@@ -30,8 +30,7 @@ Invoice _sampleInvoice({
   TaxMode taxMode = TaxMode.none,
   List<AdditionalCost> additionalCosts = const [],
 }) {
-  Product getProduct()
-  {
+  Product getProduct() {
     final product = Product(
       id: 'p1',
       name: 'CEMENT ACC',
@@ -43,7 +42,8 @@ Invoice _sampleInvoice({
     );
     return product;
   }
-  Invoice inv =  Invoice(
+
+  Invoice inv = Invoice(
     id: 'inv1',
     invoiceNumber: '212',
     customer: Customer(
@@ -54,15 +54,15 @@ Invoice _sampleInvoice({
       address: 'PULAKKATTUTHODI PERINTHALMANNA',
       gstin: '',
     ),
-    items:List.generate(
-        350,
-        (index) => InvoiceItem(
-      product: getProduct(),
-      quantity: index + 1, // Example: 1, 2, 3, ..., 10
-      discount: discount,
-      discountPerUnit: discountPerUnit,
+    items: List.generate(
+      350,
+      (index) => InvoiceItem(
+        product: getProduct(),
+        quantity: index + 1, // Example: 1, 2, 3, ..., 10
+        discount: discount,
+        discountPerUnit: discountPerUnit,
+      ),
     ),
-  ),
     date: DateTime(2026, 7, 17, 9, 25, 13),
     type: 'Invoice',
     taxRate: taxRate,
@@ -80,8 +80,11 @@ void main() {
     expect(AmountInWords.amount(100000), 'One Lakh Only');
   });
 
-  for (final pageFormat in [PdfPageFormat.a4, PdfPageFormat.a5, PdfPageFormat.a6])
-  {
+  for (final pageFormat in [
+    PdfPageFormat.a4,
+    PdfPageFormat.a5,
+    PdfPageFormat.a6
+  ]) {
     for (final showQuantity in [true, false]) {
       test(
           'gridClassic template renders on ${pageFormat == PdfPageFormat.a4 ? 'A4' : pageFormat == PdfPageFormat.a5 ? 'A5' : 'A6'} '
@@ -103,7 +106,11 @@ void main() {
         doc.addPage(w);
         final bytes = await doc.save();
         expect(bytes, isNotEmpty);
-        final name = pageFormat == PdfPageFormat.a4 ? 'a4' : pageFormat == PdfPageFormat.a5 ? "a5" : "a6";
+        final name = pageFormat == PdfPageFormat.a4
+            ? 'a4'
+            : pageFormat == PdfPageFormat.a5
+                ? "a5"
+                : "a6";
         final outputPath = 'output/apexbooks_grid_pdf_$name$showQuantity.pdf';
         final outputFile = File(outputPath);
         await outputFile.parent.create(recursive: true);
@@ -112,7 +119,8 @@ void main() {
     }
   }
 
-  test('gridClassic renders with discount, tax, additional costs and previous balance',
+  test(
+      'gridClassic renders with discount, tax, additional costs and previous balance',
       () async {
     final doc = pw.Document();
     final inv = _sampleInvoice(
@@ -124,23 +132,17 @@ void main() {
     );
 
     double total = 0.0;
-    for(final p in inv.items)
-    {
+    for (final p in inv.items) {
       total += p.total;
     }
 
-    if(kDebugMode) print(total);
+    if (kDebugMode) print(total);
 
-    pw.MultiPage p = buildGridClassicTemplate(
-        inv,
-        _company,
-        'Rs.',
-        '',
+    pw.MultiPage p = buildGridClassicTemplate(inv, _company, 'Rs.', '',
         showDiscount: true,
         previousBalanceDue: 200,
         showFooterBranding: true,
-        showTotalQuantity: true
-    );
+        showTotalQuantity: true);
 
     doc.addPage(p);
     final bytes = await doc.save();
@@ -151,10 +153,10 @@ void main() {
     await outputFile.writeAsBytes(await doc.save());
   });
 
-  test('gridClassic renders watermark behind items table across a multi-page invoice',
+  test(
+      'gridClassic renders watermark behind items table across a multi-page invoice',
       () async {
-    final watermarkBytes =
-        await File('assets/images/watermark.png').readAsBytes();
+    final watermarkBytes = await File('assets/images/logo.png').readAsBytes();
     final doc = pw.Document();
 
     pw.MultiPage w = buildGridClassicTemplate(

@@ -93,3 +93,8 @@ Vyapar Exports/
 vyapar_backup_report/
 
 # Local tooling cache.freebuff/
+
+# Release signing — never commit keystore or passwords
+android/key.properties
+android/app/*.jks
+android/app/*.keystore

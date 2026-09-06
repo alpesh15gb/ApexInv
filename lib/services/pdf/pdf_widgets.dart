@@ -309,6 +309,34 @@ pw.Widget buildUpiQrSection({
   return (rounded: rounded, roundOff: rounded - net);
 }
 
+/// Single source of truth for PDF/print totals (also used by thermal,
+/// gridClassic and ESC/POS paths). Previous balance is never part of the
+/// books' round-off — only the invoice's own [roundOffAmount] rounds.
+///
+/// - [exactDue] is the exact total plus previous balance (secondary line).
+/// - [payableDue] is the amount actually owed (payable + previous balance)
+///   and must be the bottom-line "Net Amount"/"Total Due" plus the QR amount.
+/// - [roundOff] is the invoice's own delta (0 unless [roundOffEnabled]).
+/// - [isRounded] is true only when the invoice opts into round-off; the
+///   global showRoundOff display toggle must never round a non-rounded doc.
+({double exactDue, double payableDue, double roundOff, bool isRounded})
+    pdfInvoiceTotals(Invoice invoice, {double previousBalanceDue = 0.0}) {
+  final exactDue = invoice.total + previousBalanceDue;
+  final payableDue = invoice.payableTotal + previousBalanceDue;
+  return (
+    exactDue: exactDue,
+    payableDue: payableDue,
+    roundOff: invoice.roundOffAmount,
+    isRounded: invoice.roundOffEnabled,
+  );
+}
+
+/// Whether to print the Round off + Net Amount block. Only true when the
+/// invoice itself rounds; a global showRoundOff toggle alone must not
+/// fabricate rounding (phantom paise) on exact docs.
+bool shouldShowPdfRounding(Invoice invoice, bool showRoundOffSetting) =>
+    showRoundOffSetting && invoice.roundOffEnabled;
+
 pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
     PdfColor primaryColor, PdfColor totalHighlightColor, String currencySymbol,
     {double previousBalanceDue = 0.0,
@@ -320,8 +348,18 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
   final hasPaid = invoice.amountPaid > 0;
   final isPaidInFull = invoice.outstandingBalance <= 0;
   final hasPreviousBalance = previousBalanceDue > 0;
-  final totalDue = invoice.total + previousBalanceDue;
-  final netTotal = roundNetTotal(hasPreviousBalance ? totalDue : invoice.total);
+  // Bottom-line is always the amount owed (payable + previous balance).
+  // Rounding only applies when the invoice itself opts in — the global
+  // showRoundOff toggle must never fabricate paise on exact docs.
+  final totals =
+      pdfInvoiceTotals(invoice, previousBalanceDue: previousBalanceDue);
+  final totalDue = totals.payableDue;
+  final roundedNet = totals.payableDue;
+  final roundOff = totals.roundOff;
+  final shouldRound = shouldShowPdfRounding(invoice, showRoundOff) ||
+      // Rounded invoices always show their Round Off row even when the
+      // global display toggle is off (matches ESC/POS reference).
+      invoice.roundOffEnabled;
 
   final compactStyle = compact ? compactPdfTotalsStyle : null;
   final totalWidth = compactStyle?.width ?? 200.0;
@@ -408,7 +446,7 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
           ),
           decoration: pw.BoxDecoration(
             color: totalHighlightColor,
-            borderRadius: hasPaid || hasPreviousBalance
+            borderRadius: hasPaid || hasPreviousBalance || shouldRound
                 ? pw.BorderRadius.zero
                 : const pw.BorderRadius.vertical(bottom: pw.Radius.circular(5)),
           ),
@@ -428,6 +466,9 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
             ],
           ),
         ),
+        // Previous balance is shown separately; when the invoice rounds,
+        // the bottom-line Net Amount below already equals payableDue, so
+        // skip the duplicate Total Due row (ESC/POS reference behavior).
         if (hasPreviousBalance) ...[
           pdfTotalRow(
             "Previous Balance Due",
@@ -437,39 +478,40 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
             horizontalPadding: rowHorizontalPadding,
             verticalPadding: rowVerticalPadding,
           ),
-          pw.Container(
-            padding: pw.EdgeInsets.symmetric(
-              horizontal: highlightHorizontalPadding,
-              vertical: highlightVerticalPadding,
+          if (!shouldRound)
+            pw.Container(
+              padding: pw.EdgeInsets.symmetric(
+                horizontal: highlightHorizontalPadding,
+                vertical: highlightVerticalPadding,
+              ),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.orange800,
+                borderRadius: hasPaid
+                    ? pw.BorderRadius.zero
+                    : const pw.BorderRadius.vertical(
+                        bottom: pw.Radius.circular(5)),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text("Total Due",
+                      style: pw.TextStyle(
+                          fontSize: highlightFontSize,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white)),
+                  pw.Text("$currencySymbol ${totalDue.toStringAsFixed(2)}",
+                      style: pw.TextStyle(
+                          fontSize: highlightFontSize,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white)),
+                ],
+              ),
             ),
-            decoration: pw.BoxDecoration(
-              color: PdfColors.orange800,
-              borderRadius: hasPaid
-                  ? pw.BorderRadius.zero
-                  : const pw.BorderRadius.vertical(
-                      bottom: pw.Radius.circular(5)),
-            ),
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text("Total Due",
-                    style: pw.TextStyle(
-                        fontSize: highlightFontSize,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.white)),
-                pw.Text("$currencySymbol ${totalDue.toStringAsFixed(2)}",
-                    style: pw.TextStyle(
-                        fontSize: highlightFontSize,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.white)),
-              ],
-            ),
-          ),
         ],
-        if (showRoundOff) ...[
+        if (shouldRound) ...[
           pdfTotalRow(
             "Round off",
-            "$currencySymbol ${netTotal.roundOff.toStringAsFixed(2)}",
+            "$currencySymbol ${roundOff.toStringAsFixed(2)}",
             fontSize: rowFontSize,
             horizontalPadding: rowHorizontalPadding,
             verticalPadding: rowVerticalPadding,
@@ -494,8 +536,7 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
                         fontSize: highlightFontSize,
                         fontWeight: pw.FontWeight.bold,
                         color: PdfColors.white)),
-                pw.Text(
-                    "$currencySymbol ${netTotal.rounded.toStringAsFixed(2)}",
+                pw.Text("$currencySymbol ${roundedNet.toStringAsFixed(2)}",
                     style: pw.TextStyle(
                         fontSize: highlightFontSize,
                         fontWeight: pw.FontWeight.bold,
@@ -548,7 +589,7 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
     ),
   );
 
-  if (!showRoundOff) return totalsBox;
+  if (!shouldRound) return totalsBox;
 
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.end,
@@ -558,7 +599,7 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
       pw.SizedBox(
         width: totalWidth,
         child: pw.Text(
-            AmountInWords.amount(netTotal.rounded,
+            AmountInWords.amount(roundedNet,
                 indian: invoice.currencyCode == 'INR'),
             textAlign: pw.TextAlign.right,
             style: pw.TextStyle(

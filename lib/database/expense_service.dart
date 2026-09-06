@@ -90,10 +90,14 @@ class ExpenseService {
     if (accountId == null || accountId.isEmpty) return ('INR', '₹');
     final rows = await txn.query('financial_accounts',
         columns: ['currency_code', 'currency_symbol'],
-        where: 'id = ?', whereArgs: [accountId], limit: 1);
+        where: 'id = ?',
+        whereArgs: [accountId],
+        limit: 1);
     if (rows.isEmpty) throw StateError('Selected account is unavailable');
-    return (rows.first['currency_code'] as String? ?? 'INR',
-        rows.first['currency_symbol'] as String? ?? '₹');
+    return (
+      rows.first['currency_code'] as String? ?? 'INR',
+      rows.first['currency_symbol'] as String? ?? '₹'
+    );
   }
 
   static Future<Expense?> getExpenseById(String id) async {
@@ -195,8 +199,10 @@ class ExpenseService {
         whereArgs: [expenseId]);
     for (final row in rows) {
       final already = await txn.query('financial_transactions',
-          columns: ['id'], where: 'reversal_of = ?',
-          whereArgs: [row['id']], limit: 1);
+          columns: ['id'],
+          where: 'reversal_of = ?',
+          whereArgs: [row['id']],
+          limit: 1);
       if (already.isNotEmpty) continue;
       await AccountingService.insertMovement(txn,
           accountId: row['account_id'] as String,
@@ -230,7 +236,7 @@ class ExpenseService {
       'SELECT COALESCE(SUM(amount), 0) FROM expenses ${where != null ? 'WHERE $where' : ''}',
       args,
     );
-    return (Sqflite.firstIntValue(result) ?? 0).toDouble();
+    return (result.first.values.first as num?)?.toDouble() ?? 0;
   }
 
   static Future<List<Map<String, dynamic>>> getExpensesByCategory({

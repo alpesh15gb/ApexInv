@@ -449,6 +449,16 @@ class SettingsService {
         SettingKey.defaultPriceIncludesTax, value ? 'true' : 'false');
   }
 
+  /// Whether new invoices round the payable total by default. Defaults to
+  /// false (exact) to preserve historical behaviour.
+  static Future<bool> getDefaultRoundOff() async {
+    return await getSetting(SettingKey.defaultRoundOff) == 'true';
+  }
+
+  static Future<void> setDefaultRoundOff(bool value) async {
+    await setSetting(SettingKey.defaultRoundOff, value ? 'true' : 'false');
+  }
+
   /// Returns the signature size key: 'small' | 'medium' | 'large'. Defaults to 'medium'.
   static Future<String> getSignatureSize() async {
     return await getSetting(SettingKey.signatureSize) ?? 'medium';

@@ -124,8 +124,12 @@ class GstrExportService {
     );
   }
 
+  // Filed invoice value = payable total: rounded when the invoice opts
+  // into round-off (matching the printed bill and the ledger AR), with
+  // taxable/tax figures staying exact.
   static double _invoiceValueOf(Map<String, dynamic> inv) =>
-      _totalsOf(inv).total;
+      InvoiceTotalsCalculator.payableTotal(_totalsOf(inv).total,
+          enabled: (inv['round_off'] as int?) == 1);
 
   /// Rate-wise GSTR figures for one invoice, consistent with the ledger
   /// (taxable + exempt = net, net + tax = total).
@@ -315,7 +319,7 @@ class GstrExportService {
     required DateTime from,
     required DateTime to,
   }) async {
-    final data = await _loadPeriod(from, to);
+    final data = await _loadPeriod(from, to, withNotes: true);
     if (data.supplierStateCode == null) {
       throw GstrExportException(
           'Set your company GSTIN in Company Info first — it supplies the '
@@ -363,7 +367,13 @@ class GstrExportService {
           (inv['customer_gstin'] as String? ?? '').trim().toUpperCase();
       final totals = _totalsOf(inv);
       final figures = _figuresForInvoice(inv, totals);
-      final invoiceValue = figures.total;
+      // Filed invoice value = payable total (rounded when opted in),
+      // matching the printed bill, ledger AR and JSON paths.
+      final payable = _invoiceValueOf(inv);
+      // Net credit notes off the way the books/P&L do (Invoice/Debit +, Credit −).
+      final invType = inv['type'] as String? ?? 'Invoice';
+      final sign = invType == 'Credit Note' ? -1.0 : 1.0;
+      final invoiceValue = payable * sign;
 
       // Rate-wise taxable for this invoice: global mode uses the invoice
       // global rate with proportional taxable shares; discount/additional
@@ -373,7 +383,7 @@ class GstrExportService {
 
       for (final entry in rates.entries) {
         final rate = entry.key;
-        final taxable = entry.value;
+        final taxable = entry.value * sign;
         if (custGstin.isNotEmpty) {
           final recipientState = _stateFromGstin(custGstin);
           b2bRows.add([
@@ -389,7 +399,7 @@ class GstrExportService {
             _n2(taxable),
             '0', // cess
           ]);
-        } else if (interstate && invoiceValue > _b2clThreshold) {
+        } else if (interstate && payable > _b2clThreshold) {
           b2clRows.add([
             '', // B2CL recipients are unregistered
             inv['customer_name'] ?? '',
@@ -409,19 +419,20 @@ class GstrExportService {
       }
 
       // HSN summary (all lines, incl. zero-rated ones at their rate).
+      // Taxable stays exact; invoice Value semantics use payable above.
       for (final t in lineTaxes) {
         final hsn = t.hsn.isEmpty ? '999999' : t.hsn; // 999999 = services/none
         final key = '$hsn|${t.rate}';
         final agg = hsnAgg.putIfAbsent(key, () => [0, 0, 0, 0, 0, 0, 0]);
-        agg[0] += t.qty;
-        agg[2] += t.taxable;
+        agg[0] += t.qty * sign;
+        agg[2] += t.taxable * sign;
         if (t.interstate) {
-          agg[3] += t.tax;
+          agg[3] += t.tax * sign;
         } else {
-          agg[4] += t.tax / 2;
-          agg[5] += t.tax / 2;
+          agg[4] += t.tax * sign / 2;
+          agg[5] += t.tax * sign / 2;
         }
-        agg[1] += t.taxable + t.tax;
+        agg[1] += (t.taxable + t.tax) * sign;
         hsnDesc[key] = t.description;
       }
     }
@@ -505,7 +516,7 @@ class GstrExportService {
     required DateTime from,
     required DateTime to,
   }) async {
-    final data = await _loadPeriod(from, to);
+    final data = await _loadPeriod(from, to, withNotes: true);
     if (data.supplierStateCode == null) {
       throw GstrExportException(
           'Set your company GSTIN in Company Info first.');
@@ -515,9 +526,12 @@ class GstrExportService {
     for (final inv in data.invoices) {
       final interstate = (inv['is_interstate'] as int? ?? 0) == 1;
       final figures = _figuresForInvoice(inv);
-      taxable += figures.taxableTotal;
-      exempt += figures.exempt;
-      final tax = figures.tax;
+      // Net credit notes off like the books/P&L do.
+      final sign =
+          (inv['type'] as String? ?? 'Invoice') == 'Credit Note' ? -1.0 : 1.0;
+      taxable += figures.taxableTotal * sign;
+      exempt += figures.exempt * sign;
+      final tax = figures.tax * sign;
       if (interstate) {
         igst += tax;
       } else {
@@ -685,12 +699,14 @@ class GstrExportService {
     final supplierState =
         companyGstin.length >= 2 ? companyGstin.substring(0, 2) : null;
 
-    final invRows = await db.rawQuery(
-      "SELECT * FROM invoices "
-      "WHERE deleted_at IS NULL AND type = 'Invoice' "
-      "AND date >= ? AND date <= ? ORDER BY date",
-      [from.toIso8601String(), to.toIso8601String()],
-    );
+    final invRows = <Map<String, dynamic>>[
+      ...await db.rawQuery(
+        "SELECT * FROM invoices "
+        "WHERE deleted_at IS NULL AND type = 'Invoice' "
+        "AND date >= ? AND date <= ? ORDER BY date",
+        [from.toIso8601String(), to.toIso8601String()],
+      )
+    ];
     if (withNotes) {
       final noteRows = await db.rawQuery(
         "SELECT * FROM invoices "
@@ -943,7 +959,7 @@ class GstrExportService {
     required DateTime from,
     required DateTime to,
   }) async {
-    final data = await _loadPeriod(from, to);
+    final data = await _loadPeriod(from, to, withNotes: true);
     if (data.supplierStateCode == null) {
       throw GstrExportException(
           'Set your company GSTIN in Company Info first.');
@@ -951,11 +967,15 @@ class GstrExportService {
     final pos = data.supplierStateCode!;
     double taxable = 0, igst = 0, cgst = 0, sgst = 0;
     for (final inv in data.invoices) {
-      if ((inv['type'] as String? ?? 'Invoice') != 'Invoice') continue;
+      final type = inv['type'] as String? ?? 'Invoice';
+      if (type != 'Invoice' && type != 'Credit Note' && type != 'Debit Note') {
+        continue;
+      }
       final interstate = (inv['is_interstate'] as int? ?? 0) == 1;
       final figures = _figuresForInvoice(inv);
-      taxable += figures.taxableTotal;
-      final tax = figures.tax;
+      final sign = type == 'Credit Note' ? -1.0 : 1.0;
+      taxable += figures.taxableTotal * sign;
+      final tax = figures.tax * sign;
       if (interstate) {
         igst += tax;
       } else {

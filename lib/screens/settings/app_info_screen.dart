@@ -89,14 +89,7 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Image.asset(
-                              Theme.of(context).brightness == Brightness.dark
-                                  ? 'assets/images/logo_dark.png'
-                                  : 'assets/images/logo.png',
-                              width: 160,
-                              height: 64,
-                              fit: BoxFit.contain,
-                            ),
+                            const AppBrandLogo(height: 64),
                             const SizedBox(height: 14),
                             Text(
                               cfg.name.toUpperCase(),
@@ -143,14 +136,7 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
                       : Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Image.asset(
-                              Theme.of(context).brightness == Brightness.dark
-                                  ? 'assets/images/logo_dark.png'
-                                  : 'assets/images/logo.png',
-                              width: 130,
-                              height: 52,
-                              fit: BoxFit.contain,
-                            ),
+                            const AppBrandLogo(height: 52),
                             const SizedBox(width: 24),
                             Expanded(
                               child: Column(
@@ -275,7 +261,7 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
                           fontWeight: FontWeight.w500),
                     ),
                     subtitle: const Text(
-                      'View status, activate a purchased key',
+                      'Free until 5 May 2027 — view status, activate a purchased key',
                       style: TextStyle(fontSize: AppFontSize.small),
                     ),
                     trailing: const Icon(Icons.chevron_right_rounded),
@@ -327,6 +313,7 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
 
   Widget _buildUpdateCard() {
     final primaryColor = Theme.of(context).primaryColor;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final cfg = ref.watch(appEditionConfigProvider);
     final l10n = AppLocalizations.of(context)!;
     final info = widget.updateInfo;
@@ -354,7 +341,9 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
       statusBadge = Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.orange.shade50,
+          color: dark
+              ? Theme.of(context).colorScheme.surfaceContainerHighest
+              : Colors.orange.shade50,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.orange.shade300),
         ),
@@ -370,7 +359,9 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
       statusBadge = Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.green.shade50,
+          color: dark
+              ? Theme.of(context).colorScheme.surfaceContainerHighest
+              : Colors.green.shade50,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.green.shade300),
         ),
@@ -386,7 +377,9 @@ class _AppInfoScreenState extends ConsumerState<AppInfoScreen> {
       statusBadge = Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.red.shade50,
+          color: dark
+              ? Theme.of(context).colorScheme.surfaceContainerHighest
+              : Colors.red.shade50,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.red.shade200),
         ),

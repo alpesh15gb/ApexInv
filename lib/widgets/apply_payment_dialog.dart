@@ -82,7 +82,7 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
 
   double get _totalPaid => _payments.fold(0.0, (s, p) => s + p.amountPaid);
   double get _outstanding => InvoiceCalculator.outstanding(
-      total: widget.invoice.total, paid: _totalPaid);
+      total: widget.invoice.payableTotal, paid: _totalPaid);
   double get _enteredAmount =>
       double.tryParse(_amountController.text.trim()) ?? 0.0;
   double get _taxOnEnteredAmount {
@@ -101,9 +101,17 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
   }
 
   Future<void> _savePayment() async {
-    if (!_formKey.currentState!.validate()) return;
+    // E3d: synchronous re-entrancy guard — checked and set before any
+    // validation/await so double-tap cannot record twice. Button is also
+    // disabled via _isSaving, but the guard covers taps before rebuild.
+    if (_isSaving) return;
+    _isSaving = true;
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _isSaving = false);
+      return;
+    }
     final l10n = AppLocalizations.of(context)!;
-    setState(() => _isSaving = true);
+    setState(() {});
     try {
       await ref.read(paymentRepositoryProvider).addPayment(
             invoice: widget.invoice,
@@ -246,7 +254,7 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
                         PaymentSummaryCard(
                           label: l10n.paymentDialogInvoiceTotalLabel,
                           value:
-                              '$sym ${widget.invoice.total.toStringAsFixed(2)}',
+                              '$sym ${widget.invoice.payableTotal.toStringAsFixed(2)}',
                           color: Colors.blue,
                         ),
                         const SizedBox(width: 12),
@@ -265,6 +273,15 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
                         ),
                       ],
                     ),
+
+                    // Payment status while a balance remains: Partial vs
+                    // Unpaid (+ Overdue) labelled explicitly; the paid-in-full
+                    // banner below already covers the settled case.
+                    if (!_isLoadingPayments &&
+                        _outstanding > InvoiceCalculator.moneyEpsilon) ...[
+                      const SizedBox(height: 12),
+                      _buildStatusLine(sym, l10n),
+                    ],
 
                     const SizedBox(height: 20),
 
@@ -375,7 +392,7 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
                                     validator: (v) {
                                       final n =
                                           double.tryParse(v?.trim() ?? '');
-                                      if (n == null || n <= 0) {
+                                      if (n == null || !n.isFinite || n <= 0) {
                                         return l10n
                                             .paymentDialogInvalidAmountError;
                                       }
@@ -542,7 +559,10 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text(l10n.actionClose),
+                    child: Text((_isLoadingPayments ||
+                            _outstanding <= InvoiceCalculator.moneyEpsilon)
+                        ? l10n.actionClose
+                        : l10n.actionCancel),
                   ),
                   if (!_isLoadingPayments &&
                       _outstanding > InvoiceCalculator.moneyEpsilon) ...[
@@ -574,6 +594,49 @@ class _ApplyPaymentDialogState extends ConsumerState<ApplyPaymentDialog> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatusLine(String sym, AppLocalizations l10n) {
+    final isPartial = _totalPaid > InvoiceCalculator.moneyEpsilon;
+    final color = isPartial ? Colors.orange : Colors.red;
+    final overdue = InvoiceCalculator.isOverdue(
+      dueDate: widget.invoice.dueDate,
+      outstanding: _outstanding,
+    );
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isPartial ? Icons.pie_chart_outline : Icons.pending_outlined,
+            color: color,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            isPartial ? l10n.paymentStatusPartial : l10n.paymentStatusUnpaid,
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$sym ${_outstanding.toStringAsFixed(2)} due'
+              '${overdue ? ' • ${l10n.invoiceMgmtOverdueBadge}' : ''}',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }

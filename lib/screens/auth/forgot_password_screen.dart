@@ -297,10 +297,11 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                     ],
                     AppSpacing.hMedium,
                     Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Back to Login'),
+                        icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                        label: const Text('Back to Login'),
                       ),
                     ),
                   ],
@@ -314,11 +315,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   }
 
   Widget _buildSuccessBox(String message) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.green[50],
-        border: Border.all(color: Colors.green[200]!),
+        color: theme.colorScheme.surfaceContainerHighest,
+        border: Border.all(color: theme.colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -337,11 +339,12 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   }
 
   Widget _buildErrorBox(String message) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.red[50],
-        border: Border.all(color: Colors.red[200]!),
+        color: theme.colorScheme.surfaceContainerHighest,
+        border: Border.all(color: theme.colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(

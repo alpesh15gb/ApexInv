@@ -15,7 +15,7 @@ import 'package:apexbooks/providers/theme_provider.dart';
 import 'package:apexbooks/widgets/language_picker.dart';
 import 'package:apexbooks/widgets/adaptive/adaptive_field_grid.dart';
 import 'package:apexbooks/widgets/adaptive/sticky_action_bar.dart';
-import 'package:apexbooks/common/invoiso_colors.dart';
+import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/models/company_info.dart';
 import 'package:apexbooks/widgets/app/app.dart';
 

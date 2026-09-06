@@ -118,6 +118,9 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
 
   bool _isTaxEnabled = true;
   bool _isPerItem = false;
+  // Document-level round-off: true → the payable total rounds to the
+  // nearest rupee (paise posts to Round Off in the ledger).
+  bool _roundOff = false;
   // Document-level GST interpretation: true → typed rates include GST and
   // tax is backed out; false → tax is added on top. Applies to every line,
   // existing and subsequently added (per-line dialog remains as override).
@@ -200,6 +203,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       taxRateController.text = (taxRate * 100).toStringAsFixed(1);
       _isTaxEnabled = _invoice!.taxMode != TaxMode.none;
       _isPerItem = _invoice!.taxMode == TaxMode.perItem;
+      _roundOff = _invoice!.roundOffEnabled;
       _pricesIncludeTax = invoiceItems.isNotEmpty &&
           invoiceItems.every((i) => i.product.priceIncludesTax);
       _isInterState = _invoice!.isInterState;
@@ -256,6 +260,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       taxRateController.text = (taxRate * 100).toStringAsFixed(1);
       _isTaxEnabled = src.taxMode != TaxMode.none;
       _isPerItem = src.taxMode == TaxMode.perItem;
+      _roundOff = src.roundOffEnabled;
       _pricesIncludeTax = invoiceItems.isNotEmpty &&
           invoiceItems.every((i) => i.product.priceIncludesTax);
       _isInterState = src.isInterState;
@@ -504,6 +509,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
         settingsRepo.getDefaultTaxMode(), // 17
         settingsRepo.getHideInvoiceNumberByDefault(), // 18
         settingsRepo.getSetting(SettingKey.defaultPriceIncludesTax), // 19
+        settingsRepo.getSetting(SettingKey.defaultRoundOff), // 20
       ]);
 
       final c = results[0] as List<Customer>;
@@ -549,6 +555,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
       final defaultTaxMode = results[17] as String;
       final hideInvoiceNumberByDefault = results[18] as bool;
       final defaultPriceIncludesTax = (results[19] as String?) == 'true';
+      final defaultRoundOff = (results[20] as String?) == 'true';
 
       // Determine which UPI to pre-select.
       String? existingUpiId;
@@ -617,6 +624,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
           _isPerItem = defaultTaxMode == 'perItem';
           _hideInvoiceNumber = hideInvoiceNumberByDefault;
           _pricesIncludeTax = defaultPriceIncludesTax;
+          _roundOff = defaultRoundOff;
         }
         _businessType = businessType;
         _adHocItemType =
@@ -1272,6 +1280,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
         currencySymbol: _currencySymbol,
         taxMode: _taxMode,
         isInterState: _isInterState,
+        roundOffEnabled: _roundOff,
         upiId: _selectedUpi?.id,
         bankAccountId: _selectedBankAccount?.accountNumber,
         quantityLabel:
@@ -1853,7 +1862,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
             final newNameError = name.isEmpty ? 'Required' : null;
             final newPriceError = priceText.isEmpty
                 ? 'Required'
-                : price <= 0
+                : (!price.isFinite || price <= 0)
                     ? 'Must be > 0'
                     : null;
             if (newNameError != null || newPriceError != null) {
@@ -3669,8 +3678,11 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
     );
   }
 
-  double get _invoiceDiscountValue =>
-      double.tryParse(_invoiceDiscountController.text) ?? 0.0;
+  double get _invoiceDiscountValue {
+    final v = double.tryParse(_invoiceDiscountController.text);
+    if (v == null || !v.isFinite) return 0.0;
+    return v;
+  }
 
   List<AdditionalCost> _buildAdditionalCosts() {
     final costs = <AdditionalCost>[];
@@ -4940,6 +4952,28 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               },
                             ),
                             const SizedBox(height: 8),
+                            SegmentedButton<bool>(
+                              segments: const [
+                                ButtonSegment<bool>(
+                                  value: false,
+                                  icon:
+                                      Icon(Icons.calculate_outlined, size: 16),
+                                  tooltip: 'Exact total, paise included',
+                                ),
+                                ButtonSegment<bool>(
+                                  value: true,
+                                  icon: Icon(Icons.adjust_rounded, size: 16),
+                                  tooltip:
+                                      'Round the payable total to the nearest rupee',
+                                ),
+                              ],
+                              selected: {_roundOff},
+                              onSelectionChanged: (selection) {
+                                if (!mounted) return;
+                                setState(() => _roundOff = selection.first);
+                              },
+                            ),
+                            const SizedBox(height: 8),
                             // Global rate input (only when global selected)
                             if (!_isPerItem)
                               TextField(
@@ -5107,13 +5141,31 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
                               _buildPreviousBalanceDueRow(),
                             ],
                             const SizedBox(height: 20),
-                            _buildTotalRow('Total', total, true),
+                            if (InvoiceTotalsCalculator.roundOffAmount(total,
+                                        enabled: _roundOff)
+                                    .abs() >=
+                                0.005) ...[
+                              const SizedBox(height: 4),
+                              _buildTotalRow(
+                                  'Round Off',
+                                  InvoiceTotalsCalculator.roundOffAmount(total,
+                                      enabled: _roundOff),
+                                  false),
+                            ],
+                            _buildTotalRow(
+                                'Total',
+                                InvoiceTotalsCalculator.payableTotal(total,
+                                    enabled: _roundOff),
+                                true),
                             if (_showPreviousBalance &&
                                 selectedCustomer != null &&
                                 !_isPreviousBalanceLoading &&
                                 _previousBalanceDue > 0) ...[
                               const SizedBox(height: 8),
-                              _buildTotalDueRow(total + _previousBalanceDue),
+                              _buildTotalDueRow(
+                                  InvoiceTotalsCalculator.payableTotal(total,
+                                          enabled: _roundOff) +
+                                      _previousBalanceDue),
                             ],
                             if (isEditing &&
                                 _invoice != null &&
@@ -5329,6 +5381,7 @@ class _CreateInvoiceScreenState extends ConsumerState<CreateInvoiceScreen> {
         currencySymbol: _currencySymbol,
         taxMode: _taxMode,
         isInterState: _isInterState,
+        roundOffEnabled: _roundOff,
         upiId: _selectedUpi?.id,
         bankAccountId: _selectedBankAccount?.accountNumber,
         quantityLabel:

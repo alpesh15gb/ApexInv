@@ -274,7 +274,14 @@ pw.Page buildThermalTemplate(
   List<pw.Widget> buildPdfBody() {
     final dateStr = formatPdfDateTime(invoice.date, datePattern,
         showTime: showTimeInPdf, timeFormat: pdfTimeFormat);
-    final netTotal = roundNetTotal(invoice.total + previousBalanceDue);
+    // Bottom-line is always the amount owed; rounding only when opted in.
+    final pdfTotals =
+        pdfInvoiceTotals(invoice, previousBalanceDue: previousBalanceDue);
+    final rawNet = pdfTotals.exactDue;
+    final roundedNet = pdfTotals.payableDue;
+    final roundOff = pdfTotals.roundOff;
+    final shouldRound =
+        shouldShowPdfRounding(invoice, showRoundOff) || invoice.roundOffEnabled;
     return [
       // ── Business Header ──
       centerText(showCompanyName ? (company?.name ?? '') : '',
@@ -437,30 +444,29 @@ pw.Page buildThermalTemplate(
                   textAlign: pw.TextAlign.end,
                   style: pw.TextStyle(
                       fontSize: boldFs, fontWeight: pw.FontWeight.bold))),
-          pw.Text(
-              '$currencySymbol ${(invoice.total + previousBalanceDue).toStringAsFixed(2)}',
+          pw.Text('$currencySymbol ${rawNet.toStringAsFixed(2)}',
               style: pw.TextStyle(
                   fontSize: boldFs, fontWeight: pw.FontWeight.bold)),
         ],
       ),
-      if (showRoundOff) ...[
+      if (shouldRound) ...[
         pw.SizedBox(height: 2),
-        labelValue('Round off:',
-            '$currencySymbol ${netTotal.roundOff.toStringAsFixed(2)}'),
+        labelValue(
+            'Round off:', '$currencySymbol ${roundOff.toStringAsFixed(2)}'),
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text('NET AMOUNT',
                 style: pw.TextStyle(
                     fontSize: boldFs, fontWeight: pw.FontWeight.bold)),
-            pw.Text('$currencySymbol ${netTotal.rounded.toStringAsFixed(2)}',
+            pw.Text('$currencySymbol ${roundedNet.toStringAsFixed(2)}',
                 style: pw.TextStyle(
                     fontSize: boldFs, fontWeight: pw.FontWeight.bold)),
           ],
         ),
         pw.SizedBox(height: 2),
         pw.Text(
-            AmountInWords.amount(netTotal.rounded,
+            AmountInWords.amount(roundedNet,
                 indian: invoice.currencyCode == 'INR'),
             style: pw.TextStyle(
                 fontSize: bodyFs - 1, fontStyle: pw.FontStyle.italic)),

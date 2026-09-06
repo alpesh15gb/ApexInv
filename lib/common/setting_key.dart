@@ -53,6 +53,7 @@ enum SettingKey {
   showCgstSgst, // whether to split tax into CGST/SGST (India, 50/50)
   defaultTaxMode, // 'global' | 'perItem' — default tax mode for new invoices
   defaultPriceIncludesTax, // whether rates include GST by default on new documents (default false = exclusive)
+  defaultRoundOff, // whether new invoices round the payable total to the nearest rupee (default false = exact)
   showRoundOff, // whether to show round-off row + amount-in-words on PDFs (default false)
   showCompanyName, // whether to show company name on PDF (default true)
   showPan, // whether to show company PAN on PDF (default true)
@@ -200,6 +201,8 @@ extension SettingKeyExtension on SettingKey {
         return 'default_tax_mode';
       case SettingKey.defaultPriceIncludesTax:
         return 'default_price_includes_tax';
+      case SettingKey.defaultRoundOff:
+        return 'default_round_off';
       case SettingKey.showRoundOff:
         return 'show_round_off';
       case SettingKey.showCompanyName:

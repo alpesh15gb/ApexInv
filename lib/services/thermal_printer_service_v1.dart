@@ -312,9 +312,13 @@ class ThermalPrinterService {
       twoCol('Prev Balance:',
           '$currency ${effectivePreviousBalance.toStringAsFixed(2)}');
     }
+    if (invoice.roundOffAmount.abs() >= 0.005) {
+      twoCol('Round Off:',
+          '$currency ${invoice.roundOffAmount.toStringAsFixed(2)}');
+    }
     twoCol(
       'TOTAL',
-      '$currency ${(invoice.total + effectivePreviousBalance).toStringAsFixed(2)}',
+      '$currency ${(invoice.payableTotal + effectivePreviousBalance).toStringAsFixed(2)}',
       bold: true,
     );
 

@@ -12,6 +12,7 @@ import 'package:apexbooks/models/invoice_payment.dart';
 import 'package:apexbooks/utils/app_date.dart';
 import 'package:apexbooks/utils/app_logger.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import 'database_helper.dart';
 import 'payment_service.dart';
 import 'accounting_service.dart';
@@ -24,9 +25,59 @@ class InvoiceService {
   static bool _affectsStock(String type) =>
       type == 'Invoice' || type == 'Delivery Challan';
 
+  /// Service-level guard for flat (amount) invoice discounts. The totals
+  /// engine clamps the payable total at zero but keeps the tax component, so
+  /// a discount larger than the pre-discount total would persist a document
+  /// whose ledger net (total − tax) goes negative. Refuse it at the write
+  /// path instead of storing a loss-making total.
+  static void _rejectExcessiveFlatDiscount(Invoice invoice) {
+    if (invoice.invoiceDiscountType != InvoiceDiscountType.amount) return;
+    if (invoice.invoiceDiscountValue <= 0) return;
+    final preDiscount =
+        invoice.subtotal + invoice.tax + invoice.additionalCostsTotal;
+    if (invoice.invoiceDiscountValue > preDiscount + 0.005) {
+      throw StateError('Invoice discount exceeds the pre-discount total');
+    }
+  }
+
   // ─────────────────────────────────────────────
   // Insert Invoice + Items + Stock Deduction (transactional)
+  // E5: UNIQUE(invoice_number) + bounded retry. generateNextInvoiceNumber
+  // reads MAX+1 outside any txn, so two concurrent savers (or a
+  // preview-then-save TOCTOU) can pick the same display number. The v54
+  // partial UNIQUE index makes the loser fail inside its insert txn; we
+  // catch that conflict, take the next number, and retry (max 5). Display
+  // format (8-digit zero-padded) is preserved by generateNextInvoiceNumber.
   static Future<void> insertInvoice(Invoice invoice) async {
+    _rejectExcessiveFlatDiscount(invoice);
+    const maxAttempts = 5;
+    for (var attempt = 0;; attempt++) {
+      try {
+        await _insertInvoiceOnce(invoice);
+        return;
+      } on DatabaseException catch (e) {
+        if (!_isInvoiceNumberConflict(e) || attempt + 1 >= maxAttempts) {
+          rethrow;
+        }
+        AppLogger.d(_tag,
+            'invoice_number conflict on ${invoice.invoiceNumber}, retrying');
+        invoice.invoiceNumber = await generateNextInvoiceNumber(invoice.type);
+      }
+    }
+  }
+
+  static bool _isInvoiceNumberConflict(DatabaseException e) {
+    final msg = e.toString().toLowerCase();
+    if (!msg.contains('unique')) return false;
+    // Same-row double-submit (PK id conflict) must NOT retry — it would
+    // loop generating fresh numbers for an id that can never insert. Only
+    // retry when the display-number index is the culprit.
+    if (msg.contains('invoices.id')) return false;
+    return msg.contains('invoice_number') ||
+        msg.contains('idx_invoices_number_unique');
+  }
+
+  static Future<void> _insertInvoiceOnce(Invoice invoice) async {
     final db = await dbHelper.database;
     await db.transaction((txn) async {
       await txn.insert('invoices', {
@@ -48,6 +99,7 @@ class InvoiceService {
         'currency_symbol': invoice.currencySymbol,
         'tax_mode': invoice.taxMode.key,
         'is_interstate': invoice.isInterState ? 1 : 0,
+        'round_off': invoice.roundOffEnabled ? 1 : 0,
         'upi_id': invoice.upiId,
         'bank_account_id': invoice.bankAccountId,
         'due_date': invoice.dueDate?.toIso8601String(),
@@ -116,6 +168,7 @@ class InvoiceService {
   }
 
   static Future<void> updateInvoice(Invoice invoice) async {
+    _rejectExcessiveFlatDiscount(invoice);
     final db = await dbHelper.database;
 
     // Fetch existing items before transaction (to restore stock)
@@ -137,7 +190,7 @@ class InvoiceService {
         [invoice.id],
       );
       final paid = (paidRows.first['paid'] as num?)?.toDouble() ?? 0.0;
-      if (paid > invoice.total + 0.005) {
+      if (paid > invoice.payableTotal + 0.005) {
         throw StateError('Invoice total below amount already paid');
       }
 
@@ -158,6 +211,7 @@ class InvoiceService {
           'invoice_title': invoice.invoiceTitle,
           'tax_mode': invoice.taxMode.key,
           'is_interstate': invoice.isInterState ? 1 : 0,
+          'round_off': invoice.roundOffEnabled ? 1 : 0,
           'upi_id': invoice.upiId,
           'bank_account_id': invoice.bankAccountId,
           'due_date': invoice.dueDate?.toIso8601String(),
@@ -280,13 +334,30 @@ class InvoiceService {
     final db = await dbHelper.database;
     final invoiceDateKey = AppDate.dateKey(asOfDate);
     final sameDayId = currentInvoiceId?.trim();
-    final dateFilter = sameDayId == null || sameDayId.isEmpty
-        ? 'substr(date, 1, 10) < ?'
-        : '(substr(date, 1, 10) < ? '
-            'OR (substr(date, 1, 10) = ? AND id < ?))';
-    final dateArgs = sameDayId == null || sameDayId.isEmpty
-        ? <Object>[invoiceDateKey]
-        : <Object>[invoiceDateKey, invoiceDateKey, sameDayId];
+    // Same-day tiebreaker uses rowid (creation order): invoice PKs are UUIDs
+    // since the cross-device collision fix, so lexical id comparison is
+    // meaningless. Legacy numeric ids keep working via rowid ordering too.
+    String dateFilter;
+    List<Object> dateArgs;
+    if (sameDayId == null || sameDayId.isEmpty) {
+      dateFilter = 'substr(date, 1, 10) < ?';
+      dateArgs = <Object>[invoiceDateKey];
+    } else {
+      final currentRows = await db.query('invoices',
+          columns: ['rowid'],
+          where: 'id = ?',
+          whereArgs: [sameDayId],
+          limit: 1);
+      if (currentRows.isEmpty) {
+        dateFilter = 'substr(date, 1, 10) < ?';
+        dateArgs = <Object>[invoiceDateKey];
+      } else {
+        final currentRowid = currentRows.first['rowid'] as int;
+        dateFilter = '(substr(date, 1, 10) < ? '
+            'OR (substr(date, 1, 10) = ? AND rowid < ?))';
+        dateArgs = <Object>[invoiceDateKey, invoiceDateKey, currentRowid];
+      }
+    }
 
     final invoiceRows = await db.query(
       'invoices',
@@ -297,6 +368,7 @@ class InvoiceService {
         'additional_costs',
         'invoice_discount_type',
         'invoice_discount_value',
+        'round_off',
       ],
       where: 'customer_id = ? '
           'AND type = ? '
@@ -361,8 +433,10 @@ class InvoiceService {
         invoiceDiscountValue:
             (row['invoice_discount_value'] as num?)?.toDouble() ?? 0.0,
       );
+      final payable = InvoiceTotalsCalculator.payableTotal(totals.total,
+          enabled: (row['round_off'] as int?) == 1);
       previousBalanceDue += InvoiceCalculator.outstanding(
-        total: totals.total,
+        total: payable,
         paid: paidByInvoice[invoiceId] ?? 0.0,
       );
     }
@@ -451,6 +525,7 @@ class InvoiceService {
       currencySymbol: i['currency_symbol'] as String? ?? '₹',
       taxMode: TaxModeExtension.fromKey(i['tax_mode'] as String?),
       isInterState: (i['is_interstate'] as int?) == 1,
+      roundOffEnabled: (i['round_off'] as int?) == 1,
       upiId: i['upi_id'] as String?,
       bankAccountId: i['bank_account_id'] as String?,
       dueDate: i['due_date'] != null
@@ -480,7 +555,9 @@ class InvoiceService {
     final invoiceMaps = await db.query(
       'invoices',
       where: 'deleted_at IS NULL',
-      orderBy: 'id DESC',
+      // rowid tracks creation order; id is a UUID since the cross-device
+      // collision fix (legacy rows keep sequential ids, still readable).
+      orderBy: 'rowid DESC',
     );
 
     return _buildInvoiceList(invoiceMaps);
@@ -599,9 +676,13 @@ class InvoiceService {
 
     final where = whereParts.join(' AND ');
     final order = orderAscending ? 'ASC' : 'DESC';
+    // 'id' used to be a monotonic sequence; it is a UUID now, so id-ordering
+    // maps to rowid (creation order). Legacy sequential ids keep working.
     final orderClause = orderBy == 'customer_name'
         ? 'customer_name COLLATE NOCASE $order'
-        : '$orderBy $order';
+        : orderBy == 'id'
+            ? 'rowid $order'
+            : '$orderBy $order';
     final invoiceMaps = await db.query(
       'invoices',
       where: where,
@@ -700,6 +781,19 @@ class InvoiceService {
       final rows = await txn.query('invoices',
           where: 'id = ?', whereArgs: [id], limit: 1);
       if (rows.isEmpty || rows.first['deleted_at'] != null) return;
+      // A trashed invoice leaves the books but its payments/movements stay
+      // posted — that would strand cash against a receivables account that no
+      // longer lists the invoice. Block the move while live (non-bounced /
+      // non-cancelled) payments exist; permanent delete reverses them.
+      final paidRows = await txn.rawQuery(
+        "SELECT COALESCE(SUM(amount_paid), 0.0) AS paid FROM invoice_payments WHERE invoice_id = ? AND cheque_status NOT IN ('bounced', 'cancelled')",
+        [id],
+      );
+      final paid = (paidRows.first['paid'] as num?)?.toDouble() ?? 0.0;
+      if (paid > 0.005) {
+        throw StateError(
+            'Cannot move invoice to trash while live payments exist. Delete the payments first or use permanent delete.');
+      }
       await txn.update(
         'invoices',
         {'deleted_at': DateTime.now().toIso8601String()},
@@ -829,6 +923,7 @@ class InvoiceService {
           currencySymbol: map['currency_symbol'] as String? ?? '₹',
           taxMode: TaxModeExtension.fromKey(map['tax_mode'] as String?),
           isInterState: (map['is_interstate'] as int?) == 1,
+          roundOffEnabled: (map['round_off'] as int?) == 1,
           upiId: map['upi_id'] as String?,
           bankAccountId: map['bank_account_id'] as String?,
           dueDate: map['due_date'] != null
@@ -885,14 +980,17 @@ class InvoiceService {
 
   /// Returns invoice count, total revenue collected, and total outstanding
   /// using batch SQL — avoids loading full Invoice objects for summary data.
+  /// When [currencyCode] is set, only that currency is counted (dashboard
+  /// renders under a single symbol); null keeps the legacy all-currencies sum.
   static Future<({int count, double revenue, double outstanding})>
-      getDashboardFinancials() async {
+      getDashboardFinancials({String? currencyCode}) async {
     final db = await dbHelper.database;
 
     // Count
     final countResult = await db.rawQuery(
-      'SELECT COUNT(*) as cnt FROM invoices WHERE type = ? AND deleted_at IS NULL',
-      ['Invoice'],
+      'SELECT COUNT(*) as cnt FROM invoices WHERE type = ? AND deleted_at IS NULL'
+      '${currencyCode == null ? '' : ' AND currency_code = ?'}',
+      ['Invoice', if (currencyCode != null) currencyCode],
     );
     final count = (countResult.first['cnt'] as int?) ?? 0;
 
@@ -901,8 +999,9 @@ class InvoiceService {
       'SELECT COALESCE(SUM(ip.amount_paid), 0.0) as revenue '
       'FROM invoice_payments ip '
       'JOIN invoices i ON ip.invoice_id = i.id '
-      "WHERE i.type = ? AND i.deleted_at IS NULL AND ip.cheque_status NOT IN ('bounced', 'cancelled')",
-      ['Invoice'],
+      "WHERE i.type = ? AND i.deleted_at IS NULL AND ip.cheque_status NOT IN ('bounced', 'cancelled')"
+      '${currencyCode == null ? '' : ' AND i.currency_code = ?'}',
+      ['Invoice', if (currencyCode != null) currencyCode],
     );
     final revenue = (revenueResult.first['revenue'] as num?)?.toDouble() ?? 0.0;
 
@@ -916,9 +1015,11 @@ class InvoiceService {
         'additional_costs',
         'invoice_discount_type',
         'invoice_discount_value',
+        'round_off',
       ],
-      where: 'type = ? AND deleted_at IS NULL',
-      whereArgs: ['Invoice'],
+      where: 'type = ? AND deleted_at IS NULL'
+          '${currencyCode == null ? '' : ' AND currency_code = ?'}',
+      whereArgs: ['Invoice', if (currencyCode != null) currencyCode],
     );
 
     if (invoiceRows.isEmpty) {
@@ -979,7 +1080,8 @@ class InvoiceService {
         invoiceDiscountValue:
             (inv['invoice_discount_value'] as num?)?.toDouble() ?? 0.0,
       );
-      final total = totals.total;
+      final total = InvoiceTotalsCalculator.payableTotal(totals.total,
+          enabled: (inv['round_off'] as int?) == 1);
       final paid = paidByInvoice[invId] ?? 0.0;
       outstanding += InvoiceCalculator.outstanding(total: total, paid: paid);
     }
@@ -993,7 +1095,7 @@ class InvoiceService {
     final rows = await db.query(
       'invoices',
       where: 'deleted_at IS NULL',
-      orderBy: 'id DESC',
+      orderBy: 'rowid DESC',
       limit: limit,
     );
     return _buildInvoiceList(rows);
@@ -1088,8 +1190,9 @@ class InvoiceService {
 
   /// Revenue grouped by month for the last [months] calendar months.
   /// Returns rows with keys 'month' (YYYY-MM string) and 'revenue' (double).
+  /// When [currencyCode] is set, only that currency is summed.
   static Future<List<Map<String, dynamic>>> getMonthlyRevenue(
-      {int months = 6}) async {
+      {int months = 6, String? currencyCode}) async {
     final db = await dbHelper.database;
     final cutoff = DateTime.now().subtract(Duration(days: months * 31));
     final cutoffStr =
@@ -1100,10 +1203,11 @@ class InvoiceService {
       "FROM invoice_payments ip "
       "JOIN invoices i ON ip.invoice_id = i.id "
       "WHERE i.type = 'Invoice' AND i.deleted_at IS NULL AND ip.cheque_status NOT IN ('bounced', 'cancelled') "
+      "${currencyCode == null ? '' : 'AND i.currency_code = ? '}"
       "AND substr(ip.date_paid, 1, 10) >= ? "
       "GROUP BY substr(ip.date_paid, 1, 7) "
       "ORDER BY month ASC",
-      [cutoffStr],
+      [if (currencyCode != null) currencyCode, cutoffStr],
     );
     return rows
         .map((r) => {
@@ -1114,8 +1218,9 @@ class InvoiceService {
   }
 
   /// Top [limit] customers by total payments received.
+  /// When [currencyCode] is set, only that currency is summed.
   static Future<List<Map<String, dynamic>>> getTopCustomers(
-      {int limit = 5}) async {
+      {int limit = 5, String? currencyCode}) async {
     final db = await dbHelper.database;
     final rows = await db.rawQuery(
       'SELECT i.customer_name, '
@@ -1125,10 +1230,11 @@ class InvoiceService {
       'LEFT JOIN invoice_payments ip ON i.id = ip.invoice_id '
       "WHERE i.type = 'Invoice' AND i.deleted_at IS NULL "
       "AND (ip.cheque_status IS NULL OR ip.cheque_status NOT IN ('bounced', 'cancelled')) "
+      '${currencyCode == null ? '' : 'AND i.currency_code = ? '}'
       'GROUP BY i.customer_name '
       'ORDER BY total_paid DESC, invoice_count DESC '
       'LIMIT ?',
-      [limit],
+      [if (currencyCode != null) currencyCode, limit],
     );
     return rows
         .map((r) => {
@@ -1162,29 +1268,13 @@ class InvoiceService {
         .toList();
   }
 
-  /// Generates the next `id` (primary key) — global sequence across all
-  /// types, unchanged from before. Other queries (e.g. "recent invoices")
-  /// rely on `id` sorting as a single monotonic sequence, so this must never
-  /// be scoped by type.
+  /// Generates the next `id` (primary key) as a UUID v4 so concurrent
+  /// creation on multiple devices cannot collide on the sync wire (the raw
+  /// id is the sync row key; cloud_id is stripped and never sent).
+  /// Legacy sequential ids remain readable everywhere; only minting changes.
+  /// Display numbering is separate ([generateNextInvoiceNumber]) and untouched.
   static Future<String> generateNextId() async {
-    final db = await dbHelper.database;
-    final result =
-        await db.rawQuery("SELECT id FROM invoices ORDER BY id DESC LIMIT 1");
-
-    int nextNumber;
-    if (result.isNotEmpty) {
-      final lastNumberStr = result.first['id'] as String;
-      final numericPart =
-          int.tryParse(lastNumberStr.replaceAll(RegExp(r'\D'), ''));
-      nextNumber = (numericPart != null) ? numericPart + 1 : 1;
-    } else {
-      final startStr =
-          await SettingsService.getSetting(SettingKey.invoiceStartingNumber);
-      nextNumber = int.tryParse(startStr ?? '') ?? 1;
-      if (nextNumber < 1) nextNumber = 1;
-    }
-
-    return nextNumber.toString().padLeft(8, '0');
+    return const Uuid().v4();
   }
 
   /// Generates the next **display** number for [type] ('Invoice' |
@@ -1200,11 +1290,14 @@ class InvoiceService {
   static Future<String> generateNextInvoiceNumber(String type) async {
     final db = await dbHelper.database;
 
+    // Numeric-only legacy ids: UUID PKs must not pollute the display sequence
+    // (hex digits inside a UUID would otherwise parse as a huge number).
     final idResult = await db.rawQuery(
-        "SELECT id FROM invoices WHERE type = ? ORDER BY id DESC LIMIT 1",
+        "SELECT id FROM invoices WHERE type = ? AND id GLOB '[0-9]*' "
+        "ORDER BY CAST(id AS INTEGER) DESC LIMIT 1",
         [type]);
     final numResult = await db.rawQuery(
-        "SELECT invoice_number FROM invoices WHERE type = ? AND invoice_number IS NOT NULL ORDER BY invoice_number DESC LIMIT 1",
+        "SELECT invoice_number FROM invoices WHERE type = ? AND invoice_number IS NOT NULL ORDER BY CAST(invoice_number AS INTEGER) DESC LIMIT 1",
         [type]);
 
     int fromId = 0;

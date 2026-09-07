@@ -710,7 +710,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeInOut,
-      width: expanded ? 210 : 64,
+      width: expanded ? 244 : 72,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainer,
         border: Border(
@@ -724,7 +724,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             // ── Logo + toggle ──────────────────────────
             if (expanded)
               SizedBox(
-                height: 76,
+                height: 80,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
@@ -760,7 +760,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               )
             else
               SizedBox(
-                height: 76,
+                height: 80,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -1832,13 +1832,32 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           ? null
           : Theme.of(context).colorScheme.surfaceContainerHighest,
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.dashboardOverviewTitle),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ??
-            Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(AppLocalizations.of(context)!.dashboardOverviewTitle),
+            Text(
+              DateFormat('EEEE, d MMMM').format(DateTime.now()),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        toolbarHeight: 72,
+        centerTitle: false,
         actions: [
+          if (!context.isCompact)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilledButton.icon(
+                onPressed: widget.onCreateInvoice,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Create invoice'),
+              ),
+            ),
           _buildLayoutToggle(),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -3426,60 +3445,94 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainer,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.primary, const Color(0xFF0B4FC4)],
+        ),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3)),
-        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '${_timeOfDayGreeting()}, ${_ownerFirstName()}!',
-            style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: scheme.onSurface,
-                letterSpacing: -0.3),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            "Here's what's happening with your business today.",
-            style: TextStyle(fontSize: 13.5, color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 10),
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < Breakpoints.compactMax;
+          final copy = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.format_quote_rounded, size: 15, color: scheme.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  quote,
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      fontStyle: FontStyle.italic,
-                      color: scheme.onSurfaceVariant),
+              Text(
+                '${_timeOfDayGreeting()}, ${_ownerFirstName()}!',
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.4,
                 ),
               ),
+              const SizedBox(height: 6),
+              const Text(
+                "Here's a clear view of your business today.",
+                style: TextStyle(fontSize: 14, color: Color(0xFFDCEAFF)),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.format_quote_rounded,
+                      size: 16, color: Color(0xFFB7D1FF)),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      quote,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontStyle: FontStyle.italic,
+                        color: Color(0xFFDCEAFF),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            DateFormat('EEEE, MMM d, yyyy').format(now),
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: scheme.onSurfaceVariant),
-          ),
-        ],
+          );
+          final action = FilledButton.icon(
+            onPressed: widget.onCreateInvoice,
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: scheme.primary,
+            ),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('New invoice'),
+          );
+          if (isCompact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [copy, const SizedBox(height: 20), action],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: copy),
+              const SizedBox(width: 24),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    DateFormat('EEE, d MMM').format(now),
+                    style: const TextStyle(
+                      color: Color(0xFFDCEAFF),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  action,
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

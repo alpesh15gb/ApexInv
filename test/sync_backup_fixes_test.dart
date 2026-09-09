@@ -325,6 +325,76 @@ void main() {
         } catch (_) {}
       }
     });
+
+    test('jewellery rate and tax snapshots survive JSON restore', () async {
+      final db = await _createDevice();
+      DatabaseHelper().useDatabaseForTest(db);
+      Directory? tmp;
+      try {
+        tmp = await Directory.systemTemp.createTemp('apex_f3_jewellery_');
+        final jsonPath = '${tmp.path}/backup.json';
+        await File(jsonPath).writeAsString(jsonEncode({
+          'metal_rates': [
+            {
+              'id': 'rate-22k',
+              'metal': 'gold',
+              'purity': '22K',
+              'rate_per_gram': 7200.0,
+              'sell_rate_per_gram': 7200.0,
+              'buy_rate_per_gram': 6800.0,
+              'effective_date': '2026-09-10',
+            },
+            {
+              'id': 'legacy-rate-22k',
+              'metal': 'gold',
+              'purity': '22K',
+              'rate_per_gram': 7000.0,
+              'effective_date': '2026-09-09',
+            }
+          ],
+          'invoice_items': [
+            {
+              'id': 'jewellery-line',
+              'invoice_id': 'jewellery-invoice',
+              'jewellery_tax_treatment': 'retail_3',
+            },
+            {
+              'id': 'legacy-jewellery-line',
+              'invoice_id': 'legacy-jewellery-invoice',
+            }
+          ],
+          '_metadata': {'version': '1.0'},
+        }));
+
+        final result =
+            await BackupManager().restoreBackup(backupPath: jsonPath);
+        expect(result.success, isTrue, reason: result.message);
+        final rate = (await db
+                .query('metal_rates', where: 'id = ?', whereArgs: ['rate-22k']))
+            .single;
+        final line = (await db.query('invoice_items',
+                where: 'id = ?', whereArgs: ['jewellery-line']))
+            .single;
+        final legacyRate = (await db.query('metal_rates',
+                where: 'id = ?', whereArgs: ['legacy-rate-22k']))
+            .single;
+        final legacyLine = (await db.query('invoice_items',
+                where: 'id = ?', whereArgs: ['legacy-jewellery-line']))
+            .single;
+        expect(rate['sell_rate_per_gram'], 7200.0);
+        expect(rate['buy_rate_per_gram'], 6800.0);
+        expect(line['jewellery_tax_treatment'], 'retail_3');
+        expect(legacyRate['sell_rate_per_gram'], 7000.0);
+        expect(legacyRate['buy_rate_per_gram'], 7000.0);
+        expect(legacyLine['jewellery_tax_treatment'], 'legacy_split');
+      } finally {
+        DatabaseHelper().clearDatabaseForTest();
+        await db.close();
+        try {
+          await tmp?.delete(recursive: true);
+        } catch (_) {}
+      }
+    });
   });
 
   group('F4 manifest + temp verify', () {

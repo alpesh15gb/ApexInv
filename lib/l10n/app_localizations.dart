@@ -204,6 +204,624 @@ abstract class AppLocalizations {
   /// **'Tell us about your business'**
   String get onboardingStepCompanySubtitle;
 
+  /// No description provided for @onboardingStepTradeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Trade'**
+  String get onboardingStepTradeTitle;
+
+  /// No description provided for @onboardingStepTradeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We will show features for your line of business'**
+  String get onboardingStepTradeSubtitle;
+
+  /// No description provided for @onboardingTradeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick what you sell. You can change this later in Company Info.'**
+  String get onboardingTradeHint;
+
+  /// No description provided for @onboardingTradeRetailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Retail / General'**
+  String get onboardingTradeRetailTitle;
+
+  /// No description provided for @onboardingTradeRetailSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shops and services billing by quantity and price'**
+  String get onboardingTradeRetailSubtitle;
+
+  /// No description provided for @onboardingTradeJewelleryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Jewellery'**
+  String get onboardingTradeJewelleryTitle;
+
+  /// No description provided for @onboardingTradeJewellerySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Weight billing with daily metal rates and hallmark'**
+  String get onboardingTradeJewellerySubtitle;
+
+  /// No description provided for @industryRetailLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Retail'**
+  String get industryRetailLabel;
+
+  /// No description provided for @industryJewelleryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Jewellery'**
+  String get industryJewelleryLabel;
+
+  /// No description provided for @industryChangeDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch trade?'**
+  String get industryChangeDialogTitle;
+
+  /// No description provided for @industryChangeDialogBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This company will switch to {trade}. The other trade\'s features will be hidden. Your data stays untouched.'**
+  String industryChangeDialogBody(Object trade);
+
+  /// No description provided for @metalRatesAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily buy and sell rates'**
+  String get metalRatesAddTitle;
+
+  /// No description provided for @metalRatesRateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Retail sell rate per gram'**
+  String get metalRatesRateLabel;
+
+  /// No description provided for @metalRatesSellRateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sell / g'**
+  String get metalRatesSellRateLabel;
+
+  /// No description provided for @metalRatesBuybackRateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Buyback / g'**
+  String get metalRatesBuybackRateLabel;
+
+  /// No description provided for @metalRatesPricingPolicyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Sell rates bill jewellery and print tags. Buyback rates value old gold. Both are per gram and transactions freeze the agreed rate.'**
+  String get metalRatesPricingPolicyHint;
+
+  /// No description provided for @metalRatesCompletePairRequiredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter positive rates, with buyback no higher than sell, for this metal and purity.'**
+  String get metalRatesCompletePairRequiredMessage;
+
+  /// No description provided for @metalRatesNoCompletePairMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter at least one complete positive sell and buyback rate pair.'**
+  String get metalRatesNoCompletePairMessage;
+
+  /// No description provided for @metalRatesSellRateSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Sell: {rate}/g'**
+  String metalRatesSellRateSummary(String rate);
+
+  /// No description provided for @metalRatesBuyRateSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Buy: {rate}/g'**
+  String metalRatesBuyRateSummary(String rate);
+
+  /// No description provided for @metalRatesDateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Effective date'**
+  String get metalRatesDateLabel;
+
+  /// No description provided for @metalRatesDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete rate?'**
+  String get metalRatesDeleteTitle;
+
+  /// No description provided for @metalRatesDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the {metal} {purity} rate for {date}?'**
+  String metalRatesDeleteBody(Object date, Object metal, Object purity);
+
+  /// No description provided for @metalRatesEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No rates yet'**
+  String get metalRatesEmptyTitle;
+
+  /// No description provided for @metalRatesEmptySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add today\'s sell and buyback rates to enable weight billing and old-gold exchange.'**
+  String get metalRatesEmptySubtitle;
+
+  /// No description provided for @metalRatesMissingTodayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s rates are missing'**
+  String get metalRatesMissingTodayTitle;
+
+  /// No description provided for @metalRatesMissingTodaySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Transactions fall back to the latest older rate. Add today\'s rate pairs for exact billing.'**
+  String get metalRatesMissingTodaySubtitle;
+
+  /// No description provided for @metalRatesSavedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate saved'**
+  String get metalRatesSavedMessage;
+
+  /// No description provided for @metalRatesDeletedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate deleted'**
+  String get metalRatesDeletedMessage;
+
+  /// No description provided for @jewellerySectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Jewellery details'**
+  String get jewellerySectionTitle;
+
+  /// No description provided for @jewellerySectionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Weight, purity, making charges and hallmark'**
+  String get jewellerySectionSubtitle;
+
+  /// No description provided for @jewelleryMetalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Metal'**
+  String get jewelleryMetalLabel;
+
+  /// No description provided for @jewelleryPurityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Purity'**
+  String get jewelleryPurityLabel;
+
+  /// No description provided for @jewelleryGrossWeightLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Gross weight (g)'**
+  String get jewelleryGrossWeightLabel;
+
+  /// No description provided for @jewelleryStoneWeightLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Stone weight (g)'**
+  String get jewelleryStoneWeightLabel;
+
+  /// No description provided for @jewelleryNetWeightLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Net weight (g)'**
+  String get jewelleryNetWeightLabel;
+
+  /// No description provided for @jewelleryMakingTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Making charges'**
+  String get jewelleryMakingTypeLabel;
+
+  /// No description provided for @jewelleryMakingFixedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Flat amount'**
+  String get jewelleryMakingFixedLabel;
+
+  /// No description provided for @jewelleryMakingPerGramLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Per gram'**
+  String get jewelleryMakingPerGramLabel;
+
+  /// No description provided for @jewelleryMakingPercentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Percent of metal'**
+  String get jewelleryMakingPercentLabel;
+
+  /// No description provided for @jewelleryMakingValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Making value'**
+  String get jewelleryMakingValueLabel;
+
+  /// No description provided for @jewelleryWastageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wastage %'**
+  String get jewelleryWastageLabel;
+
+  /// No description provided for @jewelleryHuidLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'HUID'**
+  String get jewelleryHuidLabel;
+
+  /// No description provided for @jewelleryHuidHint.
+  ///
+  /// In en, this message translates to:
+  /// **'6-character hallmark ID'**
+  String get jewelleryHuidHint;
+
+  /// No description provided for @jewelleryNetWeightHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Left blank, net = gross minus stone'**
+  String get jewelleryNetWeightHint;
+
+  /// No description provided for @jewelleryRateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sell rate per gram'**
+  String get jewelleryRateLabel;
+
+  /// No description provided for @jewelleryRateMissingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No {metal} {purity} sell rate found. Add it in Metal Rates first.'**
+  String jewelleryRateMissingMessage(Object metal, Object purity);
+
+  /// No description provided for @jewelleryLineSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{weight}g × {rate}/g'**
+  String jewelleryLineSummary(Object rate, Object weight);
+
+  /// No description provided for @oldGoldExchangeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Old Gold Exchange'**
+  String get oldGoldExchangeLabel;
+
+  /// No description provided for @oldGoldReceivedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Old gold received'**
+  String get oldGoldReceivedTitle;
+
+  /// No description provided for @oldGoldBuybackRateLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Buyback rate per gram'**
+  String get oldGoldBuybackRateLabel;
+
+  /// No description provided for @oldGoldBuybackRateHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily buyback rate for the invoice date. Edit only for the agreed exchange value.'**
+  String get oldGoldBuybackRateHelper;
+
+  /// No description provided for @oldGoldExchangeCreditLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Exchange credit'**
+  String get oldGoldExchangeCreditLabel;
+
+  /// No description provided for @oldGoldNoAutomaticRcmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No RCM is added automatically to a customer exchange. Record supplier tax only from its supporting purchase bill.'**
+  String get oldGoldNoAutomaticRcmMessage;
+
+  /// No description provided for @invoiceJewellerySectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Weight billing'**
+  String get invoiceJewellerySectionTitle;
+
+  /// No description provided for @invoiceJewelleryUseWeightLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Bill this line by weight'**
+  String get invoiceJewelleryUseWeightLabel;
+
+  /// No description provided for @invoiceJewelleryGstSplitLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'GST (3% on jewellery value)'**
+  String get invoiceJewelleryGstSplitLabel;
+
+  /// No description provided for @invoiceJewelleryLineTotalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Line total'**
+  String get invoiceJewelleryLineTotalLabel;
+
+  /// No description provided for @piecesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tagged pieces'**
+  String get piecesTitle;
+
+  /// No description provided for @piecesCountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} piece(s)'**
+  String piecesCountLabel(Object count);
+
+  /// No description provided for @piecesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No pieces tagged yet'**
+  String get piecesEmpty;
+
+  /// No description provided for @piecesAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag piece'**
+  String get piecesAdd;
+
+  /// No description provided for @piecesEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit piece'**
+  String get piecesEdit;
+
+  /// No description provided for @piecesTagNo.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag no'**
+  String get piecesTagNo;
+
+  /// No description provided for @piecesStatusInStock.
+  ///
+  /// In en, this message translates to:
+  /// **'In stock'**
+  String get piecesStatusInStock;
+
+  /// No description provided for @piecesStatusSold.
+  ///
+  /// In en, this message translates to:
+  /// **'Sold'**
+  String get piecesStatusSold;
+
+  /// No description provided for @piecesStatusExchanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Exchanged'**
+  String get piecesStatusExchanged;
+
+  /// No description provided for @piecesStatusJobWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Job work'**
+  String get piecesStatusJobWork;
+
+  /// No description provided for @piecesSoldOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Sold on {invoice}'**
+  String piecesSoldOn(Object invoice);
+
+  /// No description provided for @piecesDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove tag {tag}? Stock history is not affected.'**
+  String piecesDeleteConfirm(Object tag);
+
+  /// No description provided for @piecesSavedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Piece saved'**
+  String get piecesSavedMessage;
+
+  /// No description provided for @piecesDeletedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Piece removed'**
+  String get piecesDeletedMessage;
+
+  /// No description provided for @invoiceJewelleryPickPiece.
+  ///
+  /// In en, this message translates to:
+  /// **'Sell a tagged piece'**
+  String get invoiceJewelleryPickPiece;
+
+  /// No description provided for @invoiceJewelleryPieceWeightHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Weights filled from the tag'**
+  String get invoiceJewelleryPieceWeightHint;
+
+  /// No description provided for @navJobWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Job Work'**
+  String get navJobWork;
+
+  /// No description provided for @jobWorkTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Job Work (Karigar)'**
+  String get jobWorkTitle;
+
+  /// No description provided for @jobWorkSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Metal issued out and received back'**
+  String get jobWorkSubtitle;
+
+  /// No description provided for @jobWorkEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No job work yet'**
+  String get jobWorkEmpty;
+
+  /// No description provided for @jobWorkAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Issue metal'**
+  String get jobWorkAdd;
+
+  /// No description provided for @jobWorkKarigar.
+  ///
+  /// In en, this message translates to:
+  /// **'Karigar'**
+  String get jobWorkKarigar;
+
+  /// No description provided for @jobWorkDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get jobWorkDescription;
+
+  /// No description provided for @jobWorkIssuedNet.
+  ///
+  /// In en, this message translates to:
+  /// **'Issued net (g)'**
+  String get jobWorkIssuedNet;
+
+  /// No description provided for @jobWorkReceive.
+  ///
+  /// In en, this message translates to:
+  /// **'Receive'**
+  String get jobWorkReceive;
+
+  /// No description provided for @jobWorkReceivedNet.
+  ///
+  /// In en, this message translates to:
+  /// **'Received net (g)'**
+  String get jobWorkReceivedNet;
+
+  /// No description provided for @jobWorkStatusOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get jobWorkStatusOpen;
+
+  /// No description provided for @jobWorkStatusReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Received'**
+  String get jobWorkStatusReceived;
+
+  /// No description provided for @jobWorkSavedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Job work saved'**
+  String get jobWorkSavedMessage;
+
+  /// No description provided for @jobWorkDeletedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Job work removed'**
+  String get jobWorkDeletedMessage;
+
+  /// No description provided for @variantsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Variants'**
+  String get variantsTitle;
+
+  /// No description provided for @variantsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No variants yet'**
+  String get variantsEmpty;
+
+  /// No description provided for @variantsAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add variant'**
+  String get variantsAdd;
+
+  /// No description provided for @variantsEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit variant'**
+  String get variantsEdit;
+
+  /// No description provided for @variantsNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Variant type'**
+  String get variantsNameLabel;
+
+  /// No description provided for @variantsValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Value'**
+  String get variantsValueLabel;
+
+  /// No description provided for @variantsExtraPriceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Price delta'**
+  String get variantsExtraPriceLabel;
+
+  /// No description provided for @loyaltyPointsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'pts'**
+  String get loyaltyPointsLabel;
+
+  /// No description provided for @invoiceMakingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Making'**
+  String get invoiceMakingLabel;
+
+  /// No description provided for @invoiceWastageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wastage'**
+  String get invoiceWastageLabel;
+
+  /// No description provided for @invoiceMetalValueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Metal value'**
+  String get invoiceMetalValueLabel;
+
+  /// No description provided for @invoiceRateAsOnLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate as on {date}'**
+  String invoiceRateAsOnLabel(Object date);
+
+  /// No description provided for @navMetalRates.
+  ///
+  /// In en, this message translates to:
+  /// **'Metal Rates'**
+  String get navMetalRates;
+
+  /// No description provided for @metalRatesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Metal Rates'**
+  String get metalRatesTitle;
+
+  /// No description provided for @metalRatesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily retail sell and old-gold buyback rates per gram'**
+  String get metalRatesSubtitle;
+
   /// No description provided for @onboardingStepInvoiceTitle.
   ///
   /// In en, this message translates to:
@@ -485,6 +1103,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'More'**
   String get navMore;
+
+  /// No description provided for @navParties.
+  ///
+  /// In en, this message translates to:
+  /// **'Parties'**
+  String get navParties;
+
+  /// No description provided for @navItems.
+  ///
+  /// In en, this message translates to:
+  /// **'Items'**
+  String get navItems;
+
+  /// No description provided for @navSalesInvoices.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales Invoices'**
+  String get navSalesInvoices;
+
+  /// No description provided for @navEstimates.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimates'**
+  String get navEstimates;
+
+  /// No description provided for @navProformaInvoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Proforma Invoice'**
+  String get navProformaInvoice;
+
+  /// No description provided for @navPaymentIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment In'**
+  String get navPaymentIn;
+
+  /// No description provided for @navSaleOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Sale Order'**
+  String get navSaleOrder;
+
+  /// No description provided for @navDeliveryChallan.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery Challan'**
+  String get navDeliveryChallan;
+
+  /// No description provided for @navCreditNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit Note'**
+  String get navCreditNote;
+
+  /// No description provided for @navDebitNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Debit Note'**
+  String get navDebitNote;
+
+  /// No description provided for @navPos.
+  ///
+  /// In en, this message translates to:
+  /// **'POS'**
+  String get navPos;
+
+  /// No description provided for @navPurchaseBills.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase Bills'**
+  String get navPurchaseBills;
+
+  /// No description provided for @purchaseBillsListSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Record inward supplies to track input tax credit.'**
+  String get purchaseBillsListSubtitle;
+
+  /// No description provided for @navPurchaseOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase Order'**
+  String get navPurchaseOrder;
+
+  /// No description provided for @navPaymentOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Out'**
+  String get navPaymentOut;
+
+  /// No description provided for @navExpenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Expenses'**
+  String get navExpenses;
+
+  /// No description provided for @navBankAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Bank Accounts'**
+  String get navBankAccounts;
+
+  /// No description provided for @navCashInHand.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash In Hand'**
+  String get navCashInHand;
+
+  /// No description provided for @navCheques.
+  ///
+  /// In en, this message translates to:
+  /// **'Cheques'**
+  String get navCheques;
+
+  /// No description provided for @navLoanAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Loan Accounts'**
+  String get navLoanAccounts;
+
+  /// No description provided for @navReminders.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminders'**
+  String get navReminders;
+
+  /// No description provided for @navAuditLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Audit Log'**
+  String get navAuditLog;
+
+  /// No description provided for @navSectionSales.
+  ///
+  /// In en, this message translates to:
+  /// **'Sales (Master)'**
+  String get navSectionSales;
+
+  /// No description provided for @navSectionPurchase.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase (Master)'**
+  String get navSectionPurchase;
+
+  /// No description provided for @navSectionCashBank.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash And Bank'**
+  String get navSectionCashBank;
+
+  /// No description provided for @invoiceMgmtStatusPendingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get invoiceMgmtStatusPendingLabel;
 
   /// No description provided for @moreSectionDocuments.
   ///
@@ -3869,6 +4643,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Purchase Price'**
   String get productMgmtPurchasePriceLabel;
+
+  /// No description provided for @productMgmtJewelleryFallbackPriceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Fallback sale price'**
+  String get productMgmtJewelleryFallbackPriceLabel;
+
+  /// No description provided for @productMgmtJewelleryAcquisitionCostLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Acquisition cost / g'**
+  String get productMgmtJewelleryAcquisitionCostLabel;
+
+  /// No description provided for @productMgmtJewellerySalePriceHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional for weight-billed jewellery. The invoice uses the daily sell rate instead.'**
+  String get productMgmtJewellerySalePriceHelper;
+
+  /// No description provided for @productMgmtJewelleryPurchasePriceHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional actual acquisition cost per gram for COGS. It never uses today\'s sell or buyback rate automatically.'**
+  String get productMgmtJewelleryPurchasePriceHelper;
 
   /// No description provided for @productMgmtDefaultDiscountLabel.
   ///

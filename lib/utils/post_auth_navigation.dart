@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/providers/industry_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/screens/dashboard_screen.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_screen.dart';
@@ -18,6 +19,7 @@ Future<void> navigateAfterAuth(
   final completed = await ref
       .read(settingsRepositoryProvider)
       .getSetting(SettingKey.onboardingCompleted);
+  await loadIndustryProfile(ref);
   if (!context.mounted) return;
   Navigator.pushReplacement(
     context,

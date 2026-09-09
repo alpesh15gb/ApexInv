@@ -107,9 +107,26 @@ class CustomerService {
     return maps.isNotEmpty ? Customer.fromMap(maps.first) : null;
   }
 
+  /// Deletes every customer in one transaction, but refuses while live
+  /// documents still reference them (BUG-16): dropping customer rows under
+  /// open invoices/notes would orphan their receivables and leave journal
+  /// lines pointing at deleted parties.
   static Future<void> deleteAllCustomers() async {
     final db = await dbHelper.database;
-    await db.delete('customers');
+    await db.transaction((txn) async {
+      final live = await txn.rawQuery(
+        'SELECT COUNT(*) AS c FROM invoices WHERE deleted_at IS NULL '
+        'AND customer_id IN (SELECT id FROM customers)',
+      );
+      final liveCount = (live.first['c'] as num?)?.toInt() ?? 0;
+      if (liveCount > 0) {
+        throw StateError(
+            'Cannot delete all customers while $liveCount live invoice(s), '
+            'quotation(s) or note(s) still reference them. Move those '
+            'documents to the trash first.');
+      }
+      await txn.delete('customers');
+    });
   }
 
   static Future<List<Customer>> getCustomersPaginated({

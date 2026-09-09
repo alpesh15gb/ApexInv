@@ -1,11 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/widgets/app/app.dart';
 import 'package:apexbooks/database/accounting_service.dart';
 import 'package:apexbooks/database/customer_service.dart';
+import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/database/pos_service.dart';
 import 'package:apexbooks/database/product_service.dart';
 import 'package:apexbooks/database/sale_order_service.dart';
@@ -16,6 +21,9 @@ import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/invoice.dart';
 import 'package:apexbooks/models/invoice_item.dart';
 import 'package:apexbooks/models/product.dart';
+import 'package:apexbooks/services/backend_services.dart';
+import 'package:apexbooks/services/invoice_pdf_services.dart';
+import 'package:apexbooks/services/pdf_service.dart';
 import 'package:apexbooks/sync/sync_controller.dart';
 import 'package:apexbooks/sync/sync_engine.dart';
 
@@ -196,17 +204,72 @@ class _PosScreenState extends State<PosScreen> {
     Navigator.pop(context);
   }
 
-  void _scanSubmitted(String value) {
-    final query = value.trim().toLowerCase();
+  Future<void> _scanSubmitted(String value) async {
+    final query = value.trim();
     if (query.isEmpty) return;
+    final lower = query.toLowerCase();
     Product? match;
     for (final product in _products) {
-      if (product.barcode.trim().toLowerCase() == query ||
-          product.name.trim().toLowerCase() == query) {
+      if (product.barcode.trim().toLowerCase() == lower ||
+          product.name.trim().toLowerCase() == lower) {
         match = product;
         break;
       }
     }
+    // Parent-product fallbacks (BUG-12): variant barcodes, jewellery tag
+    // numbers and batch numbers all resolve to the product they belong to,
+    // so a printed variant/tag/batch barcode scans like the parent's own
+    // instead of dead-ending with "Product not found".
+    if (match == null) {
+      try {
+        final db = await DatabaseHelper().database;
+        final rows = await db.query('product_variants',
+            columns: ['product_id'],
+            where: 'barcode = ?',
+            whereArgs: [query],
+            limit: 1);
+        if (rows.isNotEmpty) {
+          final productId = rows.first['product_id'] as String?;
+          match = _products.where((p) => p.id == productId).firstOrNull;
+        }
+      } catch (_) {
+        // Lookup tables are enhancements; the parent-product match above
+        // remains authoritative.
+      }
+    }
+    if (match == null) {
+      try {
+        final db = await DatabaseHelper().database;
+        final rows = await db.query('jewellery_pieces',
+            columns: ['product_id'],
+            where: 'tag_no = ?',
+            whereArgs: [query],
+            limit: 1);
+        if (rows.isNotEmpty) {
+          final productId = rows.first['product_id'] as String?;
+          match = _products.where((p) => p.id == productId).firstOrNull;
+        }
+      } catch (_) {
+        // Same rationale as the variant fallback.
+      }
+    }
+    if (match == null) {
+      try {
+        final db = await DatabaseHelper().database;
+        final rows = await db.query('batch_info',
+            columns: ['product_id'],
+            where: 'batch_number = ?',
+            whereArgs: [query],
+            limit: 1);
+        if (rows.isNotEmpty) {
+          final productId = rows.first['product_id'] as String?;
+          match = _products.where((p) => p.id == productId).firstOrNull;
+        }
+      } catch (_) {
+        // Same rationale as the variant fallback.
+      }
+    }
+    if (!mounted) return;
     if (match == null) {
       _error('No exact barcode or product name match.');
       return;
@@ -754,6 +817,24 @@ class _PosScreenState extends State<PosScreen> {
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('New Sale'),
               ),
+              // Cashier can hand over the bill immediately — print (thermal
+              // or A4, per template), preview, or share it to WhatsApp
+              // without leaving the POS (BUG-13).
+              OutlinedButton.icon(
+                onPressed: () => InvoicePdfServices.previewPDF(ctx, invoice),
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                label: const Text('Preview'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () => InvoicePdfServices.generatePDF(ctx, invoice),
+                icon: const Icon(Icons.print_outlined, size: 18),
+                label: const Text('Print'),
+              ),
+              FilledButton.icon(
+                onPressed: () => _shareInvoicePdf(ctx, invoice),
+                icon: const Icon(Icons.chat_outlined, size: 18),
+                label: const Text('WhatsApp'),
+              ),
             ],
           ),
         );
@@ -768,6 +849,30 @@ class _PosScreenState extends State<PosScreen> {
       }
     } finally {
       _checkoutDialogOpen = false;
+    }
+  }
+
+  /// Generates the posted invoice as a PDF and opens the system share
+  /// sheet (WhatsApp, email, …) with it attached.
+  Future<void> _shareInvoicePdf(BuildContext context, Invoice invoice) async {
+    try {
+      final dateFmt = await BackendServices.settings.getDateFormat();
+      final pdf = await PDFService.generateInvoicePDF(invoice,
+          datePattern: dateFmt.key);
+      final bytes = await pdf.save();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/${PDFService.buildPdfFilename(invoice)}');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: 'Invoice ${invoice.invoiceNumber ?? invoice.id}',
+        text: 'Invoice ${invoice.invoiceNumber ?? invoice.id} — '
+            '${invoice.currencySymbol} ${invoice.payableTotal.toStringAsFixed(2)}',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not share invoice: $e')));
     }
   }
 
@@ -1007,13 +1112,16 @@ class _PosScreenState extends State<PosScreen> {
         Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _customer?.id ?? 'walk-in',
                 decoration: const InputDecoration(
                     labelText: 'Selected customer',
                     border: OutlineInputBorder()),
                 items: [_walkIn, ..._customers]
-                    .map((c) =>
-                        DropdownMenuItem(value: c.id, child: Text(c.name)))
+                    .map((c) => DropdownMenuItem(
+                        value: c.id,
+                        child: Text(c.name,
+                            maxLines: 1, overflow: TextOverflow.ellipsis)))
                     .toList(),
                 onChanged: (id) => setState(() => _customer = id == 'walk-in'
                     ? _walkIn

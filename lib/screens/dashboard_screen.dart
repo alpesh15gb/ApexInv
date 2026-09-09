@@ -2,7 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import 'package:uuid/uuid.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/navigation/dashboard_destinations.dart';
+import 'package:apexbooks/providers/industry_provider.dart';
 import 'package:apexbooks/widgets/discovery_banner.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -20,9 +23,10 @@ import 'package:apexbooks/licensing/license_service.dart';
 import 'package:apexbooks/widgets/update_dialog.dart';
 import 'package:apexbooks/domain/invoice_calculator.dart';
 import 'package:apexbooks/domain/customer_identity.dart';
-import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/product.dart';
+import 'package:apexbooks/models/metal_rate.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/screens/settings/settings_screen.dart';
 import 'package:apexbooks/services/invoice_pdf_services.dart';
@@ -45,7 +49,6 @@ import 'package:apexbooks/models/accounting.dart';
 import 'package:apexbooks/models/purchase_bill.dart';
 import 'package:apexbooks/services/reminder_service.dart';
 import 'package:apexbooks/screens/import_screen.dart';
-import 'package:apexbooks/screens/screens_v1/create_invoice_screen.dart' as v1;
 import 'package:apexbooks/screens/create_invoice_screen_v2.dart';
 // import 'package:apexbooks/screens/product_management_screen.dart';
 import 'package:apexbooks/screens/product_management_screen_v2.dart';
@@ -62,6 +65,8 @@ import 'package:apexbooks/screens/audit_log_screen.dart';
 import 'package:apexbooks/screens/cheques_screen.dart';
 import 'package:apexbooks/screens/financial_accounts_screen.dart';
 import 'package:apexbooks/screens/loan_accounts_screen.dart';
+import 'package:apexbooks/screens/metal_rates_screen.dart';
+import 'package:apexbooks/screens/job_work_screen.dart';
 import 'package:apexbooks/screens/payment_out_screen.dart';
 import 'package:apexbooks/screens/pos_screen.dart';
 import 'package:apexbooks/screens/sale_orders_screen.dart';
@@ -101,11 +106,10 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  static const int _moreTabIndex = 100;
-
-  /// Tab indices surfaced by the compact-shell bottom navigation bar
-  /// (Home / New / Invoices / Customers / More).
-  static const List<int> _mobileTabTargets = [0, 1, 2, 5, _moreTabIndex];
+  /// Tab ids surfaced by the compact-shell bottom navigation bar
+  /// (Home / New / Invoices / Parties / More). See [mobileTabTargets].
+  static final List<int> _mobileTabTargets =
+      mobileTabTargets.map((tab) => tab.id).toList();
 
   int _selectedIndex = 0;
   bool _sidebarExpanded = true;
@@ -117,10 +121,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _cloneType = 'Invoice';
   String _newInvoiceType = 'Invoice';
   bool _hasUpdate = false;
-  String _createInvoiceLayout = 'v2';
   int? _accessibilityJumpToken;
   final InvoiceFormGuard _invoiceFormGuard = InvoiceFormGuard();
-  final v1.InvoiceFormGuard _invoiceFormGuardV1 = v1.InvoiceFormGuard();
   final FocusNode _shortcutsFocusNode = FocusNode();
 
   @override
@@ -129,7 +131,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _currentUser = widget.loggedInUser;
     AuditActor.setCurrent(_currentUser.username);
     SessionManager.initialize(_logoutAndResetSession);
-    _loadCreateInvoiceLayout();
     // Anonymous usage heartbeat: at most one ping per day, only with
     // explicit consent. Fire-and-forget; offline or opted-out = silence.
     _sendAnalyticsHeartbeat();
@@ -242,14 +243,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Future<void> _loadCreateInvoiceLayout() async {
-    final layout = await ref
-        .read(settingsRepositoryProvider)
-        .getSetting(SettingKey.createInvoiceLayout);
-    if (!mounted) return;
-    setState(() => _createInvoiceLayout = layout ?? 'v2');
-  }
-
   Future<void> _checkForUpdates() async {
     final info = await UpdateService.checkForUpdate();
     if (info == null) return;
@@ -290,17 +283,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget buildScreen() {
-    switch (_selectedIndex) {
-      case 0:
+    switch (DashboardTab.fromId(_selectedIndex)) {
+      case DashboardTab.dashboard:
         return DashboardHome(
             onEditInvoice: editInvoice,
             onCloneInvoice: cloneInvoice,
             onCreateInvoice: () => _openNewDocument('Invoice'),
+            onOpenCustomerLedger: (customer) {
+              setState(() {
+                _pendingReportsStatementCustomerKey =
+                    CustomerIdentity.key(id: customer.id, name: customer.name);
+                _selectedIndex = DashboardTab.reports.id;
+              });
+            },
             onNavigateTab: (index) {
               _selectTab(index);
             },
             user: _currentUser);
-      case 1:
+      case DashboardTab.createInvoice:
         final createInvoiceKey = ValueKey(
             'create_invoice_${invoiceToEdit?.id ?? 'new'}_${_invoiceToClone?.id ?? ''}_$_newInvoiceType');
         void onCreateNewInvoice() {
@@ -310,26 +310,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             _invoiceToClone = null;
           });
         }
-        return _createInvoiceLayout == 'v1'
-            ? v1.CreateInvoiceScreen(
-                key: createInvoiceKey,
-                invoiceToEdit: invoiceToEdit,
-                cloneFrom: _invoiceToClone,
-                cloneType: _invoiceToClone != null ? _cloneType : null,
-                initialType: _newInvoiceType,
-                guard: _invoiceFormGuardV1,
-                onCreateNewInvoice: onCreateNewInvoice,
-              )
-            : CreateInvoiceScreenV2(
-                key: createInvoiceKey,
-                invoiceToEdit: invoiceToEdit,
-                cloneFrom: _invoiceToClone,
-                cloneType: _invoiceToClone != null ? _cloneType : null,
-                initialType: _newInvoiceType,
-                guard: _invoiceFormGuard,
-                onCreateNewInvoice: onCreateNewInvoice,
-              );
-      case 2:
+        return CreateInvoiceScreenV2(
+          key: createInvoiceKey,
+          invoiceToEdit: invoiceToEdit,
+          cloneFrom: _invoiceToClone,
+          cloneType: _invoiceToClone != null ? _cloneType : null,
+          initialType: _newInvoiceType,
+          guard: _invoiceFormGuard,
+          onCreateNewInvoice: onCreateNewInvoice,
+        );
+      case DashboardTab.salesInvoices:
         return InvoiceManagementScreenV2(
           key: const ValueKey('invoice_list'),
           onEditInvoice: editInvoice,
@@ -338,7 +328,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           user: _currentUser,
           filterType: 'Invoice',
         );
-      case 3:
+      case DashboardTab.estimates:
         return InvoiceManagementScreenV2(
           key: const ValueKey('quotation_list'),
           onEditInvoice: editInvoice,
@@ -347,7 +337,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           user: _currentUser,
           filterType: 'Quotation',
         );
-      case 4:
+      case DashboardTab.paymentIn:
         return InvoiceManagementScreenV2(
           key: const ValueKey('receipt_list'),
           onEditInvoice: editInvoice,
@@ -356,7 +346,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           user: _currentUser,
           filterType: 'Receipt',
         );
-      case 5:
+      case DashboardTab.parties:
         return CustomerManagementScreenV2(
           user: _currentUser,
           onViewCustomerStatement: (c) {
@@ -367,24 +357,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             });
           },
         );
-      case 6:
+      case DashboardTab.items:
         return ProductManagementScreenV2(user: _currentUser);
-      case 7:
+      case DashboardTab.reports:
         final statementCustomerKey = _pendingReportsStatementCustomerKey;
         _pendingReportsStatementCustomerKey = null;
         return ReportsScreen(initialStatementCustomerKey: statementCustomerKey);
-      case 8:
+      case DashboardTab.expenses:
         return const ExpenseManagementScreen();
-      case 9:
+      case DashboardTab.purchaseOrders:
         return PurchaseOrderScreen(user: _currentUser);
-      case 11:
+      case DashboardTab.purchaseBills:
         return PurchaseBillScreen(user: _currentUser);
-      case 12:
-        // No dedicated screen ever owned index 12 (Trial Balance lives in
-        // Reports) — land on Reports instead of the 'Unknown tab' fallback
-        // so stale deep-links/bookmarks keep working.
-        return const ReportsScreen();
-      case 13:
+      case DashboardTab.creditNote:
         return InvoiceManagementScreenV2(
           key: const ValueKey('credit_note_list'),
           onEditInvoice: editInvoice,
@@ -393,7 +378,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           user: _currentUser,
           filterType: 'Credit Note',
         );
-      case 14:
+      case DashboardTab.debitNote:
         return InvoiceManagementScreenV2(
           key: const ValueKey('debit_note_list'),
           onEditInvoice: editInvoice,
@@ -402,7 +387,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           user: _currentUser,
           filterType: 'Debit Note',
         );
-      case 15:
+      case DashboardTab.deliveryChallan:
         return InvoiceManagementScreenV2(
           key: const ValueKey('challan_list'),
           onEditInvoice: editInvoice,
@@ -411,7 +396,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           user: _currentUser,
           filterType: 'Delivery Challan',
         );
-      case 16:
+      case DashboardTab.proforma:
         return InvoiceManagementScreenV2(
           key: const ValueKey('proforma_list'),
           onEditInvoice: editInvoice,
@@ -420,90 +405,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           user: _currentUser,
           filterType: 'Proforma',
         );
-      case 17:
+      case DashboardTab.reminders:
         return const RemindersScreen();
-      case 18:
+      case DashboardTab.auditLog:
         return const AuditLogScreen();
-      case 19:
+      case DashboardTab.saleOrders:
         return const SaleOrdersScreen();
-      case 20:
+      case DashboardTab.pos:
         return const PosScreen();
-      case 21:
+      case DashboardTab.paymentOut:
         return const PaymentOutScreen();
-      case 22:
+      case DashboardTab.bankAccounts:
         return const FinancialAccountsScreen(accountType: 'bank');
-      case 23:
+      case DashboardTab.cashInHand:
         return const FinancialAccountsScreen(accountType: 'cash');
-      case 24:
+      case DashboardTab.cheques:
         return const ChequesScreen();
-      case 25:
+      case DashboardTab.loanAccounts:
         return const LoanAccountsScreen();
-      case 10:
+      case DashboardTab.metalRates:
+        return const MetalRatesScreen();
+      case DashboardTab.jobWork:
+        return const JobWorkScreen();
+      case DashboardTab.settings:
         return SettingsScreen(
           currentUser: _currentUser,
           openAccessibilityToken: _accessibilityJumpToken,
         );
-      case _moreTabIndex:
+      case DashboardTab.moreMenu:
         return MoreMenuScreen(
           user: _currentUser,
           hasUpdate: _hasUpdate,
           onSelectTab: _selectTab,
           onLogout: _logoutAndResetSession,
         );
-      default:
+      case null:
         return Center(
             child:
                 Text(AppLocalizations.of(context)!.dashboardUnknownTabLabel));
     }
-  }
-
-  Widget _buildCreateInvoiceLayoutToggle() {
-    final isV2 = _createInvoiceLayout == 'v2';
-    final l10n = AppLocalizations.of(context)!;
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      shape: CircleBorder(
-          side:
-              BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
-      elevation: 2,
-      child: IconButton(
-        icon: Icon(isV2 ? Icons.auto_awesome : Icons.history, size: 20),
-        tooltip: l10n.dashboardInvoiceLayoutTooltip(
-            isV2 ? l10n.dashboardLayoutNew : l10n.dashboardLayoutClassic),
-        onPressed: _showCreateInvoiceLayoutInfo,
-      ),
-    );
-  }
-
-  void _showCreateInvoiceLayoutInfo() {
-    final l10n = AppLocalizations.of(context)!;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.dashboardInvoiceLayoutDialogTitle),
-        content: Text(l10n.dashboardInvoiceLayoutDialogBody(
-            _createInvoiceLayout == 'v1'
-                ? l10n.dashboardLayoutClassic
-                : l10n.dashboardLayoutNew)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(l10n.actionClose)),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              if (!await _canLeaveInvoiceForm()) return;
-              if (!mounted) return;
-              setState(() {
-                _selectedIndex = 8;
-                _accessibilityJumpToken = (_accessibilityJumpToken ?? 0) + 1;
-              });
-            },
-            child: Text(l10n.dashboardOpenSettingsAction),
-          ),
-        ],
-      ),
-    );
   }
 
   void editInvoice(Invoice invoice) {
@@ -538,9 +478,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<bool> _canLeaveInvoiceForm() async {
-    if (_createInvoiceLayout == 'v1') {
-      return await _invoiceFormGuardV1.canLeave?.call() ?? true;
-    }
     return await _invoiceFormGuard.canLeave?.call() ?? true;
   }
 
@@ -559,7 +496,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (_selectedIndex == index) return;
     if (_selectedIndex == 1 && !await _canLeaveInvoiceForm()) return;
     if (_selectedIndex == 7 && index != 7) await _refreshUser();
-    if (index == 1) await _loadCreateInvoiceLayout();
     if (!mounted) return;
     setState(() {
       _selectedIndex = index;
@@ -601,15 +537,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 final screen = Stack(
                   children: [
                     buildScreen(),
-                    // Floating v1/v2 layout toggle: desktop only. On compact it
-                    // overlaps the Create Invoice bottom action bar (the same
-                    // toggle lives in Settings → Accessibility).
-                    if (_selectedIndex == 1 &&
-                        constraints.maxWidth >= Breakpoints.expandedMin)
-                      Positioned(
-                          bottom: 16,
-                          right: 16,
-                          child: _buildCreateInvoiceLayoutToggle()),
                     // License/trial banner overlays the top of every tab.
                     if (_showLicenseBanner)
                       Positioned(
@@ -671,31 +598,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           selectedIndex: _mobileNavIndex,
           onDestinationSelected: (i) => _selectTab(_mobileTabTargets[i]),
           destinations: [
-            NavigationDestination(
-              icon: const Icon(Icons.dashboard_outlined),
-              selectedIcon: const Icon(Icons.dashboard),
-              label: l10n.navDashboard,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.receipt_outlined),
-              selectedIcon: const Icon(Icons.receipt),
-              label: l10n.navNewInvoice,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.receipt_long_outlined),
-              selectedIcon: const Icon(Icons.receipt_long),
-              label: l10n.navInvoices,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.people_outline),
-              selectedIcon: const Icon(Icons.people),
-              label: l10n.navCustomers,
-            ),
-            NavigationDestination(
-              icon: updateBadge,
-              selectedIcon: updateBadge,
-              label: l10n.navMore,
-            ),
+            for (final tab in mobileTabTargets)
+              if (tab == DashboardTab.moreMenu)
+                NavigationDestination(
+                  icon: updateBadge,
+                  selectedIcon: updateBadge,
+                  label: tab.label(l10n),
+                )
+              else
+                NavigationDestination(
+                  icon: Icon(tab.outlinedIcon),
+                  selectedIcon: Icon(tab.filledIcon),
+                  label: tab.label(l10n),
+                ),
           ],
         ),
       ],
@@ -738,19 +653,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       child: Tooltip(
                         message: AppLocalizations.of(context)!
                             .dashboardCollapseSidebarTooltip,
-                        child: InkWell(
-                          onTap: () {
-                            if (!mounted) return;
-                            setState(() => _sidebarExpanded = false);
-                          },
-                          borderRadius: BorderRadius.circular(6),
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: Icon(Icons.chevron_left_rounded,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                                size: 20),
+                        child: ConstrainedBox(
+                          constraints:
+                              const BoxConstraints(minWidth: 44, minHeight: 44),
+                          child: InkWell(
+                            onTap: () {
+                              if (!mounted) return;
+                              setState(() => _sidebarExpanded = false);
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: Center(
+                              child: Icon(Icons.chevron_left_rounded,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                  size: 20),
+                            ),
                           ),
                         ),
                       ),
@@ -769,19 +687,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     Tooltip(
                       message: AppLocalizations.of(context)!
                           .dashboardExpandSidebarTooltip,
-                      child: InkWell(
-                        onTap: () {
-                          if (!mounted) return;
-                          setState(() => _sidebarExpanded = true);
-                        },
-                        borderRadius: BorderRadius.circular(6),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Icon(Icons.chevron_right_rounded,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                              size: 18),
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(minWidth: 44, minHeight: 44),
+                        child: InkWell(
+                          onTap: () {
+                            if (!mounted) return;
+                            setState(() => _sidebarExpanded = true);
+                          },
+                          borderRadius: BorderRadius.circular(6),
+                          child: Center(
+                            child: Icon(Icons.chevron_right_rounded,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                size: 18),
+                          ),
                         ),
                       ),
                     ),
@@ -795,72 +716,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 thickness: 1),
             const SizedBox(height: 8),
 
-            // ── Nav Items — Tally-style grouped ─────────────────
+            // ── Nav Items — built from the destination registry ──
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildNavItem(0, Icons.dashboard_outlined, Icons.dashboard,
-                        AppLocalizations.of(context)!.navDashboard),
-                    const SizedBox(height: 4),
-                    _buildNavItem(
-                        5, Icons.people_outline, Icons.people, 'Parties'),
-                    _buildNavItem(6, Icons.inventory_2_outlined,
-                        Icons.inventory_2, 'Items'),
-                    if (expanded) const Divider(height: 16),
-                    if (expanded) _buildSectionHeader('Sales (Master)'),
-                    _buildNavItem(2, Icons.receipt_long_outlined,
-                        Icons.receipt_long, 'Sales Invoices'),
-                    _buildNavItem(3, Icons.request_quote_outlined,
-                        Icons.request_quote, 'Estimates'),
-                    _buildNavItem(16, Icons.request_page_outlined,
-                        Icons.request_page, 'Proforma Invoice'),
-                    _buildNavItem(4, Icons.payments_outlined, Icons.payments,
-                        'Payment In'),
-                    _buildNavItem(19, Icons.shopping_bag_outlined,
-                        Icons.shopping_bag, 'Sale Order'),
-                    _buildNavItem(15, Icons.local_shipping_outlined,
-                        Icons.local_shipping, 'Delivery Challan'),
-                    _buildNavItem(13, Icons.note_alt_outlined, Icons.note_alt,
-                        'Credit Note'),
-                    _buildNavItem(20, Icons.point_of_sale_outlined,
-                        Icons.point_of_sale, 'POS'),
-                    if (expanded) const Divider(height: 16),
-                    if (expanded) _buildSectionHeader('Purchase (Master)'),
-                    _buildNavItem(11, Icons.inventory_outlined, Icons.inventory,
-                        'Purchase Bills'),
-                    _buildNavItem(9, Icons.shopping_cart_outlined,
-                        Icons.shopping_cart, 'Purchase Order'),
-                    _buildNavItem(21, Icons.payments_outlined, Icons.payments,
-                        'Payment Out'),
-                    _buildNavItem(8, Icons.receipt_long_outlined,
-                        Icons.receipt_long, 'Expenses'),
-                    _buildNavItem(14, Icons.note_add_outlined, Icons.note_add,
-                        'Debit Note'),
-                    if (expanded) const Divider(height: 16),
-                    if (expanded) _buildSectionHeader('Cash And Bank'),
-                    _buildNavItem(22, Icons.account_balance_outlined,
-                        Icons.account_balance, 'Bank Accounts'),
-                    _buildNavItem(23, Icons.account_balance_wallet_outlined,
-                        Icons.account_balance_wallet, 'Cash In Hand'),
-                    _buildNavItem(24, Icons.confirmation_number_outlined,
-                        Icons.confirmation_number, 'Cheques'),
-                    _buildNavItem(25, Icons.request_quote_outlined,
-                        Icons.request_quote, 'Loan Accounts'),
-                    if (expanded) const Divider(height: 16),
-                    _buildNavItem(7, Icons.bar_chart_outlined, Icons.bar_chart,
-                        AppLocalizations.of(context)!.navReports),
-                    _buildNavItem(1, Icons.receipt_outlined, Icons.receipt,
-                        AppLocalizations.of(context)!.navNewInvoice),
-                    _buildNavItem(10, Icons.settings_outlined, Icons.settings,
-                        AppLocalizations.of(context)!.navSettings,
-                        showDot: _hasUpdate),
-                    _buildNavItem(17, Icons.notifications_active_outlined,
-                        Icons.notifications_active, 'Reminders'),
-                    if (_currentUser.isAdmin())
-                      _buildNavItem(18, Icons.fact_check_outlined,
-                          Icons.fact_check, 'Audit Log'),
+                    ..._sidebarItems(expanded),
                     const SizedBox(height: 8),
                   ],
                 ),
@@ -1192,9 +1054,41 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildNavItem(
-      int index, IconData outlinedIcon, IconData filledIcon, String label,
-      {bool showDot = false}) {
+  /// Sidebar entries derived from [dashboardSidebarOrder]: dividers and
+  /// localized section headers separate the groups, admin-only destinations
+  /// stay hidden for standard users.
+  List<Widget> _sidebarItems(bool expanded) {
+    final l10n = AppLocalizations.of(context)!;
+    final industry = ref.watch(industryProfileProvider);
+    final items = <Widget>[];
+    var previousSection = DashboardSection.none;
+    for (var i = 0; i < dashboardSidebarOrder.length; i++) {
+      final tab = dashboardSidebarOrder[i];
+      if (tab.adminOnly && !_currentUser.isAdmin()) continue;
+      final allowed = tab.industries;
+      if (allowed != null && !allowed.contains(industry)) continue;
+      if (i == 1) items.add(const SizedBox(height: 4));
+      final header = tab.sectionHeader(l10n);
+      if (expanded && header != null) {
+        items.add(const Divider(height: 16));
+        items.add(_buildSectionHeader(header));
+      } else if (expanded &&
+          previousSection != DashboardSection.none &&
+          tab.section == DashboardSection.none) {
+        items.add(const Divider(height: 16));
+      }
+      items.add(_buildNavItem(tab, showDot: tab.showsUpdateDot && _hasUpdate));
+      previousSection = tab.section;
+    }
+    return items;
+  }
+
+  Widget _buildNavItem(DashboardTab tab, {bool showDot = false}) {
+    final l10n = AppLocalizations.of(context)!;
+    final index = tab.id;
+    final outlinedIcon = tab.outlinedIcon;
+    final filledIcon = tab.filledIcon;
+    final label = tab.label(l10n);
     final selected = _selectedIndex == index;
     final primary = Theme.of(context).primaryColor;
 
@@ -1347,6 +1241,7 @@ class DashboardHome extends ConsumerStatefulWidget {
   final Function(Invoice, String) onCloneInvoice;
   final User user;
   final VoidCallback? onCreateInvoice;
+  final ValueChanged<Customer> onOpenCustomerLedger;
 
   /// Routes to another dashboard tab via the existing [_selectTab] routing
   /// (same guards/destinations as the sidebar and bottom navigation bar).
@@ -1356,6 +1251,7 @@ class DashboardHome extends ConsumerStatefulWidget {
     required this.onCloneInvoice,
     required this.user,
     required this.onNavigateTab,
+    required this.onOpenCustomerLedger,
     this.onCreateInvoice,
     super.key,
   });
@@ -1405,8 +1301,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
   /// Current-month purchase bills, for the honest ITC comparison block.
   List<PurchaseBill> _periodBills = [];
   bool isLoading = true;
-  String _dashboardLayout = 'default';
-  bool _showLayoutBanner = false;
+  String? _dashboardError;
   bool _showThemeBanner = false;
   bool _showShortcutsBanner = false;
   bool _showSupportBanner = false;
@@ -1414,6 +1309,10 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
   List<Map<String, dynamic>> _monthlyRevenue = [];
   List<Map<String, dynamic>> _topCustomers = [];
   List<Map<String, dynamic>> _topProducts = [];
+  List<MetalRate> _marketRates = [];
+  DateTime? _marketRatesDate;
+  Map<String, MetalRate> _previousMarketRates = const {};
+  List<Map<String, dynamic>> _recentActivity = const [];
 
   @override
   void initState() {
@@ -1423,193 +1322,256 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
 
   Future<void> _loadDashboardData() async {
     if (!mounted) return;
-    setState(() => isLoading = true);
-
-    // Dashboard renders under a single currency symbol — fetch it first so
-    // revenue/outstanding/monthly/top-customers are filtered to it (mixed
-    // currencies must never be summed under one symbol).
-    final currency = await ref.read(settingsRepositoryProvider).getCurrency();
-    if (!mounted) return;
-    final results = await Future.wait([
-      ref.read(customerRepositoryProvider).getTotalCustomerCount(), // 0
-      ref.read(productRepositoryProvider).getTotalProductCount(), // 1
-      ref
-          .read(invoiceRepositoryProvider)
-          .getDashboardFinancials(currencyCode: currency.code), // 2
-      ref.read(invoiceRepositoryProvider).getRecentInvoices(limit: 5), // 3
-      ref.read(invoiceRepositoryProvider).getDueSoonInvoices(), // 4
-      ref.read(invoiceRepositoryProvider).getOverdueInvoices(limit: 10), // 5
-      ref
-          .read(invoiceRepositoryProvider)
-          .getMonthlyRevenue(currencyCode: currency.code), // 6
-      ref
-          .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.dashboardLayout), // 7
-      ref
-          .read(invoiceRepositoryProvider)
-          .getTopCustomers(currencyCode: currency.code), // 8
-      ref.read(invoiceRepositoryProvider).getTopProducts(), // 9
-      ref
-          .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.layoutBannerDismissed), // 10
-      ref
-          .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.supportBannerDismissed), // 11
-      ref.read(productRepositoryProvider).getOutOfStockProducts(), // 12
-      ref
-          .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.themeBannerDismissed), // 13
-      ref
-          .read(settingsRepositoryProvider)
-          .getSetting(SettingKey.shortcutsBannerDismissed), // 14
-    ]);
-
-    // ── Ledgerly overview batch: read-only and additive. Every figure below
-    // comes from an existing query; the screen only groups/filters the
-    // returned rows (ageing buckets, monthly money-in/out, stock value).
-    // A failure here must never blank the core dashboard, so the panels
-    // fall back to honest empty states.
-    final code = currency.code;
-    final now = DateTime.now();
-    final monthStart = DateTime(now.year, now.month, 1);
-    final prevMonthStart = DateTime(now.year, now.month - 1, 1);
-    final daysInPrevMonth =
-        DateTime(prevMonthStart.year, prevMonthStart.month + 1, 0).day;
-    final prevWindowEnd = DateTime(prevMonthStart.year, prevMonthStart.month,
-        now.day > daysInPrevMonth ? daysInPrevMonth : now.day, 23, 59, 59);
-    final sixMonthStart = DateTime(now.year, now.month - 5, 1);
-    final seriesStarts =
-        List.generate(6, (i) => DateTime(now.year, now.month - (5 - i), 1));
-    DateTime monthEnd(DateTime m) =>
-        DateTime(m.year, m.month + 1, 0, 23, 59, 59);
-
-    var reminderOverdue = <OverdueInvoice>[];
-    var dayBook = <DayBookEntry>[];
-    var cashAccounts = <FinancialAccount>[];
-    var cashBalances = <String, double>{};
-    var cashSeries = <double>[];
-    var cashPrevMonthEnd = 0.0;
-    var allProducts = <Product>[];
-    var periodInvoices = <Invoice>[];
-    var periodBills = <PurchaseBill>[];
-    var pnlSeries = <PnlSummary>[];
-    PnlSummary? pnlPrevWindow;
-    try {
-      final extra = await Future.wait([
-        ReminderService.getOverdue(limit: 200), // 0
-        ReportService.getDayBook(sixMonthStart, now, currencyCode: code), // 1
-        AccountingService.getAccounts(), // 2
-        ref.read(productRepositoryProvider).getAllProducts(), // 3
-        ref.read(invoiceRepositoryProvider).getInvoicesForExport(
-            fromDate: monthStart, toDate: now, filterType: 'Invoice'), // 4
-        PurchaseBillService.getBills(from: monthStart, to: now), // 5
-        for (var i = 0; i < seriesStarts.length; i++)
-          ReportService.getPnl(
-            seriesStarts[i],
-            i == seriesStarts.length - 1 ? now : monthEnd(seriesStarts[i]),
-            currencyCode: code,
-          ), // 6..11
-        ReportService.getPnl(prevMonthStart, prevWindowEnd,
-            currencyCode: code), // 12
-      ]);
-      reminderOverdue = extra[0] as List<OverdueInvoice>;
-      dayBook = extra[1] as List<DayBookEntry>;
-      final accounts = extra[2] as List<FinancialAccount>;
-      // Currency scope: never sum mixed currencies under one symbol.
-      cashAccounts = accounts.where((a) => a.currencyCode == code).toList();
-      allProducts = extra[3] as List<Product>;
-      periodInvoices = extra[4] as List<Invoice>;
-      periodBills = extra[5] as List<PurchaseBill>;
-      pnlSeries = extra.sublist(6, 12).cast<PnlSummary>();
-      pnlPrevWindow = extra[12] as PnlSummary;
-      // Live balances plus real historical balances (AccountingService
-      // supports `through`, so month-end points are actuals, not estimates).
-      cashBalances = await AccountingService.getBalances(cashAccounts);
-      final seriesDates = [
-        for (var i = 0; i < 5; i++)
-          DateTime(now.year, now.month - (4 - i), 0, 23, 59, 59),
-        now,
-      ];
-      final balanceFutures = <Future<double>>[];
-      for (var d = 0; d < seriesDates.length; d++) {
-        final date = seriesDates[d];
-        final historical = d < seriesDates.length - 1;
-        balanceFutures.add(() async {
-          var total = 0.0;
-          for (final account in cashAccounts) {
-            total += await AccountingService.getBalance(account.id,
-                through: historical ? date : null);
-          }
-          return total;
-        }());
-      }
-      cashSeries = await Future.wait(balanceFutures);
-      cashPrevMonthEnd =
-          cashSeries.length >= 2 ? cashSeries[cashSeries.length - 2] : 0.0;
-    } catch (_) {
-      // Panels keep their honest empty defaults (see initializers above).
-    }
-
-    final customerCount = results[0] as int;
-    final productCount = results[1] as int;
-    final financials =
-        results[2] as ({int count, double revenue, double outstanding});
-    final recent = results[3] as List<Invoice>;
-    final dueSoon = results[4] as List<Invoice>;
-    final overdue = results[5] as List<Invoice>;
-    final monthly = results[6] as List<Map<String, dynamic>>;
-    final layout = results[7] as String?;
-    final topCust = results[8] as List<Map<String, dynamic>>;
-    final topProd = results[9] as List<Map<String, dynamic>>;
-    final bannerDismissed = results[10] as String?;
-    final supportDismissed = results[11] as String?;
-    final outOfStock = results[12] as List<Product>;
-    final themeBannerDismissed = results[13] as String?;
-    final shortcutsBannerDismissed =
-        Platform.isAndroid ? '1' : results[14] as String?;
-    final String milestone = financials.count >= 100
-        ? '100'
-        : financials.count >= 50
-            ? '50'
-            : financials.count > 10
-                ? '10'
-                : '';
-    if (!mounted) return;
     setState(() {
-      totalCustomers = customerCount;
-      totalProducts = productCount;
-      outOfStockProducts = outOfStock;
-      totalInvoices = financials.count;
-      totalRevenue = financials.revenue;
-      totalOutstanding = financials.outstanding;
-      recentInvoices = recent;
-      dueSoonInvoices = dueSoon;
-      overdueInvoices = overdue;
-      _currencySymbol = currency.symbol;
-      _currencyCode = code;
-      _reminderOverdue = reminderOverdue;
-      _dayBook = dayBook;
-      _cashAccounts = cashAccounts;
-      _cashBalances = cashBalances;
-      _cashSeries = cashSeries;
-      _cashPrevMonthEnd = cashPrevMonthEnd;
-      _allProducts = allProducts;
-      _periodInvoices = periodInvoices;
-      _periodBills = periodBills;
-      _pnlSeries = pnlSeries;
-      _pnlPrevWindow = pnlPrevWindow;
-      _monthlyRevenue = monthly;
-      _dashboardLayout = layout ?? 'default';
-      _topCustomers = topCust;
-      _topProducts = topProd;
-      _showLayoutBanner = bannerDismissed != '1';
-      _showThemeBanner = themeBannerDismissed != '1';
-      _showShortcutsBanner = shortcutsBannerDismissed != '1';
-      _supportMilestone = milestone;
-      _showSupportBanner =
-          milestone.isNotEmpty && supportDismissed != milestone;
-      isLoading = false;
+      isLoading = true;
+      _dashboardError = null;
     });
+
+    try {
+      // Dashboard renders under a single currency symbol — fetch it first so
+      // revenue/outstanding/monthly/top-customers are filtered to it (mixed
+      // currencies must never be summed under one symbol).
+      final currency = await ref.read(settingsRepositoryProvider).getCurrency();
+      if (!mounted) return;
+      final results = await Future.wait([
+        ref.read(customerRepositoryProvider).getTotalCustomerCount(), // 0
+        ref.read(productRepositoryProvider).getTotalProductCount(), // 1
+        ref
+            .read(invoiceRepositoryProvider)
+            .getDashboardFinancials(currencyCode: currency.code), // 2
+        ref.read(invoiceRepositoryProvider).getRecentInvoices(limit: 5), // 3
+        ref.read(invoiceRepositoryProvider).getDueSoonInvoices(), // 4
+        ref.read(invoiceRepositoryProvider).getOverdueInvoices(limit: 10), // 5
+        ref
+            .read(invoiceRepositoryProvider)
+            .getMonthlyRevenue(currencyCode: currency.code), // 6
+        ref
+            .read(invoiceRepositoryProvider)
+            .getTopCustomers(currencyCode: currency.code), // 7
+        ref.read(invoiceRepositoryProvider).getTopProducts(), // 8
+        ref
+            .read(settingsRepositoryProvider)
+            .getSetting(SettingKey.supportBannerDismissed), // 9
+        ref.read(productRepositoryProvider).getOutOfStockProducts(), // 12
+        ref
+            .read(settingsRepositoryProvider)
+            .getSetting(SettingKey.themeBannerDismissed), // 13
+        ref
+            .read(settingsRepositoryProvider)
+            .getSetting(SettingKey.shortcutsBannerDismissed), // 14
+      ]);
+
+      // ── Ledgerly overview batch: read-only and additive. Every figure below
+      // comes from an existing query; the screen only groups/filters the
+      // returned rows (ageing buckets, monthly money-in/out, stock value).
+      // A failure here must never blank the core dashboard, so the panels
+      // fall back to honest empty states.
+      final code = currency.code;
+      final now = DateTime.now();
+      final monthStart = DateTime(now.year, now.month, 1);
+      final prevMonthStart = DateTime(now.year, now.month - 1, 1);
+      final daysInPrevMonth =
+          DateTime(prevMonthStart.year, prevMonthStart.month + 1, 0).day;
+      final prevWindowEnd = DateTime(prevMonthStart.year, prevMonthStart.month,
+          now.day > daysInPrevMonth ? daysInPrevMonth : now.day, 23, 59, 59);
+      final sixMonthStart = DateTime(now.year, now.month - 5, 1);
+      final seriesStarts =
+          List.generate(6, (i) => DateTime(now.year, now.month - (5 - i), 1));
+      DateTime monthEnd(DateTime m) =>
+          DateTime(m.year, m.month + 1, 0, 23, 59, 59);
+
+      var reminderOverdue = <OverdueInvoice>[];
+      var dayBook = <DayBookEntry>[];
+      var cashAccounts = <FinancialAccount>[];
+      var cashBalances = <String, double>{};
+      var cashSeries = <double>[];
+      var cashPrevMonthEnd = 0.0;
+      var allProducts = <Product>[];
+      var periodInvoices = <Invoice>[];
+      var periodBills = <PurchaseBill>[];
+      var pnlSeries = <PnlSummary>[];
+      PnlSummary? pnlPrevWindow;
+      try {
+        final extra = await Future.wait([
+          ReminderService.getOverdue(limit: 200), // 0
+          ReportService.getDayBook(sixMonthStart, now, currencyCode: code), // 1
+          AccountingService.getAccounts(), // 2
+          ref.read(productRepositoryProvider).getAllProducts(), // 3
+          ref.read(invoiceRepositoryProvider).getInvoicesForExport(
+              fromDate: monthStart, toDate: now, filterType: 'Invoice'), // 4
+          PurchaseBillService.getBills(from: monthStart, to: now), // 5
+          for (var i = 0; i < seriesStarts.length; i++)
+            ReportService.getPnl(
+              seriesStarts[i],
+              i == seriesStarts.length - 1 ? now : monthEnd(seriesStarts[i]),
+              currencyCode: code,
+            ), // 6..11
+          ReportService.getPnl(prevMonthStart, prevWindowEnd,
+              currencyCode: code), // 12
+        ]);
+        reminderOverdue = extra[0] as List<OverdueInvoice>;
+        dayBook = extra[1] as List<DayBookEntry>;
+        final accounts = extra[2] as List<FinancialAccount>;
+        // Currency scope: never sum mixed currencies under one symbol.
+        cashAccounts = accounts.where((a) => a.currencyCode == code).toList();
+        allProducts = extra[3] as List<Product>;
+        periodInvoices = extra[4] as List<Invoice>;
+        periodBills = extra[5] as List<PurchaseBill>;
+        pnlSeries = extra.sublist(6, 12).cast<PnlSummary>();
+        pnlPrevWindow = extra[12] as PnlSummary;
+        // Live balances plus real historical balances (AccountingService
+        // supports `through`, so month-end points are actuals, not estimates).
+        cashBalances = await AccountingService.getBalances(cashAccounts);
+        final seriesDates = [
+          for (var i = 0; i < 5; i++)
+            DateTime(now.year, now.month - (4 - i), 0, 23, 59, 59),
+          now,
+        ];
+        final balanceFutures = <Future<double>>[];
+        for (var d = 0; d < seriesDates.length; d++) {
+          final date = seriesDates[d];
+          final historical = d < seriesDates.length - 1;
+          balanceFutures.add(() async {
+            var total = 0.0;
+            for (final account in cashAccounts) {
+              total += await AccountingService.getBalance(account.id,
+                  through: historical ? date : null);
+            }
+            return total;
+          }());
+        }
+        cashSeries = await Future.wait(balanceFutures);
+        cashPrevMonthEnd =
+            cashSeries.length >= 2 ? cashSeries[cashSeries.length - 2] : 0.0;
+      } catch (_) {
+        // Panels keep their honest empty defaults (see initializers above).
+      }
+
+      var marketRates = <MetalRate>[];
+      DateTime? marketRatesDate;
+      var previousMarketRates = <String, MetalRate>{};
+      if (ref.read(industryProfileProvider) == IndustryProfile.jewellery) {
+        try {
+          final jewellery = ref.read(jewelleryRepositoryProvider);
+          const featuredRates = [
+            ('gold', '24K'),
+            ('gold', '22K'),
+            ('silver', '999'),
+          ];
+          final resolved = await Future.wait([
+            for (final pair in featuredRates)
+              jewellery.getRateForDate(
+                metal: pair.$1,
+                purity: pair.$2,
+                date: DateTime.now(),
+              ),
+          ]);
+          marketRates = [
+            for (final rate in resolved)
+              if (rate != null) rate
+          ];
+          if (marketRates.isNotEmpty) {
+            marketRatesDate = marketRates
+                .map((rate) => rate.effectiveDate)
+                .reduce(
+                    (latest, value) => value.isAfter(latest) ? value : latest);
+            final prior = await Future.wait([
+              for (final rate in marketRates)
+                jewellery.getRateForDate(
+                  metal: rate.metal,
+                  purity: rate.purity,
+                  date: rate.effectiveDate.subtract(const Duration(days: 1)),
+                ),
+            ]);
+            for (var i = 0; i < marketRates.length; i++) {
+              final rate = prior[i];
+              if (rate != null) {
+                previousMarketRates[
+                    '${marketRates[i].metal}|${marketRates[i].purity}'] = rate;
+              }
+            }
+          }
+        } catch (_) {
+          // Market rates are an enhancement; the financial dashboard remains
+          // usable when no rate board has been configured yet.
+        }
+      }
+
+      var recentActivity = <Map<String, dynamic>>[];
+      try {
+        recentActivity = await AuditLogService.recent(limit: 5);
+      } catch (_) {
+        // Activity is supplementary; never fail the dashboard when audit
+        // history is unavailable (for example, on older restored databases).
+      }
+
+      final customerCount = results[0] as int;
+      final productCount = results[1] as int;
+      final financials =
+          results[2] as ({int count, double revenue, double outstanding});
+      final recent = results[3] as List<Invoice>;
+      final dueSoon = results[4] as List<Invoice>;
+      final overdue = results[5] as List<Invoice>;
+      final monthly = results[6] as List<Map<String, dynamic>>;
+      final topCust = results[7] as List<Map<String, dynamic>>;
+      final topProd = results[8] as List<Map<String, dynamic>>;
+      final supportDismissed = results[9] as String?;
+      final outOfStock = results[10] as List<Product>;
+      final themeBannerDismissed = results[11] as String?;
+      final shortcutsBannerDismissed =
+          Platform.isAndroid ? '1' : results[12] as String?;
+      final String milestone = financials.count >= 100
+          ? '100'
+          : financials.count >= 50
+              ? '50'
+              : financials.count > 10
+                  ? '10'
+                  : '';
+      if (!mounted) return;
+      setState(() {
+        totalCustomers = customerCount;
+        totalProducts = productCount;
+        outOfStockProducts = outOfStock;
+        totalInvoices = financials.count;
+        totalRevenue = financials.revenue;
+        totalOutstanding = financials.outstanding;
+        recentInvoices = recent;
+        dueSoonInvoices = dueSoon;
+        overdueInvoices = overdue;
+        _currencySymbol = currency.symbol;
+        _currencyCode = code;
+        _reminderOverdue = reminderOverdue;
+        _dayBook = dayBook;
+        _cashAccounts = cashAccounts;
+        _cashBalances = cashBalances;
+        _cashSeries = cashSeries;
+        _cashPrevMonthEnd = cashPrevMonthEnd;
+        _allProducts = allProducts;
+        _periodInvoices = periodInvoices;
+        _periodBills = periodBills;
+        _pnlSeries = pnlSeries;
+        _pnlPrevWindow = pnlPrevWindow;
+        _monthlyRevenue = monthly;
+        _topCustomers = topCust;
+        _topProducts = topProd;
+        _marketRates = marketRates;
+        _marketRatesDate = marketRatesDate;
+        _previousMarketRates = previousMarketRates;
+        _recentActivity = recentActivity;
+        _showThemeBanner = themeBannerDismissed != '1';
+        _showShortcutsBanner = shortcutsBannerDismissed != '1';
+        _supportMilestone = milestone;
+        _showSupportBanner =
+            milestone.isNotEmpty && supportDismissed != milestone;
+        isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        _dashboardError = e.toString();
+      });
+    }
   }
 
   Future<void> _dismissSupportBanner() async {
@@ -1617,13 +1579,6 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
         .read(settingsRepositoryProvider)
         .setSetting(SettingKey.supportBannerDismissed, _supportMilestone);
     if (mounted) setState(() => _showSupportBanner = false);
-  }
-
-  Future<void> _dismissLayoutBanner() async {
-    await ref
-        .read(settingsRepositoryProvider)
-        .setSetting(SettingKey.layoutBannerDismissed, '1');
-    if (mounted) setState(() => _showLayoutBanner = false);
   }
 
   Future<void> _dismissThemeBanner() async {
@@ -1638,6 +1593,275 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
         .read(settingsRepositoryProvider)
         .setSetting(SettingKey.shortcutsBannerDismissed, '1');
     if (mounted) setState(() => _showShortcutsBanner = false);
+  }
+
+  Future<void> _showCommandPalette() async {
+    final customers =
+        await ref.read(customerRepositoryProvider).getAllCustomers();
+    if (!mounted) return;
+    final controller = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final query = controller.text.trim().toLowerCase();
+          final matches = customers
+              .where((customer) =>
+                  query.isEmpty ||
+                  customer.name.toLowerCase().contains(query) ||
+                  customer.phone.toLowerCase().contains(query) ||
+                  customer.gstin.toLowerCase().contains(query))
+              .take(6)
+              .toList();
+          void closeThen(VoidCallback action) {
+            Navigator.pop(dialogContext);
+            action();
+          }
+
+          return Dialog(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640, maxHeight: 560),
+              child: Padding(
+                padding: const EdgeInsets.all(AppPadding.large),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        hintText: 'Search customers, ledgers, or type add',
+                        suffixIcon: IconButton(
+                          tooltip: AppLocalizations.of(context)!.actionClose,
+                          onPressed: () => Navigator.pop(dialogContext),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppPadding.medium),
+                    if (query.isEmpty || query == 'add') ...[
+                      _commandActionTile(
+                        icon: Icons.person_add_alt_1_outlined,
+                        title: 'Add new customer',
+                        subtitle: 'Create customer and open ledger',
+                        onTap: () => closeThen(() => _showCustomerDrawer()),
+                      ),
+                      _commandActionTile(
+                        icon: Icons.receipt_long_outlined,
+                        title: AppLocalizations.of(context)!.navNewInvoice,
+                        subtitle: 'Create a sales invoice',
+                        onTap: () =>
+                            closeThen(() => widget.onCreateInvoice?.call()),
+                      ),
+                      _commandActionTile(
+                        icon: Icons.scale_outlined,
+                        title: 'Metal rates',
+                        subtitle: 'Update today\'s declared rates',
+                        onTap: () => closeThen(() =>
+                            widget.onNavigateTab(DashboardTab.metalRates.id)),
+                      ),
+                    ],
+                    if (query.isNotEmpty) ...[
+                      Text('Customers',
+                          style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                              fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      if (matches.isEmpty)
+                        _commandActionTile(
+                          icon: Icons.person_add_alt_1_outlined,
+                          title: 'Add "$query" as a customer',
+                          subtitle: 'No existing customer matched',
+                          onTap: () => closeThen(() => _showCustomerDrawer(
+                              initialName: controller.text.trim())),
+                        )
+                      else
+                        Flexible(
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: matches.length,
+                            itemBuilder: (_, index) {
+                              final customer = matches[index];
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  child: Text(customer.name.isEmpty
+                                      ? '?'
+                                      : customer.name[0].toUpperCase()),
+                                ),
+                                title: Text(customer.name),
+                                subtitle: Text(customer.phone.isNotEmpty
+                                    ? customer.phone
+                                    : customer.gstin),
+                                trailing: const Icon(Icons.menu_book_outlined),
+                                onTap: () => closeThen(() =>
+                                    widget.onOpenCustomerLedger(customer)),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    controller.dispose();
+  }
+
+  Widget _commandActionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) =>
+      ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.arrow_outward_rounded),
+        onTap: onTap,
+      );
+
+  Future<void> _showCustomerDrawer({String initialName = ''}) async {
+    final name = TextEditingController(text: initialName);
+    final phone = TextEditingController();
+    final address = TextEditingController();
+    final gstin = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Customer details',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (dialogContext, _, __) => Align(
+        alignment: Alignment.centerRight,
+        child: SafeArea(
+          child: Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: SizedBox(
+              width: MediaQuery.sizeOf(dialogContext).width <
+                      Breakpoints.compactMax
+                  ? double.infinity
+                  : 560,
+              child: Padding(
+                padding: const EdgeInsets.all(AppPadding.xlarge),
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text('Customer details',
+                                style:
+                                    Theme.of(context).textTheme.headlineSmall),
+                          ),
+                          IconButton(
+                            tooltip: AppLocalizations.of(context)!.actionClose,
+                            onPressed: () => Navigator.pop(dialogContext),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppPadding.large),
+                      TextFormField(
+                        controller: name,
+                        autofocus: initialName.isEmpty,
+                        textInputAction: TextInputAction.next,
+                        decoration:
+                            const InputDecoration(labelText: 'Customer name'),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? 'Customer name is required'
+                                : null,
+                      ),
+                      const SizedBox(height: AppPadding.medium),
+                      TextFormField(
+                        controller: phone,
+                        keyboardType: TextInputType.phone,
+                        textInputAction: TextInputAction.next,
+                        decoration:
+                            const InputDecoration(labelText: 'Mobile number'),
+                      ),
+                      const SizedBox(height: AppPadding.medium),
+                      TextFormField(
+                        controller: address,
+                        minLines: 2,
+                        maxLines: 3,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(labelText: 'Address'),
+                      ),
+                      const SizedBox(height: AppPadding.medium),
+                      TextFormField(
+                        controller: gstin,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: const InputDecoration(labelText: 'GSTIN'),
+                      ),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: Text(
+                                AppLocalizations.of(context)!.actionCancel),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton.icon(
+                            onPressed: () async {
+                              if (!(formKey.currentState?.validate() ??
+                                  false)) {
+                                return;
+                              }
+                              final customer = Customer(
+                                id: const Uuid().v4(),
+                                name: name.text.trim(),
+                                email: '',
+                                phone: phone.text.trim(),
+                                address: address.text.trim(),
+                                gstin: gstin.text.trim().toUpperCase(),
+                              );
+                              await ref
+                                  .read(customerRepositoryProvider)
+                                  .insertCustomer(customer);
+                              if (!dialogContext.mounted || !mounted) return;
+                              Navigator.pop(dialogContext);
+                              widget.onOpenCustomerLedger(customer);
+                            },
+                            icon: const Icon(Icons.menu_book_outlined),
+                            label: const Text('Save & open ledger'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      transitionBuilder: (_, animation, __, child) => SlideTransition(
+        position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+            .animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+        child: child,
+      ),
+    );
+    name.dispose();
+    phone.dispose();
+    address.dispose();
+    gstin.dispose();
   }
 
   void _showShortcutsDialog() {
@@ -1725,32 +1949,6 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
     );
   }
 
-  Widget _buildLayoutDiscoveryBanner() {
-    return DiscoveryBanner(
-      visible: _showLayoutBanner,
-      icon: Icons.dashboard_customize_outlined,
-      iconColor: const Color(0xFF2563EB),
-      backgroundColor: const Color(0xFFEFF6FF),
-      borderColor: const Color(0xFFBFDBFE),
-      title: Text(
-        AppLocalizations.of(context)!.dashboardLayoutBannerTitle,
-        style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 13,
-            color: Color(0xFF1E40AF)),
-      ),
-      subtitle: Text(
-        AppLocalizations.of(context)!.dashboardLayoutBannerSubtitle,
-        style: const TextStyle(fontSize: 12, color: Color(0xFF3B82F6)),
-      ),
-      actionLabel: AppLocalizations.of(context)!.actionGotIt,
-      onAction: _dismissLayoutBanner,
-      actionColor: const Color(0xFF2563EB),
-      onDismiss: _dismissLayoutBanner,
-      dismissIconColor: const Color(0xFF93C5FD),
-    );
-  }
-
   Widget _buildThemeDiscoveryBanner() {
     return DiscoveryBanner(
       visible: _showThemeBanner,
@@ -1827,64 +2025,96 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).brightness == Brightness.dark
-          ? null
-          : Theme.of(context).colorScheme.surfaceContainerHighest,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(AppLocalizations.of(context)!.dashboardOverviewTitle),
-            Text(
-              DateFormat('EEEE, d MMMM').format(DateTime.now()),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _showCommandPalette,
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+            _showCommandPalette,
+      },
+      child: Scaffold(
+        backgroundColor: Theme.of(context).brightness == Brightness.dark
+            ? null
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(AppLocalizations.of(context)!.dashboardOverviewTitle),
+              Text(
+                DateFormat('EEEE, d MMMM').format(DateTime.now()),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
+            ],
+          ),
+          toolbarHeight: 72,
+          centerTitle: false,
+          actions: [
+            if (!context.isCompact)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: OutlinedButton.icon(
+                  onPressed: _showCommandPalette,
+                  icon: const Icon(Icons.search_rounded, size: 18),
+                  label: const Text('Search or add'),
+                ),
+              ),
+            if (!context.isCompact)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilledButton.icon(
+                  onPressed: widget.onCreateInvoice,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Create invoice'),
+                ),
+              ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadDashboardData,
+              tooltip: AppLocalizations.of(context)!.actionRefresh,
             ),
+            const SizedBox(width: 8),
           ],
         ),
-        toolbarHeight: 72,
-        centerTitle: false,
-        actions: [
-          if (!context.isCompact)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilledButton.icon(
-                onPressed: widget.onCreateInvoice,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Create invoice'),
-              ),
-            ),
-          _buildLayoutToggle(),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadDashboardData,
-            tooltip: AppLocalizations.of(context)!.actionRefresh,
-          ),
-          const SizedBox(width: 8),
-        ],
+        body: isLoading
+            ? const AppLoadingState()
+            : _dashboardError != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.error_outline_rounded,
+                              size: 48,
+                              color: Theme.of(context).colorScheme.error),
+                          const SizedBox(height: 16),
+                          Text('Failed to load dashboard',
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          Text(_dashboardError!,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: _loadDashboardData,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : _buildContent(),
       ),
-      body: isLoading ? const AppLoadingState() : _buildContent(),
     );
   }
 
   Widget _buildContent() {
-    switch (_dashboardLayout) {
-      case 'classic':
-        return _buildClassicLayout();
-      case 'simple':
-        return _buildSimpleFeedLayout();
-      case 'bento':
-        return _buildBentoLayout();
-      default:
-        return _buildDefaultLayout();
-    }
-  }
-
-  Widget _buildDefaultLayout() {
     return SingleChildScrollView(
       padding: EdgeInsets.all(context.isCompact ? 16 : 28),
       child: Center(
@@ -1893,12 +2123,17 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildLayoutDiscoveryBanner(),
               _buildThemeDiscoveryBanner(),
               _buildShortcutsDiscoveryBanner(),
               _buildSupportBanner(),
               // ── Ledgerly overview ──────────────────────────────
               _buildLedgerlyGreeting(),
+
+              if (ref.watch(industryProfileProvider) ==
+                  IndustryProfile.jewellery) ...[
+                const SizedBox(height: 20),
+                _buildJewelleryWorkspace(),
+              ],
 
               const SizedBox(height: 20),
 
@@ -2137,29 +2372,25 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           dueDate: invoice.dueDate,
           outstanding: invoice.outstandingBalance,
         );
+    final scheme = Theme.of(context).colorScheme;
+    final background =
+        isOverdue ? scheme.errorContainer : scheme.primaryContainer;
+    final foreground =
+        isOverdue ? scheme.onErrorContainer : scheme.onPrimaryContainer;
     return Container(
       width: 38,
       height: 38,
       decoration: BoxDecoration(
-        gradient: isOverdue
-            ? DashboardScreenColors.invoiceNumberOverDueLinearGradient
-            : LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Theme.of(context).primaryColor,
-                  Theme.of(context).primaryColor.withValues(alpha: 0.7),
-                ],
-              ),
+        color: background,
         borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
       ),
       child: Center(
         child: Text(
           '${index + 1}',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: foreground,
           ),
         ),
       ),
@@ -2208,7 +2439,7 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               ),
             ),
             if (invoice.type == 'Invoice')
-              _buildPaymentStatusChip(invoice.paymentStatus),
+              PaymentStatusChip(status: invoice.paymentStatus),
           ],
         ),
         const SizedBox(height: 6),
@@ -3319,6 +3550,8 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
     final ageing = _buildAgeingPanel();
     final gst = _buildGstPanel();
     final inventory = _buildInventoryPanel();
+    final topCustomers = _buildTopCustomersCard();
+    final topProducts = _buildTopProductsCard();
     return LayoutBuilder(
       builder: (context, c) {
         if (c.maxWidth < Breakpoints.compactMax) {
@@ -3334,6 +3567,10 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
               gst,
               const SizedBox(height: 16),
               inventory,
+              const SizedBox(height: 16),
+              topCustomers,
+              const SizedBox(height: 16),
+              topProducts,
             ],
           );
         }
@@ -3355,6 +3592,8 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
             pair(ageing, gst),
             const SizedBox(height: 16),
             inventory,
+            const SizedBox(height: 16),
+            pair(topCustomers, topProducts),
           ],
         );
       },
@@ -3637,6 +3876,326 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
     return expanded ? SizedBox(width: double.infinity, child: button) : button;
   }
 
+  Widget _buildJewelleryWorkspace() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildJewelleryMarketRates(),
+        const SizedBox(height: 20),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final quickActions = _buildJewelleryQuickActions();
+            final activity = _buildJewelleryRecentActivity();
+            if (constraints.maxWidth < Breakpoints.compactMax) {
+              return Column(
+                children: [quickActions, const SizedBox(height: 16), activity],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: quickActions),
+                const SizedBox(width: 16),
+                Expanded(child: activity),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildJewelleryMarketRates() {
+    final scheme = Theme.of(context).colorScheme;
+    const featured = [
+      ('gold', '24K', 'GD 24K'),
+      ('gold', '22K', 'GD 22K'),
+      ('silver', '999', 'SLV'),
+    ];
+    return _ledgerlyPanel(
+      title: 'Market Rates',
+      subtitle: _marketRates.isEmpty
+          ? 'Add declared rates in Metal Rates'
+          : 'Latest declared rates · ${DateFormat('d MMM').format(_marketRatesDate!)}',
+      icon: Icons.show_chart_rounded,
+      color: scheme.primary,
+      trailing: TextButton.icon(
+        onPressed: () => widget.onNavigateTab(DashboardTab.metalRates.id),
+        icon: const Icon(Icons.open_in_new, size: 16),
+        label: const Text('Manage'),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < Breakpoints.compactMax;
+          return compact
+              ? Column(
+                  children: [
+                    for (var i = 0; i < featured.length; i++) ...[
+                      if (i > 0) const Divider(height: 20),
+                      _marketRateTile(
+                          featured[i].$1, featured[i].$2, featured[i].$3),
+                    ],
+                  ],
+                )
+              : Row(
+                  children: [
+                    for (var i = 0; i < featured.length; i++) ...[
+                      if (i > 0)
+                        const SizedBox(
+                          height: 48,
+                          child: VerticalDivider(width: 28),
+                        ),
+                      Expanded(
+                          child: _marketRateTile(
+                              featured[i].$1, featured[i].$2, featured[i].$3)),
+                    ],
+                  ],
+                );
+        },
+      ),
+    );
+  }
+
+  Widget _marketRateTile(String metal, String purity, String label) {
+    final scheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
+    MetalRate? rate;
+    for (final candidate in _marketRates) {
+      if (candidate.metal == metal && candidate.purity == purity) {
+        rate = candidate;
+        break;
+      }
+    }
+    final previous = _previousMarketRates['$metal|$purity'];
+    final change =
+        rate == null || previous == null || previous.sellRatePerGram == 0
+            ? null
+            : (rate.sellRatePerGram - previous.sellRatePerGram) /
+                previous.sellRatePerGram *
+                100;
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: scheme.primaryContainer,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            metal == 'silver' ? Icons.circle_outlined : Icons.diamond_outlined,
+            color: scheme.onPrimaryContainer,
+            size: 19,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(
+                rate == null
+                    ? 'Not configured'
+                    : l10n.metalRatesSellRateSummary(
+                        '$_currencySymbol ${rate.sellRatePerGram.toStringAsFixed(0)}'),
+                style: TextStyle(
+                  color: rate == null ? scheme.error : scheme.onSurface,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (change != null)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Icon(change >= 0 ? Icons.trending_up : Icons.trending_down,
+                  color: change >= 0 ? scheme.primary : scheme.error, size: 18),
+              Text('${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                      color: change >= 0 ? scheme.primary : scheme.error,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700)),
+            ],
+          )
+        else if (rate != null)
+          Icon(Icons.remove, color: scheme.onSurfaceVariant, size: 18),
+      ],
+    );
+  }
+
+  Widget _buildJewelleryQuickActions() {
+    final l10n = AppLocalizations.of(context)!;
+    return _ledgerlyPanel(
+      title: 'Quick Actions',
+      icon: Icons.bolt_outlined,
+      color: Theme.of(context).colorScheme.primary,
+      child: Column(
+        children: [
+          _quickActionButton(
+            (
+              icon: Icons.person_add_alt_1_outlined,
+              label: l10n.navCustomers,
+              onTap: _showCustomerDrawer,
+              color: Theme.of(context).colorScheme.primary
+            ),
+            expanded: true,
+          ),
+          const SizedBox(height: 8),
+          _quickActionButton(
+            (
+              icon: Icons.receipt_long_outlined,
+              label: l10n.navNewInvoice,
+              onTap: () => widget.onCreateInvoice?.call(),
+              color: Theme.of(context).colorScheme.tertiary
+            ),
+            expanded: true,
+          ),
+          const SizedBox(height: 8),
+          _quickActionButton(
+            (
+              icon: Icons.scale_outlined,
+              label: 'Metal Rates',
+              onTap: () => widget.onNavigateTab(DashboardTab.metalRates.id),
+              color: Theme.of(context).colorScheme.secondary
+            ),
+            expanded: true,
+          ),
+          const SizedBox(height: 8),
+          _quickActionButton(
+            (
+              icon: Icons.handyman_outlined,
+              label: 'Job Work',
+              onTap: () => widget.onNavigateTab(DashboardTab.jobWork.id),
+              color: Theme.of(context).colorScheme.primary
+            ),
+            expanded: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildJewelleryRecentActivity() {
+    final scheme = Theme.of(context).colorScheme;
+    return _ledgerlyPanel(
+      title: 'Recent Activity',
+      icon: Icons.history_rounded,
+      color: scheme.tertiary,
+      trailing: Text('${_recentActivity.length} recent',
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+      child: _recentActivity.isEmpty && recentInvoices.isEmpty
+          ? Text('No sales activity yet.',
+              style: TextStyle(color: scheme.onSurfaceVariant))
+          : Column(
+              children: [
+                for (var i = 0;
+                    i <
+                            (_recentActivity.isEmpty
+                                ? recentInvoices.length
+                                : _recentActivity.length) &&
+                        i < 4;
+                    i++) ...[
+                  if (i > 0) const Divider(height: 20),
+                  _recentActivity.isEmpty
+                      ? _jewelleryActivityRow(recentInvoices[i])
+                      : _auditActivityRow(_recentActivity[i]),
+                ],
+              ],
+            ),
+    );
+  }
+
+  Widget _jewelleryActivityRow(Invoice invoice) {
+    final scheme = Theme.of(context).colorScheme;
+    final itemName = invoice.items.isEmpty
+        ? 'Invoice posted'
+        : invoice.items.first.product.name;
+    return InkWell(
+      onTap: () => widget.onEditInvoice(invoice),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: scheme.secondaryContainer,
+              child: Icon(Icons.person_outline,
+                  size: 18, color: scheme.onSecondaryContainer),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(invoice.customer.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(itemName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant, fontSize: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+                '${invoice.currencySymbol} ${invoice.payableTotal.toStringAsFixed(0)}',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _auditActivityRow(Map<String, dynamic> entry) {
+    final scheme = Theme.of(context).colorScheme;
+    final action = entry['action'] as String? ?? 'activity';
+    final details = entry['details'] as String? ?? action.replaceAll('_', ' ');
+    final time = DateTime.tryParse(entry['created_at'] as String? ?? '');
+    final label = time == null ? '' : DateFormat('d MMM, h:mm a').format(time);
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: scheme.secondaryContainer,
+          child: Icon(
+            action.contains('payment')
+                ? Icons.payments_outlined
+                : action.contains('purchase')
+                    ? Icons.business_outlined
+                    : Icons.receipt_long_outlined,
+            size: 18,
+            color: scheme.onSecondaryContainer,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(details,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              if (label.isNotEmpty)
+                Text(label,
+                    style: TextStyle(
+                        color: scheme.onSurfaceVariant, fontSize: 12)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Quick Actions row — wired to the same destinations the dashboard already
   /// uses (tabs 1/4/8/11, ImportScreen for Scan Bill).
   Widget _buildLedgerlyQuickActions() {
@@ -3701,112 +4260,6 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
           );
         },
       ),
-    );
-  }
-
-  Widget _buildGreetingBanner() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-      decoration: BoxDecoration(
-        gradient: DashboardScreenColors.welcomePanelBackgroundGradientColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1E293B).withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: context.isCompact
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  AppLocalizations.of(context)!
-                      .dashboardWelcomeBackMessage(widget.user.username),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  AppLocalizations.of(context)!.dashboardBusinessGlanceSubtitle,
-                  style: TextStyle(
-                      fontSize: 12.5,
-                      color: Colors.white.withValues(alpha: 0.72)),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Text(
-                      DateFormat('EEEE, MMM d, yyyy').format(DateTime.now()),
-                      style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white.withValues(alpha: 0.85)),
-                    ),
-                  ],
-                ),
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      AppLocalizations.of(context)!
-                          .dashboardWelcomeBackMessage(widget.user.username),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      AppLocalizations.of(context)!
-                          .dashboardBusinessGlanceSubtitle,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withValues(alpha: 0.72)),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      DateFormat('EEEE').format(DateTime.now()),
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withValues(alpha: 0.72)),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      DateFormat('MMM d, yyyy').format(DateTime.now()),
-                      style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white),
-                    ),
-                  ],
-                ),
-              ],
-            ),
     );
   }
 
@@ -4517,36 +4970,6 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
     );
   }
 
-  Widget _buildPaymentStatusChip(PaymentStatus status) {
-    final l10n = AppLocalizations.of(context)!;
-    final Color color;
-    final String label;
-    switch (status) {
-      case PaymentStatus.paid:
-        color = Colors.green;
-        label = l10n.paymentStatusPaid;
-      case PaymentStatus.partial:
-        color = Colors.orange;
-        label = l10n.paymentStatusPartial;
-      case PaymentStatus.unpaid:
-        color = Colors.red;
-        label = l10n.paymentStatusUnpaid;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style:
-            TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
-      ),
-    );
-  }
-
   Future<void> _showCloneDialog(Invoice invoice) async {
     final l10n = AppLocalizations.of(context)!;
     final type = await showDialog<String>(
@@ -4640,1616 +5063,62 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
     );
   }
 
-  // ── Layout Toggle ───────────────────────────────────────────────────────────
-
-  Widget _buildLayoutToggle() {
-    return PopupMenuButton<String>(
-      icon: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const Icon(Icons.dashboard_customize_outlined, size: 20),
-          if (_showLayoutBanner)
-            Positioned(
-              top: -3,
-              right: -3,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-        ],
-      ),
-      tooltip: AppLocalizations.of(context)!.dashboardLayoutTooltip,
-      offset: const Offset(0, 40),
-      onSelected: (value) async {
-        if (!mounted) return;
-        await ref
-            .read(settingsRepositoryProvider)
-            .setSetting(SettingKey.dashboardLayout, value);
-        setState(() => _dashboardLayout = value);
-        if (_showLayoutBanner) _dismissLayoutBanner();
-      },
-      itemBuilder: (ctx) {
-        final l10n = AppLocalizations.of(context)!;
-        return [
-          _layoutMenuItem(
-              'default',
-              Icons.view_agenda_outlined,
-              l10n.dashboardLayoutDefaultTitle,
-              l10n.dashboardLayoutDefaultSubtitle),
-          _layoutMenuItem('classic', Icons.grid_view_outlined,
-              l10n.dashboardLayoutClassic, l10n.dashboardLayoutClassicSubtitle),
-          _layoutMenuItem(
-              'bento',
-              Icons.auto_awesome_mosaic_outlined,
-              l10n.dashboardLayoutBentoTitle,
-              l10n.dashboardLayoutBentoSubtitle),
-          _layoutMenuItem(
-              'simple',
-              Icons.view_list_outlined,
-              l10n.dashboardLayoutSimpleTitle,
-              l10n.dashboardLayoutSimpleSubtitle),
-        ];
-      },
-    );
-  }
-
-  PopupMenuItem<String> _layoutMenuItem(
-      String value, IconData icon, String title, String sub) {
-    final active = _dashboardLayout == value;
-    final primary = Theme.of(context).primaryColor;
-    return PopupMenuItem(
-      value: value,
-      child: Row(
-        children: [
-          Icon(icon,
-              size: 18,
-              color: active
-                  ? primary
-                  : Theme.of(context).colorScheme.onSurfaceVariant),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight:
-                            active ? FontWeight.w700 : FontWeight.normal,
-                        color: active
-                            ? primary
-                            : Theme.of(context).colorScheme.onSurface)),
-                Text(sub,
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          if (active) Icon(Icons.check_rounded, size: 16, color: primary),
-        ],
-      ),
-    );
-  }
-
-  // ── Layout: Classic ─────────────────────────────────────────────────────────
-
-  Widget _buildClassicLayout() {
-    final primary = Theme.of(context).primaryColor;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: AppLayout.maxWidthNormal),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildLayoutDiscoveryBanner(),
-              _buildThemeDiscoveryBanner(),
-              _buildShortcutsDiscoveryBanner(),
-              _buildSupportBanner(),
-              _buildGreetingBanner(),
-              const SizedBox(height: 20),
-              // KPI row
-              LayoutBuilder(builder: (context, kpiConstraints) {
-                final kpiCards = <Widget>[
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!
-                          .dashboardRevenueCollectedLabel,
-                      '$_currencySymbol ${_fmtAmt(totalRevenue)}',
-                      Icons.account_balance_wallet_outlined,
-                      const Color(0xFF6A1B9A)),
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!.dashboardOutstandingLabel,
-                      '$_currencySymbol ${_fmtAmt(totalOutstanding)}',
-                      Icons.hourglass_top_outlined,
-                      const Color(0xFFC62828)),
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!.dashboardTotalInvoicesLabel,
-                      totalInvoices.toString(),
-                      Icons.receipt_long_outlined,
-                      const Color(0xFFE65100)),
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!.navCustomers,
-                      totalCustomers.toString(),
-                      Icons.people_outline,
-                      const Color(0xFF1565C0)),
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!.navProducts,
-                      totalProducts.toString(),
-                      Icons.inventory_2_outlined,
-                      const Color(0xFF2E7D32)),
-                ];
-                return _responsiveKpiBlock(kpiCards, kpiConstraints.maxWidth);
-              }),
-              const SizedBox(height: 20),
-              // Charts row — stacked on compact so neither chart is crushed.
-              LayoutBuilder(builder: (context, chartConstraints) {
-                final chartRow = IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(flex: 3, child: _buildRevenueBarChart(primary)),
-                      const SizedBox(width: 16),
-                      Expanded(flex: 2, child: _buildRevenueDonut()),
-                    ],
-                  ),
-                );
-                if (chartConstraints.maxWidth < Breakpoints.compactMax) {
-                  return Column(
-                    children: [
-                      _buildRevenueBarChart(primary),
-                      const SizedBox(height: 16),
-                      _buildRevenueDonut(),
-                    ],
-                  );
-                }
-                return chartRow;
-              }),
-              const SizedBox(height: 20),
-              // Bottom row
-              LayoutBuilder(builder: (context, bottomConstraints) {
-                final rightColumn = Column(
-                  children: [
-                    if (dueSoonInvoices.isNotEmpty) ...[
-                      _buildDueSoonCard(),
-                      const SizedBox(height: 14),
-                    ],
-                    if (overdueInvoices.isNotEmpty) ...[
-                      _buildOverdueCompactCard(),
-                      const SizedBox(height: 14),
-                    ],
-                    if (outOfStockProducts.isNotEmpty) ...[
-                      _buildOutOfStockCard(),
-                      const SizedBox(height: 14),
-                    ],
-                    _buildQuickActionsCard(),
-                  ],
-                );
-                if (bottomConstraints.maxWidth < Breakpoints.compactMax) {
-                  return Column(
-                    children: [
-                      _buildCompactRecentInvoices(limit: 7),
-                      const SizedBox(height: 14),
-                      rightColumn,
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                        flex: 3, child: _buildCompactRecentInvoices(limit: 7)),
-                    const SizedBox(width: 16),
-                    Expanded(flex: 2, child: rightColumn),
-                  ],
-                );
-              }),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// KPI block shared by the dashboard layouts: 2-column wrap on compact
-  /// widths, equal-width row on wide windows.
-  Widget _responsiveKpiBlock(List<Widget> cards, double availableWidth) {
-    if (availableWidth < Breakpoints.compactMax) {
-      const gap = 12.0;
-      final cardWidth = (availableWidth - gap) / 2;
-      return Wrap(
-        spacing: gap,
-        runSpacing: gap,
-        children: [
-          for (final card in cards) SizedBox(width: cardWidth, child: card),
-        ],
-      );
-    }
-    return Row(
-      children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
-          Expanded(child: cards[i]),
-        ],
-      ],
-    );
-  }
-
-  // ── Layout: Simple Feed ─────────────────────────────────────────────────────
-
-  Widget _buildSimpleFeedLayout() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: AppLayout.maxWidthNormal),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildLayoutDiscoveryBanner(),
-              _buildThemeDiscoveryBanner(),
-              _buildShortcutsDiscoveryBanner(),
-              _buildSupportBanner(),
-              _buildGreetingBanner(),
-              const SizedBox(height: 20),
-              // Mini KPI strip
-              LayoutBuilder(builder: (context, kpiConstraints) {
-                final kpiCards = <Widget>[
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!
-                          .dashboardRevenueCollectedLabel,
-                      '$_currencySymbol ${_fmtAmt(totalRevenue)}',
-                      Icons.account_balance_wallet_outlined,
-                      const Color(0xFF6A1B9A)),
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!.dashboardOutstandingLabel,
-                      '$_currencySymbol ${_fmtAmt(totalOutstanding)}',
-                      Icons.hourglass_top_outlined,
-                      const Color(0xFFC62828)),
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!.navInvoices,
-                      totalInvoices.toString(),
-                      Icons.receipt_long_outlined,
-                      const Color(0xFFE65100)),
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!.navCustomers,
-                      totalCustomers.toString(),
-                      Icons.people_outline,
-                      const Color(0xFF1565C0)),
-                  _buildKpiCard(
-                    AppLocalizations.of(context)!.navProducts,
-                    totalProducts.toString(),
-                    Icons.inventory_2_outlined,
-                    const Color(0xFF2E7D32),
-                  ),
-                ];
-                return _responsiveKpiBlock(kpiCards, kpiConstraints.maxWidth);
-              }),
-              const SizedBox(height: 20),
-              // Two-column body — stacks on compact phones.
-              LayoutBuilder(builder: (context, bodyConstraints) {
-                final mainColumn = Column(
-                  children: [
-                    _buildCompactRecentInvoices(limit: 10),
-                    if (_topCustomers.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      _buildTopCustomersCard(),
-                    ],
-                    if (_topProducts.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      _buildTopProductsCard(),
-                    ],
-                  ],
-                );
-                final sidebarColumn = Column(
-                  children: [
-                    _buildQuickActionsCard(),
-                    const SizedBox(height: 14),
-                    if (overdueInvoices.isNotEmpty) ...[
-                      _buildOverdueCompactCard(),
-                      const SizedBox(height: 14),
-                    ],
-                    if (dueSoonInvoices.isNotEmpty) ...[
-                      _buildDueSoonCard(),
-                      const SizedBox(height: 14),
-                    ],
-                    if (outOfStockProducts.isNotEmpty) _buildOutOfStockCard(),
-                  ],
-                );
-                if (bodyConstraints.maxWidth < Breakpoints.compactMax) {
-                  return Column(
-                    children: [
-                      mainColumn,
-                      const SizedBox(height: 14),
-                      sidebarColumn,
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Left: recent invoices + top customers + top products
-                    Expanded(flex: 3, child: mainColumn),
-                    const SizedBox(width: 20),
-                    // Right sidebar
-                    Expanded(flex: 2, child: sidebarColumn),
-                  ],
-                );
-              }),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Shared: KPI Card ────────────────────────────────────────────────────────
-
-  Widget _buildKpiCard(String title, String value, IconData icon, Color color,
-      {bool alert = false}) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        border: alert
-            ? Border.all(color: color.withValues(alpha: 0.35), width: 1.5)
-            : null,
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3)),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: color, size: 19),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Title wraps naturally (up to 2 lines) instead of
-                // ellipsizing ordinary labels like "Products".
-                Text(title,
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
-                        height: 1.25),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 3),
-                Text(value,
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Shared: Revenue Bar Chart ────────────────────────────────────────────────
-
-  Widget _buildRevenueBarChart(Color primary) {
-    final hasData = _monthlyRevenue.isNotEmpty;
-    final maxY = hasData
-        ? _monthlyRevenue
-                .map((e) => (e['revenue'] as num).toDouble())
-                .reduce((a, b) => a > b ? a : b) *
-            1.25
-        : 1000.0;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3))
-        ],
-      ),
+  Widget _buildTopCustomersCard() {
+    final scheme = Theme.of(context).colorScheme;
+    return _ledgerlyPanel(
+      title: AppLocalizations.of(context)!.dashboardTopCustomersTitle,
+      subtitle:
+          AppLocalizations.of(context)!.reportsTopCustomersByRevenueTitle(5),
+      icon: Icons.emoji_events_outlined,
+      color: scheme.primary,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(AppLocalizations.of(context)!.dashboardRevenueLast6MonthsTitle,
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface)),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 190,
-            child: hasData
-                ? BarChart(
-                    BarChartData(
-                      alignment: BarChartAlignment.spaceAround,
-                      maxY: maxY,
-                      barGroups: _monthlyRevenue.asMap().entries.map((entry) {
-                        final rev = (entry.value['revenue'] as num).toDouble();
-                        return BarChartGroupData(
-                          x: entry.key,
-                          barRods: [
-                            BarChartRodData(
-                              toY: rev,
-                              gradient: LinearGradient(
-                                colors: [
-                                  primary,
-                                  primary.withValues(alpha: 0.55)
-                                ],
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                              ),
-                              width: 28,
-                              borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(6)),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                      titlesData: FlTitlesData(
-                        leftTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false)),
-                        topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false)),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (value, meta) {
-                              final idx = value.toInt();
-                              if (idx < 0 || idx >= _monthlyRevenue.length) {
-                                return const SizedBox.shrink();
-                              }
-                              final monthStr =
-                                  _monthlyRevenue[idx]['month'] as String;
-                              try {
-                                final date =
-                                    DateFormat('yyyy-MM').parse(monthStr);
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 5),
-                                  child: Text(DateFormat('MMM').format(date),
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant)),
-                                );
-                              } catch (_) {
-                                return const SizedBox.shrink();
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        getDrawingHorizontalLine: (_) => FlLine(
-                            color: Colors.grey.withValues(alpha: 0.12),
-                            strokeWidth: 1),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      barTouchData: BarTouchData(
-                        touchTooltipData: BarTouchTooltipData(
-                          getTooltipItem: (group, _, rod, __) => BarTooltipItem(
-                            '$_currencySymbol ${_fmtAmt(rod.toY)}',
-                            const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13),
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                : Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.bar_chart_outlined,
-                            size: 48,
-                            color:
-                                Theme.of(context).colorScheme.outlineVariant),
-                        const SizedBox(height: 8),
-                        Text(
-                            AppLocalizations.of(context)!
-                                .dashboardNoPaymentDataYetLabel,
-                            style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                                fontSize: 13)),
-                      ],
-                    ),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Shared: Revenue Donut ────────────────────────────────────────────────────
-
-  Widget _buildRevenueDonut() {
-    final total = totalRevenue + totalOutstanding;
-    final hasData = total > 0.01;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(AppLocalizations.of(context)!.dashboardFinancialOverviewTitle,
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface)),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 160,
-            child: hasData
-                ? PieChart(
-                    PieChartData(
-                      centerSpaceRadius: 46,
-                      sectionsSpace: 3,
-                      sections: [
-                        PieChartSectionData(
-                          value: totalRevenue,
-                          color: const Color(0xFF2E7D32),
-                          title: '',
-                          radius: 38,
-                        ),
-                        PieChartSectionData(
-                          value: totalOutstanding,
-                          color: const Color(0xFFC62828),
-                          title: '',
-                          radius: 38,
-                        ),
-                      ],
-                    ),
-                  )
-                : Center(
-                    child: Text(
-                        AppLocalizations.of(context)!
-                            .dashboardNoInvoicesYetTitle,
-                        style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                            fontSize: 13))),
-          ),
-          const SizedBox(height: 14),
-          _buildDonutLegend(
-              AppLocalizations.of(context)!.dashboardCollectedLabel,
-              const Color(0xFF2E7D32),
-              '$_currencySymbol ${_fmtAmt(totalRevenue)}'),
-          const SizedBox(height: 6),
-          _buildDonutLegend(
-              AppLocalizations.of(context)!.dashboardOutstandingLabel,
-              const Color(0xFFC62828),
-              '$_currencySymbol ${_fmtAmt(totalOutstanding)}'),
-          if (overdueInvoices.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFB71C1C).withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded,
-                      size: 13, color: Color(0xFFB71C1C)),
-                  const SizedBox(width: 6),
-                  Text(
-                      AppLocalizations.of(context)!
-                          .dashboardInvoiceCountOverdueLabel(
-                              overdueInvoices.length),
-                      style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFFB71C1C),
-                          fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDonutLegend(String label, Color color, String amount) {
-    return Row(
-      children: [
-        Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 8),
-        Expanded(
-            child: Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant))),
-        Text(amount,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface)),
-      ],
-    );
-  }
-
-  // ── Shared: Compact Recent Invoices ─────────────────────────────────────────
-
-  Widget _buildCompactRecentInvoices({int limit = 7}) {
-    final invoices = recentInvoices.take(limit).toList();
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Text(AppLocalizations.of(context)!.dashboardRecentInvoicesTitle,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface)),
-              const Spacer(),
-              Text(AppLocalizations.of(context)!.dashboardLastNLabel(limit),
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          // Header row
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                    flex: 2,
-                    child: Text(AppLocalizations.of(context)!.labelInvoice,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600))),
-                Expanded(
-                    flex: 3,
-                    child: Text(AppLocalizations.of(context)!.labelCustomer,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600))),
-                Expanded(
-                    flex: 2,
-                    child: Text(AppLocalizations.of(context)!.labelAmount,
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600))),
-                const SizedBox(width: 60),
-              ],
-            ),
-          ),
-          Divider(
-              height: 1,
-              thickness: 1,
-              color: Theme.of(context).colorScheme.outlineVariant),
-          const SizedBox(height: 4),
-          if (invoices.isEmpty)
+          if (_topCustomers.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                  child: Text(
-                      AppLocalizations.of(context)!.dashboardNoInvoicesYetTitle,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 13))),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                  AppLocalizations.of(context)!
+                      .reportsNoCustomersWithInvoicesMessage,
+                  style:
+                      TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
             )
           else
-            ...invoices.map(_buildCompactInvoiceRow),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactInvoiceRow(Invoice inv) {
-    final status = inv.paymentStatus;
-    final Color statusColor;
-    final String statusLabel;
-    final l10n = AppLocalizations.of(context)!;
-    switch (status) {
-      case PaymentStatus.paid:
-        statusColor = const Color(0xFF2E7D32);
-        statusLabel = l10n.paymentStatusPaid;
-        break;
-      case PaymentStatus.partial:
-        statusColor = const Color(0xFFF57C00);
-        statusLabel = l10n.paymentStatusPartial;
-        break;
-      default:
-        final isOver = InvoiceCalculator.isOverdue(
-            dueDate: inv.dueDate, outstanding: inv.outstandingBalance);
-        statusColor =
-            isOver ? const Color(0xFFC62828) : const Color(0xFF546E7A);
-        statusLabel = isOver
-            ? l10n.dashboardOverdueSectionTitle
-            : l10n.paymentStatusUnpaid;
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-                '#${inv.id.length > 8 ? inv.id.substring(inv.id.length - 8) : inv.id}',
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ),
-          Expanded(
-            flex: 3,
-            child: Text(inv.customer.name,
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text('$_currencySymbol ${_fmtAmt(inv.payableTotal)}',
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                textAlign: TextAlign.right,
-                maxLines: 1),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6)),
-            child: Text(statusLabel,
-                style: TextStyle(
-                    fontSize: 10,
-                    color: statusColor,
-                    fontWeight: FontWeight.w700)),
-          ),
-          const SizedBox(width: 8),
-          Tooltip(
-            message: 'Edit',
-            child: InkWell(
-              onTap: () => widget.onEditInvoice(inv),
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(Icons.edit_outlined,
-                    size: 15,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-            ),
-          ),
-          const SizedBox(width: 2),
-          Tooltip(
-            message: 'Download PDF',
-            child: InkWell(
-              onTap: () => PDFService.downloadPDF(context, inv),
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(Icons.download_outlined,
-                    size: 15,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Shared: Due Soon Card ────────────────────────────────────────────────────
-
-  Widget _buildDueSoonCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                    color: const Color(0xFFF57C00).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.event_outlined,
-                    color: Color(0xFFF57C00), size: 15),
-              ),
-              const SizedBox(width: 8),
-              Text(AppLocalizations.of(context)!.dashboardDueSoonTitle,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                    color: const Color(0xFFF57C00).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10)),
-                child: Text('${dueSoonInvoices.length}',
-                    style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFFF57C00),
-                        fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...dueSoonInvoices.take(5).map((inv) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                        child: Text(inv.customer.name,
-                            style: const TextStyle(fontSize: 12),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis)),
-                    Text('$_currencySymbol ${_fmtAmt(inv.outstandingBalance)}',
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600)),
-                    const SizedBox(width: 2),
-                    _buildInvoiceActionMenu(inv),
-                  ],
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-
-  // ── Shared: Out of Stock Card ────────────────────────────────────────────────
-
-  Widget _buildOutOfStockCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.18), width: 1),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.inventory_2_outlined,
-                    color: Colors.red, size: 15),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                  AppLocalizations.of(context)!.dashboardOutOfStockSectionTitle,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10)),
-                child: Text('${outOfStockProducts.length}',
-                    style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.red,
-                        fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...outOfStockProducts.take(5).map((p) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    Expanded(
-                        child: Text(p.name,
-                            style: const TextStyle(fontSize: 12),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis)),
-                    Text(AppLocalizations.of(context)!.dashboardZeroLeftLabel,
-                        style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.red,
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(width: 6),
-                    Tooltip(
-                      message: AppLocalizations.of(context)!.actionUpdateStock,
-                      child: InkWell(
-                        onTap: () => _showUpdateStockDialog(p),
-                        borderRadius: BorderRadius.circular(7),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.add_box_outlined,
-                                  size: 13, color: Colors.green),
-                              const SizedBox(width: 4),
-                              Text(AppLocalizations.of(context)!.labelStock,
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-
-  // ── Shared: Overdue Compact Card ─────────────────────────────────────────────
-
-  Widget _buildOverdueCompactCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-            color: const Color(0xFFC62828).withValues(alpha: 0.2), width: 1),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                    color: const Color(0xFFC62828).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.warning_amber_rounded,
-                    color: Color(0xFFC62828), size: 15),
-              ),
-              const SizedBox(width: 8),
-              Text(AppLocalizations.of(context)!.dashboardOverdueSectionTitle,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                    color: const Color(0xFFC62828).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10)),
-                child: Text('${overdueInvoices.length}',
-                    style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFFC62828),
-                        fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...overdueInvoices.take(5).map((inv) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                        child: Text(inv.customer.name,
-                            style: const TextStyle(fontSize: 12),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis)),
-                    Text('$_currencySymbol ${_fmtAmt(inv.outstandingBalance)}',
-                        style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFFC62828),
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(width: 4),
-                    Tooltip(
-                      message:
-                          AppLocalizations.of(context)!.actionRecordPayment,
-                      child: InkWell(
-                        onTap: () => showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (_) => ApplyPaymentDialog(
-                            invoice: inv,
-                            onPaymentRecorded: _loadDashboardData,
-                          ),
-                        ),
-                        borderRadius: BorderRadius.circular(7),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
-                            color:
-                                const Color(0xFF6A1B9A).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.payments_outlined,
-                                  size: 13, color: Color(0xFF6A1B9A)),
-                              const SizedBox(width: 4),
-                              Text(AppLocalizations.of(context)!.actionPay,
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFF6A1B9A),
-                                      fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    _buildPdfActionMenu(inv),
-                  ],
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-
-  // ── Shared: Quick Actions Card ───────────────────────────────────────────────
-
-  Widget _buildQuickActionsCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(AppLocalizations.of(context)!.dashboardQuickActionsTitle,
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface)),
-          const SizedBox(height: 12),
-          _buildQuickActionRow(
-              Icons.add_circle_outline_rounded,
-              AppLocalizations.of(context)!.navNewInvoice,
-              Theme.of(context).primaryColor, () {
-            if (!mounted) return;
-            context
-                .findAncestorStateOfType<_DashboardScreenState>()
-                ?.setState(() {
-              context
-                  .findAncestorStateOfType<_DashboardScreenState>()
-                  ?._selectedIndex = 1;
-            });
-          }),
-          const SizedBox(height: 4),
-          _buildQuickActionRow(
-              Icons.person_add_outlined,
-              AppLocalizations.of(context)!.navCustomers,
-              const Color(0xFF1565C0), () {
-            if (!mounted) return;
-            context
-                .findAncestorStateOfType<_DashboardScreenState>()
-                ?.setState(() {
-              context
-                  .findAncestorStateOfType<_DashboardScreenState>()
-                  ?._selectedIndex = 5;
-            });
-          }),
-          const SizedBox(height: 4),
-          _buildQuickActionRow(
-              Icons.bar_chart_outlined,
-              AppLocalizations.of(context)!.navReports,
-              const Color(0xFF2E7D32), () {
-            if (!mounted) return;
-            context
-                .findAncestorStateOfType<_DashboardScreenState>()
-                ?.setState(() {
-              context
-                  .findAncestorStateOfType<_DashboardScreenState>()
-                  ?._selectedIndex = 7;
-            });
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickActionRow(
-      IconData icon, String label, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8)),
-              child: Icon(icon, color: color, size: 15),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-                child: Text(label,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontWeight: FontWeight.w500))),
-            Icon(Icons.chevron_right_rounded,
-                size: 16,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Shared: Amount Formatter ─────────────────────────────────────────────────
-
-  String _fmtAmt(double amount) {
-    if (amount >= 10000000) {
-      return '${(amount / 10000000).toStringAsFixed(2)}Cr';
-    }
-    if (amount >= 100000) return '${(amount / 100000).toStringAsFixed(2)}L';
-    if (amount >= 1000) return '${(amount / 1000).toStringAsFixed(1)}K';
-    return amount.toStringAsFixed(2);
-  }
-
-  // ── Layout: Bento Grid ──────────────────────────────────────────────────────
-
-  Widget _buildBentoLayout() {
-    final primary = Theme.of(context).primaryColor;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: AppLayout.maxWidthNormal),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildLayoutDiscoveryBanner(),
-              _buildThemeDiscoveryBanner(),
-              _buildShortcutsDiscoveryBanner(),
-              _buildSupportBanner(),
-              _buildGreetingBanner(),
-              const SizedBox(height: 20),
-              // ── Top row: Hero chart + 2×2 KPI grid ──────────────────────────
-              // Compact phones: chart and KPI cards stack full-width instead
-              // of sharing a fixed-290px hero row that crushes both.
-              LayoutBuilder(builder: (context, heroConstraints) {
-                final kpiTiles = <Widget>[
-                  _buildKpiCard(
-                    AppLocalizations.of(context)!
-                        .dashboardRevenueCollectedLabel,
-                    '$_currencySymbol ${_fmtAmt(totalRevenue)}',
-                    Icons.account_balance_wallet_outlined,
-                    const Color(0xFF6A1B9A),
-                  ),
-                  _buildKpiCard(
-                    AppLocalizations.of(context)!.navInvoices,
-                    totalInvoices.toString(),
-                    Icons.receipt_long_outlined,
-                    const Color(0xFFE65100),
-                  ),
-                  _buildKpiCard(
-                    AppLocalizations.of(context)!.dashboardOutstandingLabel,
-                    '$_currencySymbol ${_fmtAmt(totalOutstanding)}',
-                    Icons.hourglass_top_outlined,
-                    const Color(0xFFC62828),
-                  ),
-                  _buildKpiCard(
-                    AppLocalizations.of(context)!.dashboardOverdueSectionTitle,
-                    overdueInvoices.length.toString(),
-                    Icons.warning_amber_outlined,
-                    const Color(0xFFB71C1C),
-                    alert: overdueInvoices.isNotEmpty,
-                  ),
-                  _buildKpiCard(
-                      AppLocalizations.of(context)!.navCustomers,
-                      totalCustomers.toString(),
-                      Icons.people_outline,
-                      const Color(0xFF1565C0)),
-                  _buildKpiCard(
-                    AppLocalizations.of(context)!.navProducts,
-                    totalProducts.toString(),
-                    Icons.inventory_2_outlined,
-                    const Color(0xFF2E7D32),
-                  ),
-                ];
-                if (heroConstraints.maxWidth < Breakpoints.compactMax) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            for (final c in _topCustomers.take(5)) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Builder(builder: (context) {
+                  final name = c['customer_name'] as String? ?? '';
+                  final paid = (c['total_paid'] as num).toDouble();
+                  return Row(
                     children: [
-                      _buildRevenueBarChart(primary),
-                      const SizedBox(height: 14),
-                      _responsiveKpiBlock(kpiTiles, heroConstraints.maxWidth),
+                      CircleAvatar(
+                        radius: 13,
+                        backgroundColor: scheme.primary.withValues(alpha: 0.1),
+                        child: Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.primary,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Text(name,
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis)),
+                      Text(_inrCompact(paid),
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurface)),
                     ],
                   );
-                }
-                return SizedBox(
-                  height: 290,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Hero: Revenue bar chart
-                      Expanded(
-                        flex: 3,
-                        child: _buildRevenueBarChart(primary),
-                      ),
-                      const SizedBox(width: 14),
-                      // 2×3 KPI tiles
-                      Expanded(
-                        flex: 2,
-                        child: Column(
-                          children: [
-                            for (var row = 0; row < 3; row++)
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Expanded(child: kpiTiles[row * 2]),
-                                    const SizedBox(width: 14),
-                                    Expanded(child: kpiTiles[row * 2 + 1]),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-              const SizedBox(height: 14),
-              // ── Bottom row: Wide invoice table + narrow sidebar ───────────────
-              LayoutBuilder(builder: (context, bottomConstraints) {
-                final mainColumn = Column(
-                  children: [
-                    _buildCompactRecentInvoices(limit: 8),
-                    if (_topProducts.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      _buildTopProductsCard(),
-                    ],
-                  ],
-                );
-                final sidebarColumn = Column(
-                  children: [
-                    _buildQuickActionsCard(),
-                    if (overdueInvoices.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      _buildOverdueCompactCard(),
-                    ],
-                    if (dueSoonInvoices.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      _buildDueSoonCard(),
-                    ],
-                    if (outOfStockProducts.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      _buildOutOfStockCard(),
-                    ],
-                  ],
-                );
-                if (bottomConstraints.maxWidth < Breakpoints.compactMax) {
-                  return Column(
-                    children: [
-                      mainColumn,
-                      const SizedBox(height: 14),
-                      sidebarColumn,
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: mainColumn),
-                    const SizedBox(width: 14),
-                    Expanded(flex: 2, child: sidebarColumn),
-                  ],
-                );
-              }),
-              const SizedBox(height: 24),
+                }),
+              ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Shared: PDF-Only Action Menu (⋯) ───────────────────────────────────────
-
-  Widget _buildPdfActionMenu(Invoice inv) {
-    return PopupMenuButton<String>(
-      icon: Icon(Icons.more_vert_rounded,
-          size: 15, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      iconSize: 22,
-      padding: EdgeInsets.zero,
-      tooltip: AppLocalizations.of(context)!.dashboardPdfActionsTooltip,
-      offset: const Offset(0, 24),
-      onSelected: (value) {
-        if (value == 'preview') {
-          InvoicePdfServices.previewPDF(context, inv);
-        } else if (value == 'download') {
-          PDFService.downloadPDF(context, inv);
-        }
-      },
-      itemBuilder: (ctx) => [
-        PopupMenuItem(
-          value: 'preview',
-          child: Row(children: [
-            const Icon(Icons.visibility_outlined,
-                size: 16, color: Colors.green),
-            const SizedBox(width: 10),
-            Text(AppLocalizations.of(context)!.actionPdfPreview,
-                style: const TextStyle(fontSize: 13)),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'download',
-          child: Row(children: [
-            const Icon(Icons.download_outlined,
-                size: 16, color: Colors.deepPurple),
-            const SizedBox(width: 10),
-            Text(AppLocalizations.of(context)!.actionDownloadPdf,
-                style: const TextStyle(fontSize: 13)),
-          ]),
-        ),
-      ],
-    );
-  }
-
-  // ── Shared: Invoice Action Menu (⋯) ────────────────────────────────────────
-
-  Widget _buildInvoiceActionMenu(Invoice inv) {
-    return PopupMenuButton<String>(
-      icon: Icon(Icons.more_vert_rounded,
-          size: 15, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      iconSize: 22,
-      padding: EdgeInsets.zero,
-      tooltip: AppLocalizations.of(context)!.dashboardActionsTooltip,
-      offset: const Offset(0, 24),
-      onSelected: (value) {
-        switch (value) {
-          case 'payment':
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (_) => ApplyPaymentDialog(
-                invoice: inv,
-                onPaymentRecorded: _loadDashboardData,
-              ),
-            );
-            break;
-          case 'preview':
-            InvoicePdfServices.previewPDF(context, inv);
-            break;
-          case 'download':
-            PDFService.downloadPDF(context, inv);
-            break;
-        }
-      },
-      itemBuilder: (ctx) => [
-        PopupMenuItem(
-          value: 'payment',
-          child: Row(children: [
-            const Icon(Icons.payments_outlined,
-                size: 16, color: Color(0xFF6A1B9A)),
-            const SizedBox(width: 10),
-            Text(AppLocalizations.of(context)!.actionRecordPayment,
-                style: const TextStyle(fontSize: 13)),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'preview',
-          child: Row(children: [
-            const Icon(Icons.visibility_outlined,
-                size: 16, color: Colors.green),
-            const SizedBox(width: 10),
-            Text(AppLocalizations.of(context)!.actionPdfPreview,
-                style: const TextStyle(fontSize: 13)),
-          ]),
-        ),
-        PopupMenuItem(
-          value: 'download',
-          child: Row(children: [
-            const Icon(Icons.download_outlined,
-                size: 16, color: Colors.deepPurple),
-            const SizedBox(width: 10),
-            Text(AppLocalizations.of(context)!.actionDownloadPdf,
-                style: const TextStyle(fontSize: 13)),
-          ]),
-        ),
-      ],
-    );
-  }
-
-  // ── Shared: Top Customers Card ───────────────────────────────────────────────
-
-  Widget _buildTopCustomersCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                    color: const Color(0xFF1565C0).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.emoji_events_outlined,
-                    color: Color(0xFF1565C0), size: 15),
-              ),
-              const SizedBox(width: 8),
-              Text(AppLocalizations.of(context)!.dashboardTopCustomersTitle,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ..._topCustomers.map((c) {
-            final name = c['customer_name'] as String? ?? '';
-            final paid = (c['total_paid'] as num).toDouble();
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 13,
-                    backgroundColor:
-                        const Color(0xFF1565C0).withValues(alpha: 0.1),
-                    child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF1565C0),
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                      child: Text(name,
-                          style: const TextStyle(fontSize: 12),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis)),
-                  Text('$_currencySymbol ${_fmtAmt(paid)}',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurface)),
-                ],
-              ),
-            );
-          }),
         ],
       ),
     );
@@ -6258,75 +5127,60 @@ class _DashboardHomeState extends ConsumerState<DashboardHome> {
   // ── Shared: Top Products Card ────────────────────────────────────────────────
 
   Widget _buildTopProductsCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3))
-        ],
-      ),
+    final scheme = Theme.of(context).colorScheme;
+    return _ledgerlyPanel(
+      title: AppLocalizations.of(context)!.dashboardTopProductsTitle,
+      icon: Icons.trending_up_outlined,
+      color: scheme.primary,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                    color: const Color(0xFF2E7D32).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.trending_up_outlined,
-                    color: Color(0xFF2E7D32), size: 15),
+          if (_topProducts.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                  AppLocalizations.of(context)!
+                      .createInvoiceNoProductsFoundMessage,
+                  style:
+                      TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+            )
+          else
+            for (final p in _topProducts.take(5)) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Builder(builder: (context) {
+                  final name = p['product_name'] as String? ?? '';
+                  final qty = (p['total_qty'] as num).toDouble();
+                  return Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                            color: scheme.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(7)),
+                        child: Icon(Icons.inventory_2_outlined,
+                            size: 13, color: scheme.primary),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Text(name,
+                              style: const TextStyle(fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis)),
+                      Text(
+                          AppLocalizations.of(context)!.dashboardUnitsLabel(
+                              qty % 1 == 0
+                                  ? qty.toInt().toString()
+                                  : qty.toStringAsFixed(1)),
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.onSurface)),
+                    ],
+                  );
+                }),
               ),
-              const SizedBox(width: 8),
-              Text(AppLocalizations.of(context)!.dashboardTopProductsTitle,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface)),
             ],
-          ),
-          const SizedBox(height: 12),
-          ..._topProducts.map((p) {
-            final name = p['product_name'] as String? ?? '';
-            final qty = (p['total_qty'] as num).toDouble();
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                        color: const Color(0xFF2E7D32).withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(7)),
-                    child: const Icon(Icons.inventory_2_outlined,
-                        size: 13, color: Color(0xFF2E7D32)),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                      child: Text(name,
-                          style: const TextStyle(fontSize: 12),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis)),
-                  Text(
-                      AppLocalizations.of(context)!.dashboardUnitsLabel(
-                          qty % 1 == 0
-                              ? qty.toInt().toString()
-                              : qty.toStringAsFixed(1)),
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurface)),
-                ],
-              ),
-            );
-          }),
         ],
       ),
     );

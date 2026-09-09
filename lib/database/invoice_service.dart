@@ -1,14 +1,17 @@
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/database/invoice_item_service.dart';
+import 'package:apexbooks/database/jewellery_service.dart';
 import 'package:apexbooks/database/settings_service.dart';
 import 'package:apexbooks/domain/invoice_calculator.dart';
 import 'package:apexbooks/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/domain/jewellery/jewellery_calculator.dart';
 import 'package:apexbooks/models/additional_cost.dart';
 import 'package:apexbooks/models/invoice.dart';
 import 'package:apexbooks/models/product.dart';
 import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/invoice_item.dart';
 import 'package:apexbooks/models/invoice_payment.dart';
+import 'package:apexbooks/models/verticals.dart';
 import 'package:apexbooks/utils/app_date.dart';
 import 'package:apexbooks/utils/app_logger.dart';
 import 'package:sqflite/sqflite.dart';
@@ -52,7 +55,8 @@ class InvoiceService {
   // partial UNIQUE index makes the loser fail inside its insert txn; we
   // catch that conflict, take the next number, and retry (max 5). Display
   // format (8-digit zero-padded) is preserved by generateNextInvoiceNumber.
-  static Future<void> insertInvoice(Invoice invoice, {String? actor}) async {
+  static Future<void> insertInvoice(Invoice invoice,
+      {String? actor, List<OldGoldEntry> oldGoldEntries = const []}) async {
     _rejectExcessiveFlatDiscount(invoice);
     // Period lock: backdated documents into a closed/filed period are
     // refused before any write (covers Invoice, Quotation, Credit/Debit
@@ -63,7 +67,7 @@ class InvoiceService {
     for (var attempt = 0;; attempt++) {
       try {
         await _insertInvoiceOnce(invoice, actor: actor);
-        return;
+        break;
       } on DatabaseException catch (e) {
         if (!_isInvoiceNumberConflict(e) || attempt + 1 >= maxAttempts) {
           rethrow;
@@ -73,6 +77,77 @@ class InvoiceService {
         invoice.invoiceNumber = await generateNextInvoiceNumber(invoice.type);
       }
     }
+    await _afterInvoiceWrite(invoice, oldGoldEntries);
+  }
+
+  /// Post-save side effects (retail.md P3): old-gold exchange rows + their
+  /// RCM postings, and the exchange credit booked as one receipt from the
+  /// customer into Old Gold Stock so AR nets to the printed payable.
+  ///
+  /// On every call (create or update) the method first reverses any prior
+  /// source-linked exchange receipt for this invoice so that repeated edits
+  /// never accumulate duplicate receipts (CRITICAL-01 fix).
+  static Future<void> _afterInvoiceWrite(
+      Invoice invoice, List<OldGoldEntry> entries) async {
+    await _reversePriorExchangeReceipt(invoice.id);
+    // Always rewrite the old-gold rows, even when the edit removed every
+    // exchange: _writeOldGold reverses the prior entries' RCM postings and
+    // deletes their rows first. The old early return on an empty list
+    // orphaned both the rows and the ledger entries (BUG-08).
+    await _writeOldGold(invoice, entries);
+    final exchangeTotal = entries.fold(0.0, (sum, e) => sum + e.amount);
+    if (exchangeTotal <= 0 || invoice.type != 'Invoice') return;
+    await PaymentService.addPayment(
+      invoice: invoice,
+      amountPaid: exchangeTotal,
+      datePaid: invoice.date,
+      paymentMethod: LedgerService.receiptMethodOldGold,
+      notes: 'Old gold exchange · '
+          '${entries.map((e) => '${e.netWeight.toStringAsFixed(2)}g').join(', ')}',
+    );
+  }
+
+  /// Deletes any existing old-gold exchange receipt for [invoiceId] so that
+  /// a subsequent call to [_afterInvoiceWrite] can book exactly one fresh
+  /// receipt. Idempotent — no-op when no prior receipt exists.
+  static Future<void> _reversePriorExchangeReceipt(String invoiceId) async {
+    final db = await dbHelper.database;
+    final rows = await db.query('invoice_payments',
+        columns: ['id'],
+        where: 'invoice_id = ? AND payment_method = ?',
+        whereArgs: [invoiceId, LedgerService.receiptMethodOldGold]);
+    for (final row in rows) {
+      await PaymentService.deletePayment(row['id'] as String);
+    }
+  }
+
+  /// Replaces an invoice's old-gold rows and re-books their RCM postings.
+  /// Own transaction so a half-applied exchange can never strand a tax pair.
+  static Future<void> _writeOldGold(
+      Invoice invoice, List<OldGoldEntry> entries) async {
+    final db = await dbHelper.database;
+    await db.transaction((txn) async {
+      final oldRows = await txn.query('old_gold_entries',
+          where: 'invoice_id = ?', whereArgs: [invoice.id]);
+      for (final row in oldRows) {
+        await JournalStore.reverseSource(txn,
+            sourceType: JournalStore.srcOldGold, sourceId: row['id'] as String);
+      }
+      final stored = await JewelleryService.replaceOldGoldForInvoice(
+          invoiceId: invoice.id, entries: entries, txn: txn);
+      for (final entry in stored) {
+        if (entry.rcmTax <= 0) continue;
+        await JournalStore.postBuilt(
+            txn,
+            LedgerPostings.oldGoldRcmEntry(
+              date: invoice.date,
+              customerName: invoice.customer.name,
+              amount: entry.rcmTax,
+              currencyCode: invoice.currencyCode,
+              sourceId: entry.id,
+            ));
+      }
+    });
   }
 
   static bool _isInvoiceNumberConflict(DatabaseException e) {
@@ -123,6 +198,7 @@ class InvoiceService {
         'custom_fields': invoice.customFields ?? '',
         'sales_channel': invoice.salesChannel,
         'source_order_id': invoice.sourceOrderId,
+        'industry': invoice.industry,
       });
 
       for (var item in invoice.items) {
@@ -148,7 +224,34 @@ class InvoiceService {
           'product_unit': item.product.unit,
           'unit': item.unit,
           'description': item.description,
+          'metal_rate_id': item.metalRateId,
+          'net_weight': item.netWeight,
+          'making_amount': item.makingAmount,
+          'wastage_amount': item.wastageAmount,
+          'jewellery_tax_treatment': item.jewelleryTaxTreatment.key,
+          'jewellery_piece_id': item.jewelleryPieceId,
+          'huid_snapshot': item.huidSnapshot,
+          'tag_no_snapshot': item.tagNoSnapshot,
+          'purity_snapshot': item.puritySnapshot,
+          'gross_weight_snapshot': item.grossWeightSnapshot,
+          'variant_snapshot_id': item.variantSnapshotId,
+          'variant_snapshot_name': item.variantSnapshotName,
         });
+      }
+      // Piece lifecycle (retail.md P2): jewellery lines that sold a tagged
+      // piece flip it to `sold` inside the same transaction.
+      final soldPieceIds = {
+        for (final item in invoice.items)
+          if (item.jewelleryPieceId != null &&
+              item.jewelleryPieceId!.isNotEmpty)
+            item.jewelleryPieceId!
+      };
+      if (soldPieceIds.isNotEmpty) {
+        await JewelleryService.syncPiecesForInvoice(
+          invoiceId: invoice.id,
+          pieceIds: soldPieceIds,
+          txn: txn,
+        );
       }
       if (_affectsStock(invoice.type)) {
         for (final item in invoice.items) {
@@ -198,6 +301,8 @@ class InvoiceService {
         sourceId: invoice.id,
       );
       if (salePosting != null) await JournalStore.postBuilt(txn, salePosting);
+      // Loyalty snapshot (retail.md P4): award points for the payable.
+      await _applyLoyaltyAward(txn, invoice);
     });
   }
 
@@ -230,7 +335,8 @@ class InvoiceService {
     }
   }
 
-  static Future<void> updateInvoice(Invoice invoice, {String? actor}) async {
+  static Future<void> updateInvoice(Invoice invoice,
+      {String? actor, List<OldGoldEntry> oldGoldEntries = const []}) async {
     _rejectExcessiveFlatDiscount(invoice);
     final db = await dbHelper.database;
 
@@ -283,6 +389,7 @@ class InvoiceService {
           'customer_address': invoice.customer.address,
           'customer_gstin': invoice.customer.gstin,
           'customer_business_name': invoice.customer.businessName,
+          'date': invoice.date.toIso8601String(),
           'notes': invoice.notes,
           'tax_rate': invoice.taxRate,
           'type': invoice.type,
@@ -340,8 +447,32 @@ class InvoiceService {
           'product_unit': item.product.unit,
           'unit': item.unit,
           'description': item.description,
+          'metal_rate_id': item.metalRateId,
+          'net_weight': item.netWeight,
+          'making_amount': item.makingAmount,
+          'wastage_amount': item.wastageAmount,
+          'jewellery_tax_treatment': item.jewelleryTaxTreatment.key,
+          'jewellery_piece_id': item.jewelleryPieceId,
+          'huid_snapshot': item.huidSnapshot,
+          'tag_no_snapshot': item.tagNoSnapshot,
+          'purity_snapshot': item.puritySnapshot,
+          'gross_weight_snapshot': item.grossWeightSnapshot,
+          'variant_snapshot_id': item.variantSnapshotId,
+          'variant_snapshot_name': item.variantSnapshotName,
         });
       }
+      // Piece lifecycle on edit: pieces this invoice no longer references
+      // return to stock, newly referenced ones flip to sold — same txn.
+      await JewelleryService.syncPiecesForInvoice(
+        invoiceId: invoice.id,
+        pieceIds: {
+          for (final item in invoice.items)
+            if (item.jewelleryPieceId != null &&
+                item.jewelleryPieceId!.isNotEmpty)
+              item.jewelleryPieceId!
+        },
+        txn: txn,
+      );
 
       final stockDelta = <String, double>{};
       if (_affectsStock(oldType)) {
@@ -415,7 +546,48 @@ class InvoiceService {
       if (updatedPosting != null) {
         await JournalStore.postBuilt(txn, updatedPosting);
       }
+      // Loyalty snapshot (retail.md P4): recompute for the edited payable
+      // and adjust the customer by the delta.
+      await _applyLoyaltyAward(txn, invoice,
+          previousPoints:
+              (oldHeaderFull.first['loyalty_points'] as num?)?.toDouble() ?? 0);
     });
+    await _afterInvoiceWrite(invoice, oldGoldEntries);
+  }
+
+  /// Points earned for one invoice at the configured rate (0 = loyalty off).
+  static Future<double> _loyaltyAwardForTxn(
+      DatabaseExecutor txn, double payable) async {
+    final rows = await txn.query('settings',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: [SettingKey.loyaltyPointsPer100.key],
+        limit: 1);
+    final rate = double.tryParse(
+            rows.isEmpty ? '' : rows.first['value'] as String? ?? '') ??
+        0.0;
+    if (rate <= 0 || payable <= 0) return 0;
+    return (payable * rate / 100).floorToDouble();
+  }
+
+  /// Stamps the award on the invoice and moves the customer balance by the
+  /// delta vs the previously awarded amount. A zero rate (loyalty off)
+  /// leaves prior awards untouched — turning loyalty off must not
+  /// retroactively strip points when an old invoice is edited.
+  static Future<void> _applyLoyaltyAward(DatabaseExecutor txn, Invoice invoice,
+      {double previousPoints = 0}) async {
+    if (invoice.type != 'Invoice') return;
+    final award = await _loyaltyAwardForTxn(txn, invoice.payableTotal);
+    if (award <= 0) return;
+    await txn.update('invoices', {'loyalty_points': award},
+        where: 'id = ?', whereArgs: [invoice.id]);
+    final delta = award - previousPoints;
+    if (delta == 0 || invoice.customer.id.trim().isEmpty) return;
+    await txn.rawUpdate(
+      'UPDATE customers SET loyalty_points = '
+      'COALESCE(loyalty_points, 0) + ? WHERE id = ?',
+      [delta, invoice.customer.id],
+    );
   }
 
   static Future<double> getPreviousBalanceDueForInvoice(Invoice invoice) async {
@@ -609,6 +781,20 @@ class InvoiceService {
           extraCost: extraCost,
           unit: row['unit'] as String?,
           description: row['description'] as String?,
+          metalRateId: row['metal_rate_id'] as String?,
+          netWeight: (row['net_weight'] as num?)?.toDouble(),
+          makingAmount: (row['making_amount'] as num?)?.toDouble(),
+          wastageAmount: (row['wastage_amount'] as num?)?.toDouble(),
+          jewelleryTaxTreatment: jewelleryTaxTreatmentFromKey(
+              row['jewellery_tax_treatment'] as String?),
+          jewelleryPieceId: row['jewellery_piece_id'] as String?,
+          huidSnapshot: row['huid_snapshot'] as String?,
+          tagNoSnapshot: row['tag_no_snapshot'] as String?,
+          puritySnapshot: row['purity_snapshot'] as String?,
+          grossWeightSnapshot:
+              (row['gross_weight_snapshot'] as num?)?.toDouble(),
+          variantSnapshotId: row['variant_snapshot_id'] as String?,
+          variantSnapshotName: row['variant_snapshot_name'] as String?,
         ));
       } catch (e, stackTrace) {
         AppLogger.e(_tag, 'Error parsing invoice item row', e, stackTrace);
@@ -654,6 +840,7 @@ class InvoiceService {
       customFields: i['custom_fields'] as String?,
       salesChannel: i['sales_channel'] as String? ?? 'invoice',
       sourceOrderId: i['source_order_id'] as String?,
+      industry: i['industry'] as String? ?? '',
       payments: payments,
     );
   }
@@ -764,6 +951,8 @@ class InvoiceService {
     String orderBy = 'id',
     bool orderAscending = false,
     String? customerId,
+    DateTime? fromDate,
+    DateTime? toDate,
   }) async {
     final db = await dbHelper.database;
 
@@ -781,6 +970,14 @@ class InvoiceService {
     if (customerId != null && customerId.isNotEmpty) {
       whereParts.add('customer_id = ?');
       whereArgs.add(customerId);
+    }
+    if (fromDate != null) {
+      whereParts.add('date >= ?');
+      whereArgs.add(AppDate.dateKeyStart(fromDate));
+    }
+    if (toDate != null) {
+      whereParts.add('date <= ?');
+      whereArgs.add(AppDate.dateKeyEnd(toDate));
     }
 
     final where = whereParts.join(' AND ');
@@ -808,6 +1005,8 @@ class InvoiceService {
     String searchQuery = '',
     String? filterType,
     String? customerId,
+    DateTime? fromDate,
+    DateTime? toDate,
   }) async {
     final db = await dbHelper.database;
 
@@ -825,6 +1024,14 @@ class InvoiceService {
     if (customerId != null && customerId.isNotEmpty) {
       whereParts.add('customer_id = ?');
       whereArgs.add(customerId);
+    }
+    if (fromDate != null) {
+      whereParts.add('date >= ?');
+      whereArgs.add(AppDate.dateKeyStart(fromDate));
+    }
+    if (toDate != null) {
+      whereParts.add('date <= ?');
+      whereArgs.add(AppDate.dateKeyEnd(toDate));
     }
 
     final where = whereParts.join(' AND ');
@@ -874,7 +1081,13 @@ class InvoiceService {
         continue;
       }
       final rawQty = item['quantity'];
-      final qty = (rawQty as num?)?.toDouble() ?? 0;
+      // Weight-billed jewellery lines carry net grams in [quantity] (grams
+      // are the billing unit), but product stock is a discrete piece count
+      // (BUG-06): adjust one piece per weight line so a 12.45-gram sale can
+      // never drive the piece count negative.
+      final isWeightLine =
+          (item['metal_rate_id'] as String?)?.isNotEmpty == true;
+      final qty = isWeightLine ? 1.0 : ((rawQty as num?)?.toDouble() ?? 0);
       if (qty == 0) continue;
       final stock = (products.first['stock'] as num?)?.toDouble() ?? 0;
       await txn.update('products', {'stock': stock + sign * qty},
@@ -895,6 +1108,44 @@ class InvoiceService {
       if (rows.isEmpty || rows.first['deleted_at'] != null) return;
       final customer = rows.first['customer_name'] as String? ?? '';
       final number = (rows.first['invoice_number'] as String?) ?? id;
+      // System-managed old-gold exchange receipts are internal financing,
+      // not live customer payments (BUG-09): they must never block the
+      // trash. Remove them here and mirror their receipt postings so no
+      // stranded cash leg is left behind, all inside this transaction.
+      final oldGoldPaymentRows = await txn.query(
+        'invoice_payments',
+        columns: ['id'],
+        where: 'invoice_id = ? AND payment_method = ?',
+        whereArgs: [id, LedgerService.receiptMethodOldGold],
+      );
+      for (final row in oldGoldPaymentRows) {
+        await AccountingService.reverseSourceInTransaction(txn,
+            sourceType: 'invoice_payment',
+            sourceId: row['id'] as String,
+            reason: 'Invoice moved to trash');
+        await JournalStore.reverseSource(txn,
+            sourceType: JournalStore.srcReceipt, sourceId: row['id'] as String);
+      }
+      if (oldGoldPaymentRows.isNotEmpty) {
+        await txn.delete(
+          'invoice_payments',
+          where: 'invoice_id = ? AND payment_method = ?',
+          whereArgs: [id, LedgerService.receiptMethodOldGold],
+        );
+      }
+      // The old-gold purchases leave the books with the invoice: mirror
+      // their RCM postings. The rows stay on disk so a later restore can
+      // still see what was exchanged.
+      final oldGoldRows = await txn.query(
+        'old_gold_entries',
+        columns: ['id'],
+        where: 'invoice_id = ?',
+        whereArgs: [id],
+      );
+      for (final row in oldGoldRows) {
+        await JournalStore.reverseSource(txn,
+            sourceType: JournalStore.srcOldGold, sourceId: row['id'] as String);
+      }
       // A trashed invoice leaves the books but its payments/movements stay
       // posted — that would strand cash against a receivables account that no
       // longer lists the invoice. Block the move while live (non-bounced /
@@ -916,6 +1167,10 @@ class InvoiceService {
       );
       // Invoice left the books — give the reserved stock back, atomically.
       await _adjustStockInTxn(txn, id, 1);
+      // Tagged pieces this invoice sold return to stock (BUG-07) — the
+      // permanent-delete path already releases them; soft delete must too.
+      await JewelleryService.syncPiecesForInvoice(
+          invoiceId: id, pieceIds: {}, txn: txn);
       // The trashed document leaves the ledger: mirror its posting so every
       // read nets it to zero, exactly as the projection (deleted_at filter).
       await JournalStore.reverseSource(txn,
@@ -1022,6 +1277,9 @@ class InvoiceService {
           .delete('invoice_items', where: 'invoice_id = ?', whereArgs: [id]);
       await txn
           .delete('invoice_payments', where: 'invoice_id = ?', whereArgs: [id]);
+      // Pieces this invoice sold return to stock with the delete.
+      await JewelleryService.syncPiecesForInvoice(
+          invoiceId: id, pieceIds: {}, txn: txn);
       await txn.delete('invoices', where: 'id = ?', whereArgs: [id]);
       await AuditLogService.logInTxn(
         txn,
@@ -1059,6 +1317,14 @@ class InvoiceService {
     if (invoiceMaps.isEmpty) return [];
 
     final invoices = <Invoice>[];
+    final invoiceIds = <String>[
+      for (final map in invoiceMaps)
+        if (map['id'] is String && (map['date'] as String?) != null)
+          map['id'] as String,
+    ];
+    // One batched items query for the whole page (no per-invoice N+1).
+    final itemsByInvoice =
+        await InvoiceItemService.getInvoiceItemsByInvoiceIds(invoiceIds);
 
     for (var map in invoiceMaps) {
       final invoiceId = map['id'] as String?;
@@ -1079,8 +1345,7 @@ class InvoiceService {
         'business_name': map['customer_business_name'] ?? '',
       });
 
-      final items =
-          await InvoiceItemService.getInvoiceItemsByInvoiceId(invoiceId);
+      final items = itemsByInvoice[invoiceId] ?? const [];
       invoices.add(
         Invoice(
           id: invoiceId,

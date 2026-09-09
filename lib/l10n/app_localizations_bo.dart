@@ -57,6 +57,348 @@ class AppLocalizationsBo extends AppLocalizations {
   String get onboardingStepCompanySubtitle => 'ཁྱེད་ཀྱི་ཚོང་ལས་སྐོར་བཤད་རོགས།';
 
   @override
+  String get onboardingStepTradeTitle => 'Your Trade';
+
+  @override
+  String get onboardingStepTradeSubtitle =>
+      'We will show features for your line of business';
+
+  @override
+  String get onboardingTradeHint =>
+      'Pick what you sell. You can change this later in Company Info.';
+
+  @override
+  String get onboardingTradeRetailTitle => 'Retail / General';
+
+  @override
+  String get onboardingTradeRetailSubtitle =>
+      'Shops and services billing by quantity and price';
+
+  @override
+  String get onboardingTradeJewelleryTitle => 'Jewellery';
+
+  @override
+  String get onboardingTradeJewellerySubtitle =>
+      'Weight billing with daily metal rates and hallmark';
+
+  @override
+  String get industryRetailLabel => 'Retail';
+
+  @override
+  String get industryJewelleryLabel => 'Jewellery';
+
+  @override
+  String get industryChangeDialogTitle => 'Switch trade?';
+
+  @override
+  String industryChangeDialogBody(Object trade) {
+    return 'This company will switch to $trade. The other trade\'s features will be hidden. Your data stays untouched.';
+  }
+
+  @override
+  String get metalRatesAddTitle => 'Daily buy and sell rates';
+
+  @override
+  String get metalRatesRateLabel => 'Retail sell rate per gram';
+
+  @override
+  String get metalRatesSellRateLabel => 'Sell / g';
+
+  @override
+  String get metalRatesBuybackRateLabel => 'Buyback / g';
+
+  @override
+  String get metalRatesPricingPolicyHint =>
+      'Sell rates bill jewellery and print tags. Buyback rates value old gold. Both are per gram and transactions freeze the agreed rate.';
+
+  @override
+  String get metalRatesCompletePairRequiredMessage =>
+      'Enter positive rates, with buyback no higher than sell, for this metal and purity.';
+
+  @override
+  String get metalRatesNoCompletePairMessage =>
+      'Enter at least one complete positive sell and buyback rate pair.';
+
+  @override
+  String metalRatesSellRateSummary(String rate) {
+    return 'Sell: $rate/g';
+  }
+
+  @override
+  String metalRatesBuyRateSummary(String rate) {
+    return 'Buy: $rate/g';
+  }
+
+  @override
+  String get metalRatesDateLabel => 'Effective date';
+
+  @override
+  String get metalRatesDeleteTitle => 'Delete rate?';
+
+  @override
+  String metalRatesDeleteBody(Object date, Object metal, Object purity) {
+    return 'Remove the $metal $purity rate for $date?';
+  }
+
+  @override
+  String get metalRatesEmptyTitle => 'No rates yet';
+
+  @override
+  String get metalRatesEmptySubtitle =>
+      'Add today\'s sell and buyback rates to enable weight billing and old-gold exchange.';
+
+  @override
+  String get metalRatesMissingTodayTitle => 'Today\'s rates are missing';
+
+  @override
+  String get metalRatesMissingTodaySubtitle =>
+      'Transactions fall back to the latest older rate. Add today\'s rate pairs for exact billing.';
+
+  @override
+  String get metalRatesSavedMessage => 'Rate saved';
+
+  @override
+  String get metalRatesDeletedMessage => 'Rate deleted';
+
+  @override
+  String get jewellerySectionTitle => 'Jewellery details';
+
+  @override
+  String get jewellerySectionSubtitle =>
+      'Weight, purity, making charges and hallmark';
+
+  @override
+  String get jewelleryMetalLabel => 'Metal';
+
+  @override
+  String get jewelleryPurityLabel => 'Purity';
+
+  @override
+  String get jewelleryGrossWeightLabel => 'Gross weight (g)';
+
+  @override
+  String get jewelleryStoneWeightLabel => 'Stone weight (g)';
+
+  @override
+  String get jewelleryNetWeightLabel => 'Net weight (g)';
+
+  @override
+  String get jewelleryMakingTypeLabel => 'Making charges';
+
+  @override
+  String get jewelleryMakingFixedLabel => 'Flat amount';
+
+  @override
+  String get jewelleryMakingPerGramLabel => 'Per gram';
+
+  @override
+  String get jewelleryMakingPercentLabel => 'Percent of metal';
+
+  @override
+  String get jewelleryMakingValueLabel => 'Making value';
+
+  @override
+  String get jewelleryWastageLabel => 'Wastage %';
+
+  @override
+  String get jewelleryHuidLabel => 'HUID';
+
+  @override
+  String get jewelleryHuidHint => '6-character hallmark ID';
+
+  @override
+  String get jewelleryNetWeightHint => 'Left blank, net = gross minus stone';
+
+  @override
+  String get jewelleryRateLabel => 'Sell rate per gram';
+
+  @override
+  String jewelleryRateMissingMessage(Object metal, Object purity) {
+    return 'No $metal $purity sell rate found. Add it in Metal Rates first.';
+  }
+
+  @override
+  String jewelleryLineSummary(Object rate, Object weight) {
+    return '${weight}g × $rate/g';
+  }
+
+  @override
+  String get oldGoldExchangeLabel => 'Old Gold Exchange';
+
+  @override
+  String get oldGoldReceivedTitle => 'Old gold received';
+
+  @override
+  String get oldGoldBuybackRateLabel => 'Buyback rate per gram';
+
+  @override
+  String get oldGoldBuybackRateHelper =>
+      'Daily buyback rate for the invoice date. Edit only for the agreed exchange value.';
+
+  @override
+  String get oldGoldExchangeCreditLabel => 'Exchange credit';
+
+  @override
+  String get oldGoldNoAutomaticRcmMessage =>
+      'No RCM is added automatically to a customer exchange. Record supplier tax only from its supporting purchase bill.';
+
+  @override
+  String get invoiceJewellerySectionTitle => 'Weight billing';
+
+  @override
+  String get invoiceJewelleryUseWeightLabel => 'Bill this line by weight';
+
+  @override
+  String get invoiceJewelleryGstSplitLabel => 'GST (3% on jewellery value)';
+
+  @override
+  String get invoiceJewelleryLineTotalLabel => 'Line total';
+
+  @override
+  String get piecesTitle => 'Tagged pieces';
+
+  @override
+  String piecesCountLabel(Object count) {
+    return '$count piece(s)';
+  }
+
+  @override
+  String get piecesEmpty => 'No pieces tagged yet';
+
+  @override
+  String get piecesAdd => 'Tag piece';
+
+  @override
+  String get piecesEdit => 'Edit piece';
+
+  @override
+  String get piecesTagNo => 'Tag no';
+
+  @override
+  String get piecesStatusInStock => 'In stock';
+
+  @override
+  String get piecesStatusSold => 'Sold';
+
+  @override
+  String get piecesStatusExchanged => 'Exchanged';
+
+  @override
+  String get piecesStatusJobWork => 'Job work';
+
+  @override
+  String piecesSoldOn(Object invoice) {
+    return 'Sold on $invoice';
+  }
+
+  @override
+  String piecesDeleteConfirm(Object tag) {
+    return 'Remove tag $tag? Stock history is not affected.';
+  }
+
+  @override
+  String get piecesSavedMessage => 'Piece saved';
+
+  @override
+  String get piecesDeletedMessage => 'Piece removed';
+
+  @override
+  String get invoiceJewelleryPickPiece => 'Sell a tagged piece';
+
+  @override
+  String get invoiceJewelleryPieceWeightHint => 'Weights filled from the tag';
+
+  @override
+  String get navJobWork => 'Job Work';
+
+  @override
+  String get jobWorkTitle => 'Job Work (Karigar)';
+
+  @override
+  String get jobWorkSubtitle => 'Metal issued out and received back';
+
+  @override
+  String get jobWorkEmpty => 'No job work yet';
+
+  @override
+  String get jobWorkAdd => 'Issue metal';
+
+  @override
+  String get jobWorkKarigar => 'Karigar';
+
+  @override
+  String get jobWorkDescription => 'Description';
+
+  @override
+  String get jobWorkIssuedNet => 'Issued net (g)';
+
+  @override
+  String get jobWorkReceive => 'Receive';
+
+  @override
+  String get jobWorkReceivedNet => 'Received net (g)';
+
+  @override
+  String get jobWorkStatusOpen => 'Open';
+
+  @override
+  String get jobWorkStatusReceived => 'Received';
+
+  @override
+  String get jobWorkSavedMessage => 'Job work saved';
+
+  @override
+  String get jobWorkDeletedMessage => 'Job work removed';
+
+  @override
+  String get variantsTitle => 'Variants';
+
+  @override
+  String get variantsEmpty => 'No variants yet';
+
+  @override
+  String get variantsAdd => 'Add variant';
+
+  @override
+  String get variantsEdit => 'Edit variant';
+
+  @override
+  String get variantsNameLabel => 'Variant type';
+
+  @override
+  String get variantsValueLabel => 'Value';
+
+  @override
+  String get variantsExtraPriceLabel => 'Price delta';
+
+  @override
+  String get loyaltyPointsLabel => 'pts';
+
+  @override
+  String get invoiceMakingLabel => 'Making';
+
+  @override
+  String get invoiceWastageLabel => 'Wastage';
+
+  @override
+  String get invoiceMetalValueLabel => 'Metal value';
+
+  @override
+  String invoiceRateAsOnLabel(Object date) {
+    return 'Rate as on $date';
+  }
+
+  @override
+  String get navMetalRates => 'Metal Rates';
+
+  @override
+  String get metalRatesTitle => 'Metal Rates';
+
+  @override
+  String get metalRatesSubtitle =>
+      'Daily retail sell and old-gold buyback rates per gram';
+
+  @override
   String get onboardingStepInvoiceTitle => 'ཁྲལ་ཤོག་སྒྲིག་འགོད།';
 
   @override
@@ -211,6 +553,85 @@ class AppLocalizationsBo extends AppLocalizations {
 
   @override
   String get navMore => 'More';
+
+  @override
+  String get navParties => 'Parties';
+
+  @override
+  String get navItems => 'Items';
+
+  @override
+  String get navSalesInvoices => 'Sales Invoices';
+
+  @override
+  String get navEstimates => 'Estimates';
+
+  @override
+  String get navProformaInvoice => 'Proforma Invoice';
+
+  @override
+  String get navPaymentIn => 'Payment In';
+
+  @override
+  String get navSaleOrder => 'Sale Order';
+
+  @override
+  String get navDeliveryChallan => 'Delivery Challan';
+
+  @override
+  String get navCreditNote => 'Credit Note';
+
+  @override
+  String get navDebitNote => 'Debit Note';
+
+  @override
+  String get navPos => 'POS';
+
+  @override
+  String get navPurchaseBills => 'Purchase Bills';
+
+  @override
+  String get purchaseBillsListSubtitle =>
+      'Record inward supplies to track input tax credit.';
+
+  @override
+  String get navPurchaseOrder => 'Purchase Order';
+
+  @override
+  String get navPaymentOut => 'Payment Out';
+
+  @override
+  String get navExpenses => 'Expenses';
+
+  @override
+  String get navBankAccounts => 'Bank Accounts';
+
+  @override
+  String get navCashInHand => 'Cash In Hand';
+
+  @override
+  String get navCheques => 'Cheques';
+
+  @override
+  String get navLoanAccounts => 'Loan Accounts';
+
+  @override
+  String get navReminders => 'Reminders';
+
+  @override
+  String get navAuditLog => 'Audit Log';
+
+  @override
+  String get navSectionSales => 'Sales (Master)';
+
+  @override
+  String get navSectionPurchase => 'Purchase (Master)';
+
+  @override
+  String get navSectionCashBank => 'Cash And Bank';
+
+  @override
+  String get invoiceMgmtStatusPendingLabel => 'Pending';
 
   @override
   String get moreSectionDocuments => 'Documents';
@@ -2319,6 +2740,20 @@ class AppLocalizationsBo extends AppLocalizations {
 
   @override
   String get productMgmtPurchasePriceLabel => 'ཉོ་གོང་།';
+
+  @override
+  String get productMgmtJewelleryFallbackPriceLabel => 'Fallback sale price';
+
+  @override
+  String get productMgmtJewelleryAcquisitionCostLabel => 'Acquisition cost / g';
+
+  @override
+  String get productMgmtJewellerySalePriceHelper =>
+      'Optional for weight-billed jewellery. The invoice uses the daily sell rate instead.';
+
+  @override
+  String get productMgmtJewelleryPurchasePriceHelper =>
+      'Optional actual acquisition cost per gram for COGS. It never uses today\'s sell or buyback rate automatically.';
 
   @override
   String get productMgmtDefaultDiscountLabel => 'སྔར་སྒྲིག་ཆག་གོང་།';

@@ -89,11 +89,25 @@ enum SettingKey {
   licenseKey, // activated license key (AB1.<payload>.<sig>); '' = none, trial rules apply
   licenseLastSeen, // UTC ISO timestamp of the last license check; clock-rollback guard
   lockedBeforeDate, // financial period lock cutoff (ISO yyyy-MM-dd); postings dated on/before are refused. Absent/empty = unlocked.
+  labelPrinterLanguage, // barcode label printer language: 'tspl' (TSC) | 'zpl' (Zebra). Default 'tspl'.
+  labelPrinterConnection, // JSON {kind: 'usb'|'network', name?, ip?, port?} for the label printer. Empty = none.
+  labelSize, // barcode label size: preset id (e.g. '50x25') or 'custom:<w>x<h>' in mm. Default '50x25'.
+  labelShowPrice, // whether barcode labels print the selling price (default true).
+  labelShowName, // whether barcode labels print the product name (default true).
+  labelShowBarcodeText, // whether the human-readable code prints under the bars (default true).
+  labelBarcodeHeight, // barcode height: 's' | 'm' | 'l' (default 'm').
+  industryProfile, // trade vertical: 'retail' (default) | 'jewellery'.
+  loyaltyPointsPer100, // points earned per 100 spent per invoice (0 = off).
+  loyaltyPointValue, // rupees one loyalty point is worth when redeemed (default 1).
 }
 
 extension SettingKeyExtension on SettingKey {
   String get key {
     switch (this) {
+      case SettingKey.loyaltyPointsPer100:
+        return 'loyalty_points_per_100';
+      case SettingKey.loyaltyPointValue:
+        return 'loyalty_point_value';
       case SettingKey.logoPosition:
         return 'logo_position';
       case SettingKey.invoicePrefix:
@@ -274,6 +288,22 @@ extension SettingKeyExtension on SettingKey {
         return 'license_last_seen';
       case SettingKey.lockedBeforeDate:
         return 'locked_before_date';
+      case SettingKey.labelPrinterLanguage:
+        return 'label_printer_language';
+      case SettingKey.labelPrinterConnection:
+        return 'label_printer_connection';
+      case SettingKey.labelSize:
+        return 'label_size';
+      case SettingKey.labelShowPrice:
+        return 'label_show_price';
+      case SettingKey.labelShowName:
+        return 'label_show_name';
+      case SettingKey.labelShowBarcodeText:
+        return 'label_show_barcode_text';
+      case SettingKey.labelBarcodeHeight:
+        return 'label_barcode_height';
+      case SettingKey.industryProfile:
+        return 'industry_profile';
     }
   }
 }

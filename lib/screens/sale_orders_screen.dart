@@ -202,6 +202,21 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
                             ? 'New Sale Order'
                             : 'Edit Sale Order')),
                     body: DocumentEditorShell(
+                      documentTitle: existing == null
+                          ? 'New Sale Order'
+                          : 'Edit Sale Order',
+                      documentReference: existing?.orderNumber == null
+                          ? 'Draft sale order'
+                          : 'Sale Order No. ${existing!.orderNumber}',
+                      documentMode: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'sale', label: Text('Sale')),
+                          ButtonSegment(value: 'credit', label: Text('Credit')),
+                        ],
+                        selected: const {'sale'},
+                        showSelectedIcon: false,
+                        onSelectionChanged: null,
+                      ),
                       stateLabel: existing == null
                           ? 'Draft workspace'
                           : 'Editing draft',
@@ -370,37 +385,33 @@ class _SaleOrdersScreenState extends State<SaleOrdersScreen> {
                                                     runSpacing: 8,
                                                     children: [
                                                       SizedBox(
-                                                          width: productWidth,
-                                                          child: DropdownButtonFormField<
-                                                                  String>(
-                                                              value: draft
-                                                                  .product.id,
-                                                              decoration:
-                                                                  const InputDecoration(
-                                                                      labelText:
-                                                                          'Product',
-                                                                      isDense:
-                                                                          true),
-                                                              items: products
-                                                                  .map((p) => DropdownMenuItem(
-                                                                      value:
-                                                                          p.id,
-                                                                      child: Text(p
-                                                                          .name)))
-                                                                  .toList(),
-                                                              onChanged: (v) =>
+                                                        width: productWidth,
+                                                        child:
+                                                            DocumentItemPicker(
+                                                          products: products,
+                                                          initialValue: draft
+                                                              .product.name,
+                                                          label: 'Product',
+                                                          onChanged: (_) {},
+                                                          onSelected:
+                                                              (product) =>
                                                                   setDialogState(
                                                                       () {
-                                                                    draft.product =
-                                                                        products.firstWhere((p) =>
-                                                                            p.id ==
-                                                                            v);
-                                                                    draft.price.text = draft
-                                                                        .product
-                                                                        .price
-                                                                        .toStringAsFixed(
-                                                                            2);
-                                                                  }))),
+                                                            draft.product =
+                                                                product;
+                                                            draft.price.text =
+                                                                product.price
+                                                                    .toStringAsFixed(
+                                                                        2);
+                                                            draft.discount
+                                                                    .text =
+                                                                product
+                                                                    .defaultDiscount
+                                                                    .toStringAsFixed(
+                                                                        2);
+                                                          }),
+                                                        ),
+                                                      ),
                                                       SizedBox(
                                                           width: detailWidth,
                                                           child: TextField(

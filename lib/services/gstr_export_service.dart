@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/database/database_helper.dart';
 import 'package:apexbooks/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/domain/jewellery/jewellery_calculator.dart';
 import 'package:apexbooks/models/additional_cost.dart';
 import 'package:apexbooks/services/backend_services.dart';
 
@@ -273,6 +274,85 @@ class GstrExportService {
       double effectiveRate;
       double lineTax;
       int bucket;
+      final metalRateId = row['metal_rate_id'] as String?;
+      final isJewelleryRow = metalRateId != null && metalRateId.isNotEmpty;
+      final jewelleryTaxTreatment = jewelleryTaxTreatmentFromKey(
+          row['jewellery_tax_treatment'] as String?);
+      // A retail jewellery supply has one 3% GST bucket on its entire value,
+      // including making and wastage. The invoice's generic global rate does
+      // not replace that statutory weight-line rate.
+      if (isJewelleryRow &&
+          jewelleryTaxTreatment == JewelleryTaxTreatment.retail3 &&
+          taxMode != TaxMode.none) {
+        final jewelleryTax = base * jewelleryGstPercent / 100;
+        final jewelleryBucket = jewelleryGstPercent.round();
+        taxableByRate[jewelleryBucket] =
+            (taxableByRate[jewelleryBucket] ?? 0) + adjusted;
+        taxByRate[jewelleryBucket] =
+            (taxByRate[jewelleryBucket] ?? 0) + jewelleryTax;
+        hsnLines.add(_LineTax(
+          hsn: hsnOf(row).isEmpty ? '999999' : hsnOf(row),
+          description: descOf(row),
+          unit: unitOf(row),
+          qty: qtyOf(row),
+          rate: jewelleryGstPercent,
+          taxable: adjusted,
+          tax: jewelleryTax,
+          interstate: interstate,
+        ));
+        continue;
+      }
+      if (isJewelleryRow &&
+          jewelleryTaxTreatment == JewelleryTaxTreatment.legacySplit &&
+          taxMode == TaxMode.perItem) {
+        // Preserve rate-wise exports for invoices issued before the corrected
+        // retail-jewellery treatment was introduced.
+        final price = (row['unit_price'] as num?)?.toDouble() ??
+            (row['product_price'] as num?)?.toDouble() ??
+            0.0;
+        final qty = (row['quantity'] as num?)?.toDouble() ?? 0.0;
+        final discount = (row['discount'] as num?)?.toDouble() ?? 0.0;
+        final perUnit = (row['discount_per_unit'] as int?) == 1;
+        final metalBase =
+            (perUnit ? (price - discount) * qty : price * qty - discount)
+                .clamp(0.0, double.infinity);
+        final charges = ((row['making_amount'] as num?)?.toDouble() ?? 0.0) +
+            ((row['wastage_amount'] as num?)?.toDouble() ?? 0.0);
+        const metalRate = 3.0;
+        const makingRate = 5.0;
+        final metalTax = metalBase * metalRate / 100;
+        final makingTax = charges * makingRate / 100;
+        final hsn = hsnOf(row).isEmpty ? '999999' : hsnOf(row);
+        taxableByRate[metalRate.toInt()] =
+            (taxableByRate[metalRate.toInt()] ?? 0) + metalBase * factor;
+        taxByRate[metalRate.toInt()] =
+            (taxByRate[metalRate.toInt()] ?? 0) + metalTax;
+        taxableByRate[makingRate.toInt()] =
+            (taxableByRate[makingRate.toInt()] ?? 0) + charges * factor;
+        taxByRate[makingRate.toInt()] =
+            (taxByRate[makingRate.toInt()] ?? 0) + makingTax;
+        hsnLines.add(_LineTax(
+          hsn: hsn,
+          description: descOf(row),
+          unit: unitOf(row),
+          qty: qty,
+          rate: metalRate,
+          taxable: metalBase * factor,
+          tax: metalTax,
+          interstate: interstate,
+        ));
+        hsnLines.add(_LineTax(
+          hsn: hsn,
+          description: descOf(row),
+          unit: unitOf(row),
+          qty: 0,
+          rate: makingRate,
+          taxable: charges * factor,
+          tax: makingTax,
+          interstate: interstate,
+        ));
+        continue;
+      }
       if (taxMode == TaxMode.global) {
         effectiveRate = globalPercent;
         bucket = globalPercent.round();

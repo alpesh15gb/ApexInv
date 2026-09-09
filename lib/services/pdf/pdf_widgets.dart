@@ -5,7 +5,12 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:qr/qr.dart';
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/domain/jewellery/jewellery_calculator.dart';
 import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/models/invoice_item.dart';
+import 'package:apexbooks/models/metal_rate.dart';
+import 'package:apexbooks/models/verticals.dart';
 import 'package:apexbooks/utils/amount_in_words.dart';
 
 /// Tracks how much table-row height has been painted so far, so the
@@ -344,7 +349,8 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
     bool compact = false,
     bool showCgstSgst = false,
     bool showIgst = false,
-    bool showRoundOff = false}) {
+    bool showRoundOff = false,
+    List<OldGoldEntry> oldGoldEntries = const []}) {
   final hasPaid = invoice.amountPaid > 0;
   final isPaidInFull = invoice.outstandingBalance <= 0;
   final hasPreviousBalance = previousBalanceDue > 0;
@@ -545,6 +551,46 @@ pw.Widget buildEnhancedTotals(Invoice invoice, PdfColor accentRowColor,
             ),
           ),
         ],
+        if (oldGoldEntries.isNotEmpty) ...[
+          pw.SizedBox(height: 4),
+          pw.Container(
+            padding: pw.EdgeInsets.symmetric(
+                horizontal: rowHorizontalPadding ?? 8.0, vertical: 4),
+            decoration: pw.BoxDecoration(
+              border: pw.Border(
+                  top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('Old Gold Exchange',
+                    style: pw.TextStyle(
+                        fontSize: rowFontSize, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 2),
+                for (final entry in oldGoldEntries)
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(bottom: 1),
+                    child: pw.Text(
+                      '${MetalRate.metalLabel(entry.metal)} ${entry.purity} · '
+                      '${entry.netWeight.toStringAsFixed(3)}g × '
+                      '$currencySymbol${entry.ratePerGram.toStringAsFixed(2)}/g = '
+                      '$currencySymbol${entry.amount.toStringAsFixed(2)}'
+                      '${entry.rcmTax > 0 ? ' (RCM: $currencySymbol${entry.rcmTax.toStringAsFixed(2)})' : ''}',
+                      style: pw.TextStyle(fontSize: rowFontSize * 0.85),
+                    ),
+                  ),
+                pw.SizedBox(height: 2),
+                pdfTotalRow(
+                  'Exchange Credit',
+                  '-$currencySymbol ${oldGoldEntries.fold(0.0, (s, e) => s + e.amount).toStringAsFixed(2)}',
+                  fontSize: rowFontSize,
+                  horizontalPadding: rowHorizontalPadding,
+                  verticalPadding: rowVerticalPadding,
+                ),
+              ],
+            ),
+          ),
+        ],
         if (hasPaid) ...[
           pdfTotalRow(
             "Amount Paid",
@@ -676,6 +722,54 @@ pw.Widget buildInvoiceTable(
       (showItemTax || isGlobalTaxMode) && showCgstSgst && !showIgst;
   final bool showIgstCol = (showItemTax || isGlobalTaxMode) && showIgst;
   final double globalTaxRatePercent = invoice.taxRate * 100;
+  double taxableBase(InvoiceItem item) {
+    if (item.isJewelleryLine) return item.lineAmounts.lineTotal;
+    return InvoiceTotalsCalculator.line(
+      price: item.effectivePrice,
+      quantity: item.quantity,
+      discount: item.discount,
+      discountPerUnit: item.discountPerUnit,
+      extraCost: item.extraCost ?? 0,
+      taxRatePercent: item.product.tax_rate.toDouble(),
+      priceIncludesTax: item.product.priceIncludesTax,
+      taxMode: TaxMode.global,
+      globalTaxRatePercent: globalTaxRatePercent,
+    ).lineTotal;
+  }
+
+  bool hasRetailJewelleryTax(InvoiceItem item) =>
+      item.isJewelleryLine &&
+      item.jewelleryTaxTreatment == JewelleryTaxTreatment.retail3;
+
+  final jewelleryTax = invoice.items
+      .where(hasRetailJewelleryTax)
+      .fold(0.0, (sum, item) => sum + item.taxAmount);
+  final genericGlobalBase = invoice.items
+      .where((item) => !hasRetailJewelleryTax(item))
+      .fold(0.0, (sum, item) => sum + taxableBase(item));
+  final genericGlobalTax =
+      (invoice.tax - jewelleryTax).clamp(0.0, double.infinity).toDouble();
+
+  // Jewellery lines remain in their statutory 3% bucket even when an invoice
+  // has a generic global tax setting for other lines.
+  double effectiveLineTaxRatePercent(InvoiceItem item) {
+    if (hasRetailJewelleryTax(item)) return jewelleryGstPercent;
+    if (isGlobalTaxMode) return globalTaxRatePercent;
+    if (item.total <= 0) return item.product.tax_rate.toDouble();
+    return item.taxAmount / item.total * 100;
+  }
+
+  double displayedLineTax(InvoiceItem item) {
+    if (!isGlobalTaxMode || hasRetailJewelleryTax(item)) return item.taxAmount;
+    if (genericGlobalBase <= 0) return 0;
+    return genericGlobalTax * taxableBase(item) / genericGlobalBase;
+  }
+
+  String taxRateLabel(double rate) {
+    final s = rate.toStringAsFixed(2);
+    return s.endsWith('.00') ? s.substring(0, s.length - 3) : s;
+  }
+
   final watermarkImage =
       watermarkBytes != null ? pw.MemoryImage(watermarkBytes) : null;
   final watermarkCursor = _WatermarkCursor();
@@ -860,6 +954,7 @@ pw.Widget buildInvoiceTable(
               padding: pw.EdgeInsets.symmetric(
                 horizontal: cellPaddingH,
                 vertical: (showItemDescription ||
+                        item.isJewelleryLine ||
                         showTypeTag && businessType == BusinessType.both ||
                         showDiscount &&
                             item.discountPerUnit &&
@@ -880,6 +975,39 @@ pw.Widget buildInvoiceTable(
                         fontSize: tableFontSize * 0.75,
                         fontStyle: pw.FontStyle.italic,
                         color: PdfColors.grey700,
+                      ),
+                    ),
+                  // Jewellery weight billing: net grams at the frozen
+                  // purity-adjusted rate, plus the making/wastage components
+                  // (retail.md P1).
+                  if (item.isJewelleryLine)
+                    pw.Text(
+                      '${(item.netWeight ?? item.quantity).toStringAsFixed(3)} g × '
+                      '${invoice.currencySymbol}${item.effectivePrice.toStringAsFixed(2)}/g'
+                      '${(item.makingAmount ?? 0) > 0 ? ' · Making ${invoice.currencySymbol}${item.makingAmount!.toStringAsFixed(2)}' : ''}'
+                      '${(item.wastageAmount ?? 0) > 0 ? ' · Wastage ${invoice.currencySymbol}${item.wastageAmount!.toStringAsFixed(2)}' : ''}',
+                      style: pw.TextStyle(
+                        fontSize: tableFontSize * 0.75,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  // Jewellery piece identity snapshot (HIGH-07): HUID, tag
+                  // number, and purity from the frozen sale-time snapshot.
+                  if (item.isJewelleryLine &&
+                      (item.huidSnapshot?.isNotEmpty == true ||
+                          item.tagNoSnapshot?.isNotEmpty == true))
+                    pw.Text(
+                      [
+                        if (item.tagNoSnapshot?.isNotEmpty == true)
+                          'Tag #${item.tagNoSnapshot}',
+                        if (item.huidSnapshot?.isNotEmpty == true)
+                          'HUID: ${item.huidSnapshot}',
+                        if (item.puritySnapshot?.isNotEmpty == true)
+                          item.puritySnapshot!,
+                      ].join(' · '),
+                      style: pw.TextStyle(
+                        fontSize: tableFontSize * 0.7,
+                        color: PdfColors.grey600,
                       ),
                     ),
                   if (showTypeTag && businessType == BusinessType.both)
@@ -923,23 +1051,29 @@ pw.Widget buildInvoiceTable(
                 cellPaddingV: cellPaddingV),
             if (splitCgstSgst) ...[
               buildTableCell(
-                  '${(isGlobalTaxMode ? (invoice.subtotal > 0 ? invoice.tax * (item.total / invoice.subtotal) / 2 : 0.0) : item.taxAmount / 2).toStringAsFixed(2)}\n(${(isGlobalTaxMode ? globalTaxRatePercent : item.product.tax_rate) / 2}%)',
+                  '${(displayedLineTax(item) / 2).toStringAsFixed(2)}\n(${taxRateLabel(effectiveLineTaxRatePercent(item) / 2)}%)',
                   fontSize: tableFontSize,
                   cellPaddingH: cellPaddingH,
                   cellPaddingV: cellPaddingV),
               buildTableCell(
-                  '${(isGlobalTaxMode ? (invoice.subtotal > 0 ? invoice.tax * (item.total / invoice.subtotal) / 2 : 0.0) : item.taxAmount / 2).toStringAsFixed(2)}\n(${(isGlobalTaxMode ? globalTaxRatePercent : item.product.tax_rate) / 2}%)',
+                  '${(displayedLineTax(item) / 2).toStringAsFixed(2)}\n(${taxRateLabel(effectiveLineTaxRatePercent(item) / 2)}%)',
                   fontSize: tableFontSize,
                   cellPaddingH: cellPaddingH,
                   cellPaddingV: cellPaddingV),
             ] else if (showIgstCol)
               buildTableCell(
-                  '${(isGlobalTaxMode ? (invoice.subtotal > 0 ? invoice.tax * (item.total / invoice.subtotal) : 0.0) : item.taxAmount).toStringAsFixed(2)}\n(${isGlobalTaxMode ? globalTaxRatePercent : item.product.tax_rate}%)',
+                  '${displayedLineTax(item).toStringAsFixed(2)}\n(${taxRateLabel(effectiveLineTaxRatePercent(item))}%)',
                   fontSize: tableFontSize,
                   cellPaddingH: cellPaddingH,
                   cellPaddingV: cellPaddingV)
             else if (showItemTax)
-              buildTableCell('${item.product.tax_rate}%',
+              buildTableCell(
+                  item.isJewelleryLine
+                      ? item.jewelleryTaxTreatment ==
+                              JewelleryTaxTreatment.legacySplit
+                          ? '3%+5%'
+                          : '${jewelleryGstPercent}%'
+                      : '${item.product.tax_rate}%',
                   fontSize: tableFontSize,
                   cellPaddingH: cellPaddingH,
                   cellPaddingV: cellPaddingV),

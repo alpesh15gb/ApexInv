@@ -72,11 +72,17 @@ class _StatementLineDraft {
 
 class ReportService {
   static final _db = DatabaseHelper();
-  static const _invoiceItemNetSql = 'CASE WHEN ii.discount_per_unit = 1 '
+  static const _invoiceItemNetSql =
+      "CASE WHEN COALESCE(ii.metal_rate_id, '') <> '' THEN "
+      'CASE WHEN ii.discount_per_unit = 1 '
+      'THEN (COALESCE(ii.unit_price, ii.product_price) - ii.discount) * ii.quantity '
+      'ELSE COALESCE(ii.unit_price, ii.product_price) * ii.quantity - ii.discount END '
+      '+ COALESCE(ii.making_amount, 0) + COALESCE(ii.wastage_amount, 0) '
+      'ELSE CASE WHEN ii.discount_per_unit = 1 '
       'THEN (COALESCE(ii.unit_price, ii.product_price) - ii.discount) * ii.quantity '
       '+ COALESCE(ii.extra_cost, 0) '
       'ELSE COALESCE(ii.unit_price, ii.product_price) * ii.quantity '
-      '- ii.discount + COALESCE(ii.extra_cost, 0) END';
+      '- ii.discount + COALESCE(ii.extra_cost, 0) END END';
   static const _invoiceItemDiscountSql = 'CASE WHEN ii.discount_per_unit = 1 '
       'THEN ii.discount * ii.quantity ELSE ii.discount END';
   // Revenue basis for P&L/dashboard: backs out embedded tax for
@@ -85,7 +91,8 @@ class ReportService {
   // mode via the line's product rate, and in global mode via the invoice's
   // global rate (global-mode tax never derives from per-product rates).
   static const _invoiceItemTaxableNetSql =
-      "CASE WHEN i.tax_mode = 'per_item' AND ii.product_price_includes_tax = 1 "
+      "CASE WHEN COALESCE(ii.metal_rate_id, '') <> '' THEN $_invoiceItemNetSql "
+      "WHEN i.tax_mode = 'per_item' AND ii.product_price_includes_tax = 1 "
       'AND ii.product_tax_rate > 0 '
       'THEN ($_invoiceItemNetSql) / (1 + ii.product_tax_rate / 100.0) '
       "WHEN i.tax_mode = 'global' AND ii.product_price_includes_tax = 1 "
@@ -326,7 +333,9 @@ class ReportService {
     ];
 
     // Collected grouped by payment date (more accurate for cash-flow view)
-    // Bounced/cancelled cheques never count as cash collected.
+    // Bounced/cancelled cheques never count as cash collected. Day bounds
+    // compare the 10-char date part (substr) so date-only and full-ISO
+    // date_paid rows both land inside [from, to] (BUG-14).
     final collectedRows = await db.rawQuery(
       "SELECT strftime('%Y-%m', ip.date_paid) AS month, "
       "COALESCE(SUM(ip.amount_paid), 0.0) AS collected "
@@ -335,7 +344,8 @@ class ReportService {
       "WHERE i.deleted_at IS NULL AND i.type = 'Invoice' "
       "AND ip.cheque_status NOT IN ('bounced', 'cancelled') "
       "$currencyFilter"
-      "AND ip.date_paid >= ? AND ip.date_paid <= ? "
+      "AND substr(ip.date_paid, 1, 10) >= substr(?, 1, 10) "
+      "AND substr(ip.date_paid, 1, 10) <= substr(?, 1, 10) "
       "GROUP BY month ORDER BY month",
       args,
     );
@@ -1233,13 +1243,13 @@ class ReportService {
       JOIN invoices i ON i.id = invoice_payments.invoice_id
       WHERE i.deleted_at IS NULL AND i.type IN ('Invoice', 'Credit Note', 'Debit Note')
         AND invoice_payments.cheque_status NOT IN ('bounced', 'cancelled')
-        AND date_paid >= ? AND date_paid <= ?
+        AND substr(date_paid, 1, 10) >= substr(?, 1, 10) AND substr(date_paid, 1, 10) <= substr(?, 1, 10)
         ${currencyCode == null ? '' : 'AND i.currency_code = ?'}
       GROUP BY substr(date_paid, 1, 10), invoice_payments.invoice_id
       ORDER BY d
     ''', [
-      from.toIso8601String(),
-      to.toIso8601String(),
+      AppDate.dateKeyStart(from),
+      AppDate.dateKeyEnd(to),
       if (currencyCode != null) currencyCode
     ]);
     for (final r in payRows) {
@@ -1255,12 +1265,12 @@ class ReportService {
     final expRows = await db.rawQuery('''
       SELECT e.date, e.description, e.amount FROM expenses e
       LEFT JOIN financial_accounts a ON a.id = e.account_id
-      WHERE e.date >= ? AND e.date <= ?
+      WHERE substr(e.date, 1, 10) >= substr(?, 1, 10) AND substr(e.date, 1, 10) <= substr(?, 1, 10)
       ${currencyCode == null ? '' : 'AND COALESCE(a.currency_code, \'INR\') = ?'}
       ORDER BY e.date
     ''', [
-      from.toIso8601String(),
-      to.toIso8601String(),
+      AppDate.dateKeyStart(from),
+      AppDate.dateKeyEnd(to),
       if (currencyCode != null) currencyCode
     ]);
     for (final r in expRows) {
@@ -1276,13 +1286,13 @@ class ReportService {
       SELECT p.date_paid AS date, b.supplier_name, p.amount_paid
       FROM purchase_bill_payments p
       JOIN purchase_bills b ON b.id = p.purchase_bill_id
-      WHERE p.date_paid >= ? AND p.date_paid <= ?
+      WHERE substr(p.date_paid, 1, 10) >= substr(?, 1, 10) AND substr(p.date_paid, 1, 10) <= substr(?, 1, 10)
         AND COALESCE(p.cheque_status, 'none') NOT IN ('bounced', 'cancelled')
         ${currencyCode == null ? '' : 'AND b.currency_code = ?'}
       ORDER BY p.date_paid
     ''', [
-      from.toIso8601String(),
-      to.toIso8601String(),
+      AppDate.dateKeyStart(from),
+      AppDate.dateKeyEnd(to),
       if (currencyCode != null) currencyCode
     ]);
     for (final r in pbRows) {
@@ -1337,12 +1347,13 @@ class ReportService {
     final pbRes = await db.rawQuery(
       "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM purchase_bill_payments p "
       "JOIN purchase_bills b ON b.id = p.purchase_bill_id "
-      "WHERE p.date_paid >= ? AND p.date_paid <= ? "
+      "WHERE substr(p.date_paid, 1, 10) >= substr(?, 1, 10) "
+      "AND substr(p.date_paid, 1, 10) <= substr(?, 1, 10) "
       "AND p.cheque_status NOT IN ('bounced', 'cancelled') "
       "${currencyCode == null ? '' : 'AND b.currency_code = ?'}",
       [
-        from.toIso8601String(),
-        to.toIso8601String(),
+        AppDate.dateKeyStart(from),
+        AppDate.dateKeyEnd(to),
         if (currencyCode != null) currencyCode
       ],
     );
@@ -1351,12 +1362,13 @@ class ReportService {
       "SELECT COALESCE(SUM(p.amount_paid), 0) AS v FROM invoice_payments p "
       "JOIN invoices i ON i.id = p.invoice_id "
       "WHERE i.deleted_at IS NULL AND i.type IN ('Invoice', 'Credit Note', 'Debit Note') "
-      "AND p.date_paid >= ? AND p.date_paid <= ? "
+      "AND substr(p.date_paid, 1, 10) >= substr(?, 1, 10) "
+      "AND substr(p.date_paid, 1, 10) <= substr(?, 1, 10) "
       "AND p.cheque_status NOT IN ('bounced', 'cancelled') "
       "${currencyCode == null ? '' : 'AND i.currency_code = ?'}",
       [
-        from.toIso8601String(),
-        to.toIso8601String(),
+        AppDate.dateKeyStart(from),
+        AppDate.dateKeyEnd(to),
         if (currencyCode != null) currencyCode
       ],
     );

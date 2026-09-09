@@ -4,6 +4,7 @@ import 'package:apexbooks/repositories/company_info_repository.dart';
 import 'package:apexbooks/repositories/customer_repository.dart';
 import 'package:apexbooks/repositories/invoice_item_repository.dart';
 import 'package:apexbooks/repositories/invoice_repository.dart';
+import 'package:apexbooks/repositories/jewellery_repository.dart';
 import 'package:apexbooks/repositories/payment_repository.dart';
 import 'package:apexbooks/repositories/product_repository.dart';
 import 'package:apexbooks/repositories/report_repository.dart';
@@ -54,6 +55,12 @@ final reportRepositoryProvider = Provider<ReportRepository>((ref) {
 final invoiceItemRepositoryProvider = Provider<InvoiceItemRepository>((ref) {
   throw UnimplementedError(
     'invoiceItemRepositoryProvider must be overridden.',
+  );
+});
+
+final jewelleryRepositoryProvider = Provider<JewelleryRepository>((ref) {
+  throw UnimplementedError(
+    'jewelleryRepositoryProvider must be overridden.',
   );
 });
 

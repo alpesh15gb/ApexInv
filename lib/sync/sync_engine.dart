@@ -593,6 +593,16 @@ class SyncEngine {
     if (dropped.isNotEmpty) {
       AppLogger.w(_tag, 'Pull stripped unknown columns for $table: $dropped');
     }
+    // A v61 peer sends one metal rate and no jewellery-tax snapshot. Retain
+    // the old issued behavior instead of accepting v62/v63 schema defaults.
+    if (table == 'metal_rates' && stripped['rate_per_gram'] != null) {
+      stripped['sell_rate_per_gram'] ??= stripped['rate_per_gram'];
+      stripped['buy_rate_per_gram'] ??= stripped['rate_per_gram'];
+    }
+    if (table == 'invoice_items' &&
+        !stripped.containsKey('jewellery_tax_treatment')) {
+      stripped['jewellery_tax_treatment'] = 'legacy_split';
+    }
     // 'id' is always a real column; if the table itself is unknown the
     // payload degrades to just the key (insert still fails loudly, but a
     // single unknown column can no longer starve the cursor).

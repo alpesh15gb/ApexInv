@@ -46,6 +46,8 @@ class PaymentService {
     final String account;
     if (paymentMethod == 'Check') {
       account = LedgerService.accChequesInHand;
+    } else if (paymentMethod == LedgerService.receiptMethodOldGold) {
+      account = LedgerService.accOldGold;
     } else {
       final rows = await txn.query('financial_accounts',
           columns: ['type', 'name'],

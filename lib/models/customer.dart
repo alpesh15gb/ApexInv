@@ -11,6 +11,10 @@ class Customer {
   bool creditLimitEnabled;
   String paymentTermId;
 
+  /// Loyalty points balance (retail.md P4). Earned at the configured rate
+  /// per invoice; 0 when loyalty is off or the customer has none.
+  double loyaltyPoints;
+
   Customer({
     required this.id,
     required this.name,
@@ -22,6 +26,7 @@ class Customer {
     this.creditLimit = 0,
     this.creditLimitEnabled = false,
     this.paymentTermId = '',
+    this.loyaltyPoints = 0,
   });
 
   // Convert a Map into a Customer object
@@ -37,6 +42,7 @@ class Customer {
       creditLimit: (map['credit_limit'] as num?)?.toDouble() ?? 0,
       creditLimitEnabled: (map['credit_limit_enabled'] ?? 0) == 1,
       paymentTermId: map['payment_term_id'] ?? '',
+      loyaltyPoints: (map['loyalty_points'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -53,6 +59,7 @@ class Customer {
       'credit_limit': creditLimit,
       'credit_limit_enabled': creditLimitEnabled ? 1 : 0,
       'payment_term_id': paymentTermId,
+      'loyalty_points': loyaltyPoints,
     };
   }
 }

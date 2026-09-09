@@ -8,6 +8,8 @@ import 'package:apexbooks/widgets/adaptive/app_dialog.dart';
 import 'package:apexbooks/widgets/adaptive/sticky_action_bar.dart';
 import 'package:apexbooks/widgets/adaptive/entity_card.dart';
 import 'package:apexbooks/widgets/adaptive/status_chip.dart';
+import 'package:apexbooks/widgets/app/payment_status_chip.dart';
+import 'package:apexbooks/common/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +53,26 @@ void main() {
     expect(find.text('Paid'), findsOneWidget);
   });
 
+  test('PaymentStatusChip uses one semantic tone per status', () {
+    expect(
+        PaymentStatusChip.toneFor(PaymentStatus.paid), StatusTone.success);
+    expect(
+        PaymentStatusChip.toneFor(PaymentStatus.partial), StatusTone.warning);
+    expect(
+        PaymentStatusChip.toneFor(PaymentStatus.unpaid), StatusTone.danger);
+  });
+
+  testWidgets('PaymentStatusChip renders localized text with its tone',
+      (tester) async {
+    await tester.pumpWidget(_wrap(
+      const Center(child: PaymentStatusChip(status: PaymentStatus.partial)),
+    ));
+    await tester.pumpAndSettle();
+    final chip = tester.widget<StatusChip>(find.byType(StatusChip));
+    expect(chip.tone, StatusTone.warning);
+    expect(find.text(chip.label), findsOneWidget);
+  });
+
   testWidgets('EntityCard renders child and accent bar', (tester) async {
     await tester.pumpWidget(_wrap(
       Center(
@@ -63,6 +85,25 @@ void main() {
     ));
     expect(find.text('card body'), findsOneWidget);
     // Accent bar = 4px-wide positioned bar stretched between top/bottom.
+    final accentBars = tester.widgetList<Positioned>(
+      find.byWidgetPredicate(
+        (w) => w is Positioned && w.width == 4 && w.top == 0 && w.bottom == 0,
+      ),
+    );
+    expect(accentBars.length, 1);
+  });
+
+  testWidgets('EntityCard semantic accent tone renders the same accent bar',
+      (tester) async {
+    await tester.pumpWidget(_wrap(
+      const Center(
+        child: EntityCard(
+          accentTone: StatusTone.danger,
+          child: Text('semantic body'),
+        ),
+      ),
+    ));
+    expect(find.text('semantic body'), findsOneWidget);
     final accentBars = tester.widgetList<Positioned>(
       find.byWidgetPredicate(
         (w) => w is Positioned && w.width == 4 && w.top == 0 && w.bottom == 0,
@@ -192,10 +233,10 @@ void main() {
     expect(find.text('DOCUMENTS'), findsOneWidget);
     expect(find.text('ANALYTICS & DATA'), findsOneWidget);
     expect(find.text('PREFERENCES'), findsOneWidget);
-    expect(find.text('Quotations'), findsOneWidget);
+    expect(find.text('Estimates'), findsOneWidget);
     expect(find.text('Expenses'), findsOneWidget);
     // Settings row carries the update dot indicator.
-    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.settings), findsOneWidget);
 
     // The More list is scrollable now — bring each target into view first.
     Future<void> tapTile(String label) async {
@@ -207,7 +248,7 @@ void main() {
       await tester.tap(find.text(label));
     }
 
-    await tapTile('Quotations');
+    await tapTile('Estimates');
     await tapTile('Expenses');
     await tester.scrollUntilVisible(
       find.text('Logout'),

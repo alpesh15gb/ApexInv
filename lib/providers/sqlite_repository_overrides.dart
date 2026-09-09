@@ -5,6 +5,7 @@ import 'package:apexbooks/repositories/sqlite/sqlite_company_info_repository.dar
 import 'package:apexbooks/repositories/sqlite/sqlite_customer_repository.dart';
 import 'package:apexbooks/repositories/sqlite/sqlite_invoice_item_repository.dart';
 import 'package:apexbooks/repositories/sqlite/sqlite_invoice_repository.dart';
+import 'package:apexbooks/repositories/sqlite/sqlite_jewellery_repository.dart';
 import 'package:apexbooks/repositories/sqlite/sqlite_payment_repository.dart';
 import 'package:apexbooks/repositories/sqlite/sqlite_product_repository.dart';
 import 'package:apexbooks/repositories/sqlite/sqlite_report_repository.dart';
@@ -34,6 +35,9 @@ final sqliteRepositoryOverrides = <Override>[
   ),
   invoiceItemRepositoryProvider.overrideWith(
     (ref) => SqliteInvoiceItemRepository(),
+  ),
+  jewelleryRepositoryProvider.overrideWith(
+    (ref) => SqliteJewelleryRepository(),
   ),
   authRepositoryProvider.overrideWith(
     (ref) => SqliteAuthRepository(),

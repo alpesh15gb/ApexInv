@@ -198,6 +198,71 @@ void main() {
       expect(onB.first['name'], 'Alice');
     });
 
+    test('jewellery rate and tax snapshots propagate without losing fields',
+        () async {
+      await deviceA.insert('metal_rates', {
+        'id': 'rate-22k',
+        'metal': 'gold',
+        'purity': '22K',
+        'rate_per_gram': 7200.0,
+        'sell_rate_per_gram': 7200.0,
+        'buy_rate_per_gram': 6800.0,
+        'effective_date': '2026-09-10',
+      });
+      await deviceA.insert('invoice_items', {
+        'id': 'jewellery-line',
+        'invoice_id': 'jewellery-invoice',
+        'jewellery_tax_treatment': 'retail_3',
+      });
+
+      await engineA.syncNow();
+      await engineB.syncNow();
+
+      final rateOnB = await deviceB
+          .query('metal_rates', where: 'id = ?', whereArgs: ['rate-22k']);
+      final lineOnB = await deviceB.query('invoice_items',
+          where: 'id = ?', whereArgs: ['jewellery-line']);
+      expect(rateOnB, hasLength(1));
+      expect(rateOnB.first['sell_rate_per_gram'], 7200.0);
+      expect(rateOnB.first['buy_rate_per_gram'], 6800.0);
+      expect(lineOnB.first['jewellery_tax_treatment'], 'retail_3');
+    });
+
+    test('legacy jewellery payloads use the historical snapshots', () async {
+      await deviceA.insert('metal_rates', {
+        'id': 'legacy-rate-22k',
+        'metal': 'gold',
+        'purity': '22K',
+        'rate_per_gram': 7000.0,
+        'effective_date': '2026-09-09',
+      });
+      await deviceA.insert('invoice_items', {
+        'id': 'legacy-jewellery-line',
+        'invoice_id': 'legacy-jewellery-invoice',
+      });
+      await engineA.syncNow();
+
+      // Simulate a v61 peer, whose schema has neither split-rate nor tax
+      // treatment columns in its wire payload.
+      final legacyRate =
+          server._data[company]!['metal_rates']!['legacy-rate-22k']!.$1;
+      legacyRate
+        ..remove('sell_rate_per_gram')
+        ..remove('buy_rate_per_gram');
+      server._data[company]!['invoice_items']!['legacy-jewellery-line']!.$1
+          .remove('jewellery_tax_treatment');
+
+      await engineB.syncNow();
+
+      final rateOnB = await deviceB.query('metal_rates',
+          where: 'id = ?', whereArgs: ['legacy-rate-22k']);
+      final lineOnB = await deviceB.query('invoice_items',
+          where: 'id = ?', whereArgs: ['legacy-jewellery-line']);
+      expect(rateOnB.first['sell_rate_per_gram'], 7000.0);
+      expect(rateOnB.first['buy_rate_per_gram'], 7000.0);
+      expect(lineOnB.first['jewellery_tax_treatment'], 'legacy_split');
+    });
+
     test('update beats stale copy (LWW newer wins)', () async {
       await deviceA.insert('customers', {'id': 'c-101', 'name': 'Bob'});
       await engineA.syncNow();

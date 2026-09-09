@@ -38,6 +38,11 @@ const syncTableOrder = <String>[
   'customers',
   'products',
   'batch_info',
+  'metal_rates',
+  'jewellery_attributes',
+  'jewellery_pieces',
+  'job_work_orders',
+  'product_variants',
   'custom_fields',
   'expenses',
   'purchase_orders',
@@ -55,12 +60,14 @@ const syncTableOrder = <String>[
   'invoices',
   'invoice_items',
   'invoice_payments',
+  'old_gold_entries',
 ];
 
 /// Non-standard primary keys used by a small number of synced tables.
 String syncPkColumn(String table) => switch (table) {
       'settings' => 'key',
       'product_metadata' => 'product_id',
+      'jewellery_attributes' => 'product_id',
       _ => 'id',
     };
 

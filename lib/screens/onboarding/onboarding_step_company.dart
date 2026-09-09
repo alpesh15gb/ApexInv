@@ -169,6 +169,14 @@ class _CountryField extends StatelessWidget {
             prefixIcon: const Icon(Icons.public_rounded),
             border: const OutlineInputBorder(),
           ),
+          onSubmitted: (_) {
+            final typed = controller.text.trim();
+            if (typed.isNotEmpty) onChanged(typed);
+            onSubmitted();
+          },
+          onChanged: (value) {
+            if (AppCountries.all.contains(value)) onChanged(value);
+          },
         );
       },
       optionsViewBuilder: (context, onSelected, options) {

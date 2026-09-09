@@ -9,7 +9,7 @@ class AppTheme {
     final base = ThemeData(
       useMaterial3: true,
       primaryColor: const Color(0xFF155EEF),
-      visualDensity: VisualDensity.standard,
+      visualDensity: VisualDensity.compact,
       fontFamilyFallback: _scriptFontFallback,
     );
     return base.copyWith(
@@ -39,6 +39,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 1,
+        toolbarHeight: 56,
         titleTextStyle: TextStyle(
           color: Color(0xFF172033),
           fontSize: 20,
@@ -52,7 +53,7 @@ class AppTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
+          borderRadius: BorderRadius.all(Radius.circular(12)),
           side: BorderSide(color: Color(0xFFDCE2EB)),
         ),
       ),
@@ -60,9 +61,9 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(44, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderRadius: BorderRadius.all(Radius.circular(10)),
           ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
@@ -70,10 +71,10 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(44, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           side: const BorderSide(color: Color(0xFFBAC4D4)),
           shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderRadius: BorderRadius.all(Radius.circular(10)),
           ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
@@ -81,17 +82,17 @@ class AppTheme {
       inputDecorationTheme: const InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
-        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
+          borderRadius: BorderRadius.all(Radius.circular(10)),
           borderSide: BorderSide(color: Color(0xFFBAC4D4)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
+          borderRadius: BorderRadius.all(Radius.circular(10)),
           borderSide: BorderSide(color: Color(0xFFBAC4D4)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
+          borderRadius: BorderRadius.all(Radius.circular(10)),
           borderSide: BorderSide(color: Color(0xFF155EEF), width: 2),
         ),
       ),
@@ -109,6 +110,7 @@ class AppTheme {
           foregroundColor: Color(0xFFF8FAFC),
           surfaceTintColor: Colors.transparent,
           elevation: 0,
+          toolbarHeight: 56,
         ),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFF84ADFF),
@@ -132,17 +134,18 @@ class AppTheme {
           surfaceTintColor: Colors.transparent,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(16)),
+            borderRadius: BorderRadius.all(Radius.circular(12)),
             side: BorderSide(color: Color(0xFF35425A)),
           ),
         ),
-        dividerTheme: const DividerThemeData(color: Color(0xFF35425A), space: 1),
+        dividerTheme:
+            const DividerThemeData(color: Color(0xFF35425A), space: 1),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
             minimumSize: const Size(44, 44),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(12)),
+              borderRadius: BorderRadius.all(Radius.circular(10)),
             ),
             textStyle: const TextStyle(fontWeight: FontWeight.w700),
           ),
@@ -150,10 +153,10 @@ class AppTheme {
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(44, 44),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             side: const BorderSide(color: Color(0xFF7D899D)),
             shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(12)),
+              borderRadius: BorderRadius.all(Radius.circular(10)),
             ),
             textStyle: const TextStyle(fontWeight: FontWeight.w700),
           ),
@@ -161,23 +164,23 @@ class AppTheme {
         inputDecorationTheme: const InputDecorationTheme(
           filled: true,
           fillColor: Color(0xFF172033),
-          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderRadius: BorderRadius.all(Radius.circular(10)),
             borderSide: BorderSide(color: Color(0xFF7D899D)),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderRadius: BorderRadius.all(Radius.circular(10)),
             borderSide: BorderSide(color: Color(0xFF7D899D)),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderRadius: BorderRadius.all(Radius.circular(10)),
             borderSide: BorderSide(color: Color(0xFF84ADFF), width: 2),
           ),
         ),
         dialogTheme: const DialogThemeData(
           backgroundColor: Color(0xFF222D42),
         ),
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+        visualDensity: VisualDensity.compact,
       );
 }

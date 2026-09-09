@@ -47,6 +47,17 @@ class BackupManager {
     'product_metadata',
     'batch_info',
     'custom_fields',
+    // Jewellery verticals + retail variants (migrations 57–60). These are
+    // exported by the JSON backup but were missing from this allowlist, so
+    // a restore silently skipped them — wiping variants, metal rates,
+    // piece tags, old-gold receipts and job work on every JSON restore
+    // (BUG-15).
+    'metal_rates',
+    'jewellery_attributes',
+    'jewellery_pieces',
+    'product_variants',
+    'job_work_orders',
+    'old_gold_entries',
     'invoices',
     'invoice_items',
     'invoice_payments',
@@ -80,6 +91,9 @@ class BackupManager {
     'product_metadata',
     'batch_info',
     'custom_fields',
+    'metal_rates',
+    'jewellery_attributes',
+    'product_variants',
     'expense_categories',
     'financial_accounts',
     'settings',
@@ -100,6 +114,12 @@ class BackupManager {
     'loan_movements',
     'journal_entries',
     'journal_lines',
+    // Children of products/invoices/customers: tagged pieces reference the
+    // product (and the invoice they sold on), old gold references the
+    // invoice and customer, job work stands alone.
+    'jewellery_pieces',
+    'old_gold_entries',
+    'job_work_orders',
   ];
 
   // Create backup of the entire database
@@ -212,6 +232,12 @@ class BackupManager {
     'sync_conflicts',
     'journal_entries',
     'journal_lines',
+    'metal_rates',
+    'jewellery_attributes',
+    'jewellery_pieces',
+    'old_gold_entries',
+    'job_work_orders',
+    'product_variants',
     '_sync_outbox',
     '_sync_state',
     '_migration_log',
@@ -438,10 +464,21 @@ class BackupManager {
       known = {for (final c in cols) (c['name'] as String).toLowerCase()};
       _restoreColumnCache[table] = known;
     }
-    return {
+    final stripped = <String, dynamic>{
       for (final e in row.entries)
         if (known.contains(e.key.toLowerCase())) e.key: e.value
     };
+    // JSON backups made before v62/v63 omit these snapshots. Supplying their
+    // historical equivalents avoids current-schema defaults changing old data.
+    if (table == 'metal_rates' && stripped['rate_per_gram'] != null) {
+      stripped['sell_rate_per_gram'] ??= stripped['rate_per_gram'];
+      stripped['buy_rate_per_gram'] ??= stripped['rate_per_gram'];
+    }
+    if (table == 'invoice_items' &&
+        !stripped.containsKey('jewellery_tax_treatment')) {
+      stripped['jewellery_tax_treatment'] = 'legacy_split';
+    }
+    return stripped;
   }
 
   // Restore from JSON backup

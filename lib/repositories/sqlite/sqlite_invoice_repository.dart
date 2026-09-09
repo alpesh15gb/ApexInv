@@ -1,14 +1,17 @@
 import 'package:apexbooks/database/invoice_service.dart';
 import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/models/verticals.dart';
 import 'package:apexbooks/repositories/invoice_repository.dart';
 
 class SqliteInvoiceRepository implements InvoiceRepository {
   @override
-  Future<void> insertInvoice(Invoice invoice) =>
-      InvoiceService.insertInvoice(invoice);
-  @override
-  Future<void> updateInvoice(Invoice invoice) =>
-      InvoiceService.updateInvoice(invoice);
+  Future<void> insertInvoice(Invoice invoice,
+          {List<OldGoldEntry> oldGoldEntries = const []}) =>
+      InvoiceService.insertInvoice(invoice, oldGoldEntries: oldGoldEntries);
+
+  Future<void> updateInvoice(Invoice invoice,
+          {List<OldGoldEntry> oldGoldEntries = const []}) =>
+      InvoiceService.updateInvoice(invoice, oldGoldEntries: oldGoldEntries);
   @override
   Future<double> getPreviousBalanceDueForInvoice(Invoice invoice) =>
       InvoiceService.getPreviousBalanceDueForInvoice(invoice);
@@ -69,6 +72,8 @@ class SqliteInvoiceRepository implements InvoiceRepository {
     String orderBy = 'id',
     bool orderAscending = false,
     String? customerId,
+    DateTime? fromDate,
+    DateTime? toDate,
   }) =>
       InvoiceService.getInvoicesPaginated(
         page: page,
@@ -78,14 +83,22 @@ class SqliteInvoiceRepository implements InvoiceRepository {
         orderBy: orderBy,
         orderAscending: orderAscending,
         customerId: customerId,
+        fromDate: fromDate,
+        toDate: toDate,
       );
   @override
   Future<int> getInvoiceCount(
-          {String searchQuery = '', String? filterType, String? customerId}) =>
+          {String searchQuery = '',
+          String? filterType,
+          String? customerId,
+          DateTime? fromDate,
+          DateTime? toDate}) =>
       InvoiceService.getInvoiceCount(
           searchQuery: searchQuery,
           filterType: filterType,
-          customerId: customerId);
+          customerId: customerId,
+          fromDate: fromDate,
+          toDate: toDate);
   @override
   Future<void> softDeleteInvoice(String id) =>
       InvoiceService.softDeleteInvoice(id);

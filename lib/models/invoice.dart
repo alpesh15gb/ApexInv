@@ -49,6 +49,8 @@ class Invoice {
       customInvoiceNumber; // shown instead of invoiceNumber in PDF when hideInvoiceNumber is true
   String paymentTermId; // linked payment term ID
   String? customFields; // JSON string of custom field values
+  String
+      industry; // immutable snapshot of the industry profile at creation time
 
   Invoice({
     required this.id,
@@ -84,6 +86,7 @@ class Invoice {
     this.recurringNextDate,
     this.salesChannel = 'invoice',
     this.sourceOrderId,
+    this.industry = '',
   });
 
   /// Text to render for the invoice number in PDF/receipt output, or null to omit the line entirely.
@@ -99,8 +102,13 @@ class Invoice {
   }
 
   InvoiceTotals get _totals => InvoiceTotalsCalculator.totals(
-        lines: items.map((item) => item._amountsForInvoice(
-            taxMode: taxMode, globalTaxRatePercent: taxRate * 100)),
+        lines: items.map((item) => item.isJewelleryLine
+            // Weight lines always carry their own 3% retail-jewellery tax
+            // (sell rates are GST-exclusive); generic global tax does not
+            // replace it.
+            ? item.lineAmounts
+            : item._amountsForInvoice(
+                taxMode: taxMode, globalTaxRatePercent: taxRate * 100)),
         taxMode: taxMode,
         globalTaxRate: taxRate,
         globalTaxRateFormat: TaxRateFormat.fraction,

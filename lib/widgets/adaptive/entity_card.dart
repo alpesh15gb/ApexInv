@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:apexbooks/widgets/adaptive/status_chip.dart';
+
 /// Flat list card with an optional 4px status accent bar on the left edge —
 /// the shared container for mobile list rows (invoices, customers, ...).
 ///
@@ -10,6 +12,7 @@ import 'package:flutter/material.dart';
 class EntityCard extends StatelessWidget {
   final Widget child;
   final Color? accentColor;
+  final StatusTone? accentTone;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final EdgeInsetsGeometry padding;
@@ -19,6 +22,7 @@ class EntityCard extends StatelessWidget {
     super.key,
     required this.child,
     this.accentColor,
+    this.accentTone,
     this.onTap,
     this.onLongPress,
     this.padding = const EdgeInsets.all(14),
@@ -27,9 +31,18 @@ class EntityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    assert(
+      accentColor == null || accentTone == null,
+      'EntityCard accepts either accentColor or accentTone, not both.',
+    );
     final theme = Theme.of(context);
     final radius = BorderRadius.circular(12);
-    final hasAccent = accentColor != null;
+    final resolvedAccent = accentColor ??
+        (accentTone == null
+            ? null
+            : StatusChip.colorsFor(theme.brightness, accentTone!).$2);
+    final accent = resolvedAccent;
+    final hasAccent = accent != null;
     return Padding(
       padding: margin,
       child: Material(
@@ -50,7 +63,7 @@ class EntityCard extends StatelessWidget {
                   top: 0,
                   bottom: 0,
                   width: 4,
-                  child: ColoredBox(color: accentColor!),
+                  child: ColoredBox(color: accent),
                 ),
               Padding(
                 padding: hasAccent

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/domain/invoice_calculator.dart';
-import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/invoice.dart';
@@ -24,6 +23,7 @@ import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/database/payment_service.dart';
 import 'package:apexbooks/widgets/adaptive/entity_card.dart';
+import 'package:apexbooks/widgets/adaptive/status_chip.dart';
 import 'package:apexbooks/widgets/customer_info_button.dart';
 import 'package:apexbooks/utils/formatters.dart';
 import 'package:apexbooks/widgets/app/app.dart';
@@ -72,6 +72,7 @@ class _InvoiceManagementScreenV2State
   String _datePattern = 'dd/MM/yyyy';
   int _totalCount = 0;
   List<Invoice> _pageInvoices = [];
+  String? _loadError;
   final Set<String> _selectedIds = {};
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -94,12 +95,12 @@ class _InvoiceManagementScreenV2State
 
   /// Shared column widths used by both the header table and every row table so
   /// they always align pixel-perfectly.
-  static const List<(String, Color)> _dueDateFilterOptions = [
-    ('all', Colors.grey),
-    ('overdue', Colors.red),
-    ('due_today', Colors.orange),
-    ('due_week', Colors.blue),
-    ('due_month', Colors.teal),
+  static const List<(String, StatusTone)> _dueDateFilterOptions = [
+    ('all', StatusTone.neutral),
+    ('overdue', StatusTone.danger),
+    ('due_today', StatusTone.warning),
+    ('due_week', StatusTone.info),
+    ('due_month', StatusTone.info),
   ];
 
   static String _dueDateFilterLabel(AppLocalizations l10n, String key) {
@@ -138,18 +139,23 @@ class _InvoiceManagementScreenV2State
   // ─── Data loading ──────────────────────────────────────────────────────────
 
   Future<void> _loadPage() async {
-    // Status chips aggregate LIVE counts in memory from the loaded rows, so
-    // the complete result set for this type/search/customer is always
-    // fetched here and the page is sliced in Dart below. The query itself
-    // (filters, ordering, count) is unchanged — only the window is widened.
+    // SQL narrows by type/search/customer/date first; payment-derived facets
+    // (hide-paid, due-date, payment status, ID range, status chips) are then
+    // derived in Dart from the hydrated rows, and item/payment hydration is
+    // batched so no per-invoice N+1 queries run.
     setState(() {
       _isLoadingPage = true;
+      _loadError = null;
       _selectedIds.clear(); // selection reset on every page/search change
     });
     try {
       final results = await Future.wait([
         ref.read(invoiceRepositoryProvider).getInvoicesPaginated(
-              page: _currentPage,
+              // Always fetch the complete SQL-filtered set from offset 0 —
+              // the Dart filters below slice the visible page client-side,
+              // so forwarding _currentPage here would OFFSET past every row
+              // and blank page 2+ (BUG-17).
+              page: 0,
               // These filters are applied in Dart, so fetch the complete
               // result before filtering instead of silently filtering only
               // the currently visible page.
@@ -159,11 +165,15 @@ class _InvoiceManagementScreenV2State
               orderBy: _sortField,
               orderAscending: _sortAscending,
               customerId: _selectedCustomerId,
+              fromDate: _invoiceDateFrom,
+              toDate: _invoiceDateTo,
             ),
         ref.read(invoiceRepositoryProvider).getInvoiceCount(
               searchQuery: _searchQuery,
               filterType: widget.filterType,
               customerId: _selectedCustomerId,
+              fromDate: _invoiceDateFrom,
+              toDate: _invoiceDateTo,
             ),
       ]);
       if (mounted) {
@@ -276,12 +286,11 @@ class _InvoiceManagementScreenV2State
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoadingPage = false);
-        AppError.show(
-            context,
-            AppLocalizations.of(context)!
-                .invoiceMgmtFailedToLoadMessage(e.toString()),
-            onRetry: _loadPage);
+        setState(() {
+          _isLoadingPage = false;
+          _loadError = AppLocalizations.of(context)!
+              .invoiceMgmtFailedToLoadMessage(e.toString());
+        });
       }
     }
   }
@@ -1239,11 +1248,11 @@ class _InvoiceManagementScreenV2State
   //    which table columns show at all.
   // ============================================================
 
-  static const List<Map<String, dynamic>> _paymentStatusFilterOptionsV2 = [
-    {'value': 'all', 'color': Colors.grey},
-    {'value': 'paid', 'color': Colors.green},
-    {'value': 'partial', 'color': Colors.orange},
-    {'value': 'unpaid', 'color': Colors.red},
+  static const _paymentStatusFilterOptionsV2 = [
+    ('all', StatusTone.neutral),
+    ('paid', StatusTone.success),
+    ('partial', StatusTone.warning),
+    ('unpaid', StatusTone.danger),
   ];
 
   /// In-memory status bucket for the quick chips (see [_statusChip]): paid
@@ -1437,19 +1446,18 @@ class _InvoiceManagementScreenV2State
                       spacing: 8,
                       runSpacing: 8,
                       children: _paymentStatusFilterOptionsV2.map((opt) {
-                        final selected = tempStatus == opt['value'];
-                        final color = opt['color'] as Color;
+                        final selected = tempStatus == opt.$1;
+                        final tone = StatusChip.colorsFor(
+                            Theme.of(context).brightness, opt.$2);
                         return ChoiceChip(
                           label: Text(_paymentStatusFilterLabel(
-                              AppLocalizations.of(context)!,
-                              opt['value'] as String)),
+                              AppLocalizations.of(context)!, opt.$1)),
                           selected: selected,
-                          onSelected: (_) => setDialogState(
-                              () => tempStatus = opt['value'] as String),
-                          selectedColor: color.withValues(alpha: 0.18),
+                          onSelected: (_) =>
+                              setDialogState(() => tempStatus = opt.$1),
+                          selectedColor: tone.$1,
                           labelStyle: TextStyle(
-                            color:
-                                selected ? color.withValues(alpha: 0.9) : null,
+                            color: selected ? tone.$2 : null,
                             fontWeight:
                                 selected ? FontWeight.w700 : FontWeight.w500,
                           ),
@@ -1470,17 +1478,17 @@ class _InvoiceManagementScreenV2State
                       runSpacing: 8,
                       children: _dueDateFilterOptions.map((option) {
                         final selected = tempDue == option.$1;
+                        final tone = StatusChip.colorsFor(
+                            Theme.of(context).brightness, option.$2);
                         return ChoiceChip(
                           label: Text(_dueDateFilterLabel(
                               AppLocalizations.of(context)!, option.$1)),
                           selected: selected,
                           onSelected: (_) =>
                               setDialogState(() => tempDue = option.$1),
-                          selectedColor: option.$2.withValues(alpha: 0.18),
+                          selectedColor: tone.$1,
                           labelStyle: TextStyle(
-                            color: selected
-                                ? option.$2.withValues(alpha: 0.9)
-                                : null,
+                            color: selected ? tone.$2 : null,
                             fontWeight:
                                 selected ? FontWeight.w700 : FontWeight.w500,
                           ),
@@ -1694,29 +1702,10 @@ class _InvoiceManagementScreenV2State
   /// the existing AppBar action). The `New <Type>` labeling contract is kept.
   Widget _listHeaderV2(bool isWide) {
     final l10n = AppLocalizations.of(context)!;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                l10n.invoiceMgmtManagementTitle(widget.filterType),
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '$_totalCount ${widget.filterType.toLowerCase()}s',
-                style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
+    return AppListHeader(
+      title: l10n.invoiceMgmtManagementTitle(widget.filterType),
+      subtitle: '$_totalCount ${widget.filterType.toLowerCase()}s',
+      actions: [
         if (isWide)
           AppPrimaryButton(
             onPressed: widget.onCreateInvoice,
@@ -1724,6 +1713,7 @@ class _InvoiceManagementScreenV2State
             label: Text('New ${widget.filterType}'),
           ),
       ],
+      compactActions: const SizedBox.shrink(),
     );
   }
 
@@ -1732,37 +1722,40 @@ class _InvoiceManagementScreenV2State
   /// the existing dialog filters) — no query changes.
   Widget _statusChipsRowV2() {
     final l10n = AppLocalizations.of(context)!;
-    final defs = <(String, String, Color)>[
-      ('all', l10n.invoiceMgmtStatusAllLabel, Colors.grey),
-      ('paid', l10n.paymentStatusPaid, Colors.green),
-      // No localized 'Pending' key exists; pending = outstanding, not overdue.
-      ('pending', 'Pending', Colors.orange),
-      ('overdue', l10n.invoiceMgmtOverdueBadge, Colors.red),
+    final defs = <(String, String, StatusTone)>[
+      ('all', l10n.invoiceMgmtStatusAllLabel, StatusTone.neutral),
+      ('paid', l10n.paymentStatusPaid, StatusTone.success),
+      // Pending = outstanding, not overdue.
+      ('pending', l10n.invoiceMgmtStatusPendingLabel, StatusTone.warning),
+      ('overdue', l10n.invoiceMgmtOverdueBadge, StatusTone.danger),
     ];
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         for (final def in defs)
-          ChoiceChip(
-            label: Text('${def.$2} (${_statusChipCounts[def.$1] ?? 0})'),
-            selected: _statusChip == def.$1,
-            onSelected: (_) {
-              if (_statusChip == def.$1) return;
-              setState(() {
-                _statusChip = def.$1;
-                _currentPage = 0;
-              });
-              _loadPage();
-            },
-            selectedColor: def.$3.withValues(alpha: 0.18),
-            labelStyle: TextStyle(
-              color:
-                  _statusChip == def.$1 ? def.$3.withValues(alpha: 0.95) : null,
-              fontWeight:
-                  _statusChip == def.$1 ? FontWeight.w700 : FontWeight.w500,
-            ),
-          ),
+          Builder(builder: (context) {
+            final tone = StatusChip.colorsFor(
+                Theme.of(context).brightness, def.$3);
+            return ChoiceChip(
+              label: Text('${def.$2} (${_statusChipCounts[def.$1] ?? 0})'),
+              selected: _statusChip == def.$1,
+              onSelected: (_) {
+                if (_statusChip == def.$1) return;
+                setState(() {
+                  _statusChip = def.$1;
+                  _currentPage = 0;
+                });
+                _loadPage();
+              },
+              selectedColor: tone.$1,
+              labelStyle: TextStyle(
+                color: _statusChip == def.$1 ? tone.$2 : null,
+                fontWeight:
+                    _statusChip == def.$1 ? FontWeight.w700 : FontWeight.w500,
+              ),
+            );
+          }),
       ],
     );
   }
@@ -1826,26 +1819,11 @@ class _InvoiceManagementScreenV2State
   }
 
   Widget _sortableHeaderCellV2(String label, String field, TextStyle style) {
-    final active = _sortField == field;
-    return InkWell(
+    return AppSortHeaderLabel(
+      label: label,
+      active: _sortField == field,
+      ascending: _sortAscending,
       onTap: () => _changeSortV2(field),
-      borderRadius: BorderRadius.circular(4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: Text(label, overflow: TextOverflow.ellipsis, style: style),
-          ),
-          const SizedBox(width: 2),
-          Icon(
-            !active
-                ? Icons.unfold_more
-                : (_sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
-            size: 14,
-            color: active ? Colors.white : Colors.white70,
-          ),
-        ],
-      ),
     );
   }
 
@@ -2224,31 +2202,14 @@ class _InvoiceManagementScreenV2State
 
   Widget _tableHeaderRowV2(bool isWide) {
     final l10n = AppLocalizations.of(context)!;
-    TextStyle style = const TextStyle(
-        color: Colors.white,
-        fontSize: 12.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4);
-    return Container(
-      decoration: BoxDecoration(
-        gradient: InvoiceManagementScreenColors.topBarBackgroundGradientColor,
-        borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+    const style = TextStyle(fontSize: 12.5);
+    return AppTableHeader(
+      leading: AppTableSelection(
+        value: _isAllPageSelected,
+        tristate: _isSomePageSelected && !_isAllPageSelected,
+        onChanged: (_) => _toggleSelectAll(),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 44,
-            child: Checkbox(
-              value: _isAllPageSelected,
-              tristate: _isSomePageSelected && !_isAllPageSelected,
-              onChanged: (_) => _toggleSelectAll(),
-              activeColor: Colors.white,
-              checkColor: Theme.of(context).primaryColor,
-              side: const BorderSide(color: Colors.white70, width: 2),
-            ),
-          ),
+      children: [
           SizedBox(
               width: 60,
               child:
@@ -2281,7 +2242,6 @@ class _InvoiceManagementScreenV2State
               width: isWide ? 300 : 48,
               child: Text(l10n.invoiceMgmtColActions, style: style)),
         ],
-      ),
     );
   }
 
@@ -2415,7 +2375,7 @@ class _InvoiceManagementScreenV2State
               width: 76,
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: _buildPaymentStatusChip(invoice.paymentStatus),
+                child: PaymentStatusChip(status: invoice.paymentStatus),
               ),
             ),
             Expanded(
@@ -2444,98 +2404,54 @@ class _InvoiceManagementScreenV2State
     );
   }
 
-  Widget _paginationV2(bool isWide) {
+  Widget _paginationV2() {
     final l10n = AppLocalizations.of(context)!;
-    // Reference footer: "Showing 1–10 of N" next to the existing controls.
     final start = _totalCount == 0 ? 0 : _currentPage * _pageSize + 1;
     final end =
         (_currentPage * _pageSize + _pageInvoices.length).clamp(0, _totalCount);
-    final left = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('Showing $start–$end of $_totalCount',
+    return AppPagination(
+      showingLabel: 'Showing $start–$end of $_totalCount',
+      rowsPerPageLabel: l10n.invoiceMgmtRowsPerPageLabel,
+      pageSize: _pageSize,
+      onPageSizeChanged: (n) {
+        setState(() {
+          _pageSize = n;
+          _currentPage = 0;
+        });
+        _loadPage();
+      },
+      currentPage: _currentPage,
+      totalPages: _totalPages,
+      onPrevious: _currentPage > 0
+          ? () {
+              setState(() => _currentPage--);
+              _loadPage();
+            }
+          : null,
+      onNext: (_currentPage + 1 < _totalPages)
+          ? () {
+              setState(() => _currentPage++);
+              _loadPage();
+            }
+          : null,
+      previousLabel: l10n.actionPrevious,
+      nextLabel: l10n.actionNext,
+      pageIndicator: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: Theme.of(context).primaryColor.withValues(alpha: 0.3)),
+        ),
+        child: Text(
+            l10n.invoiceMgmtPageOfLabel(
+                _currentPage + 1, _totalPages > 0 ? _totalPages : 1),
             style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 13,
-                fontWeight: FontWeight.w600)),
-        const SizedBox(width: 16),
-        Text(l10n.invoiceMgmtRowsPerPageLabel,
-            style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface, fontSize: 13)),
-        const SizedBox(width: 8),
-        DropdownButton<int>(
-          value: _pageSize,
-          underline: const SizedBox(),
-          items: [10, 25, 50, 100]
-              .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
-              .toList(),
-          onChanged: (n) {
-            if (n == null) return;
-            setState(() {
-              _pageSize = n;
-              _currentPage = 0;
-            });
-            _loadPage();
-          },
-        ),
-      ],
-    );
-
-    final right = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        OutlinedButton.icon(
-          onPressed: _currentPage > 0
-              ? () {
-                  setState(() => _currentPage--);
-                  _loadPage();
-                }
-              : null,
-          icon: const Icon(Icons.chevron_left, size: 18),
-          label: Text(l10n.actionPrevious),
-        ),
-        const SizedBox(width: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-                color: Theme.of(context).primaryColor.withValues(alpha: 0.3)),
-          ),
-          child: Text(
-              l10n.invoiceMgmtPageOfLabel(
-                  _currentPage + 1, _totalPages > 0 ? _totalPages : 1),
-              style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).primaryColor)),
-        ),
-        const SizedBox(width: 12),
-        OutlinedButton.icon(
-          onPressed: (_currentPage + 1 < _totalPages)
-              ? () {
-                  setState(() => _currentPage++);
-                  _loadPage();
-                }
-              : null,
-          icon: const Icon(Icons.chevron_right, size: 18),
-          label: Text(l10n.actionNext),
-        ),
-      ],
-    );
-
-    if (isWide) {
-      return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [left, right]);
-    }
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 12,
-      runSpacing: 10,
-      children: [left, right],
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).primaryColor)),
+      ),
     );
   }
 
@@ -2574,13 +2490,14 @@ class _InvoiceManagementScreenV2State
         ),
         const SizedBox(width: 8),
         if (_isBulkLoading)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2)),
+                    color: Theme.of(context).colorScheme.primary,
+                    strokeWidth: 2)),
           ),
         IconButton(
           icon: const Icon(Icons.download_for_offline_outlined),
@@ -2619,13 +2536,14 @@ class _InvoiceManagementScreenV2State
         tooltip: 'New ${widget.filterType}',
       ),
       if (_isBulkLoading)
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           child: SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(
-                  color: Colors.white, strokeWidth: 2)),
+                  color: Theme.of(context).colorScheme.primary,
+                  strokeWidth: 2)),
         ),
       PopupMenuButton<String>(
         icon: const Icon(Icons.more_vert),
@@ -2678,10 +2596,6 @@ class _InvoiceManagementScreenV2State
         appBar: AppBar(
           title: Text(AppLocalizations.of(context)!
               .invoiceMgmtManagementTitle(widget.filterType)),
-          backgroundColor: Theme.of(context).appBarTheme.backgroundColor ??
-              Theme.of(context).primaryColor,
-          foregroundColor: Colors.white,
-          elevation: 0,
           centerTitle: false,
           actions: [..._headerBarV2(isWide), const SizedBox(width: 8)],
         ),
@@ -2721,76 +2635,75 @@ class _InvoiceManagementScreenV2State
                     ),
             ),
             const SizedBox(height: 16),
-            _isLoadingPage
-                ? const Expanded(child: AppLoadingState())
-                : Expanded(
-                    child: _pageInvoices.isEmpty
-                        ? _emptyStateV2()
-                        : useCards
-                            ? ListView.separated(
-                                padding:
-                                    const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                                itemCount: _pageInvoices.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 2),
-                                itemBuilder: (context, index) {
-                                  final globalIndex =
-                                      (_currentPage * _pageSize) + index + 1;
-                                  return _invoiceCardV2(
-                                      _pageInvoices[index], globalIndex);
-                                },
-                              )
-                            : Align(
-                                alignment: Alignment.topCenter,
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                      maxWidth: AppLayout.maxWidthWide),
-                                  child: SingleChildScrollView(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 20),
-                                    child: Card(
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(
-                                            AppBorderRadius.small),
-                                        side: BorderSide(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .outlineVariant),
-                                      ),
-                                      clipBehavior: Clip.antiAlias,
-                                      child: Column(
-                                        children: [
-                                          _tableHeaderRowV2(isWide),
-                                          ..._pageInvoices
-                                              .asMap()
-                                              .entries
-                                              .map((entry) {
-                                            final invoice = entry.value;
-                                            final index = entry.key;
-                                            final globalIndex =
-                                                (_currentPage * _pageSize) +
-                                                    index +
-                                                    1;
-                                            return _invoiceRowV2(
-                                                invoice,
-                                                globalIndex,
-                                                index.isEven,
-                                                isWide);
-                                          }),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
+            Expanded(
+              child: AppListStateView(
+                state: _isLoadingPage
+                    ? AppListState.loading
+                    : _loadError != null
+                        ? AppListState.error
+                        : _pageInvoices.isEmpty
+                            ? AppListState.empty
+                            : AppListState.data,
+                errorMessage: _loadError,
+                onRetry: _loadPage,
+                emptyState: _emptyStateV2(),
+                data: useCards
+                    ? ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                        itemCount: _pageInvoices.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 2),
+                        itemBuilder: (context, index) {
+                          final globalIndex =
+                              (_currentPage * _pageSize) + index + 1;
+                          return _invoiceCardV2(
+                              _pageInvoices[index], globalIndex);
+                        },
+                      )
+                    : Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                              maxWidth: AppLayout.maxWidthWide),
+                          child: SingleChildScrollView(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 20),
+                            child: Card(
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                    AppBorderRadius.small),
+                                side: BorderSide(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant),
                               ),
-                  ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Column(
+                                children: [
+                                  _tableHeaderRowV2(isWide),
+                                  ..._pageInvoices.asMap().entries.map((entry) {
+                                    final invoice = entry.value;
+                                    final index = entry.key;
+                                    final globalIndex =
+                                        (_currentPage * _pageSize) + index + 1;
+                                    return _invoiceRowV2(invoice, globalIndex,
+                                        index.isEven, isWide);
+                                  }),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+              ),
+            ),
             if (_pageInvoices.isNotEmpty)
               Container(
                 color: Theme.of(context).colorScheme.surfaceContainer,
                 padding:
                     const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-                child: _paginationV2(isWide),
+                child: _paginationV2(),
               ),
           ],
         ),
@@ -2807,11 +2720,7 @@ class _InvoiceManagementScreenV2State
     final hasOutstanding = invoice.paymentStatus != PaymentStatus.paid;
     final menu = _rowActionsV2(invoice, false);
     return EntityCard(
-      accentColor: switch (invoice.paymentStatus) {
-        PaymentStatus.paid => Colors.green,
-        PaymentStatus.partial => Colors.orange,
-        _ => Colors.red,
-      },
+      accentTone: PaymentStatusChip.toneFor(invoice.paymentStatus),
       margin: EdgeInsets.zero,
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
       child: Column(
@@ -2862,7 +2771,7 @@ class _InvoiceManagementScreenV2State
               CustomerInfoButton(customer: invoice.customer),
               if (widget.filterType == 'Invoice') ...[
                 const SizedBox(width: 8),
-                _buildPaymentStatusChip(invoice.paymentStatus),
+                PaymentStatusChip(status: invoice.paymentStatus),
               ],
             ],
           ),
@@ -3008,36 +2917,6 @@ class _InvoiceManagementScreenV2State
           ),
           child: Icon(icon, color: effectiveColor, size: 18),
         ),
-      ),
-    );
-  }
-
-  Widget _buildPaymentStatusChip(PaymentStatus status) {
-    final l10n = AppLocalizations.of(context)!;
-    final Color color;
-    final String label;
-    switch (status) {
-      case PaymentStatus.paid:
-        color = Colors.green;
-        label = l10n.paymentStatusPaid;
-      case PaymentStatus.partial:
-        color = Colors.orange;
-        label = l10n.paymentStatusPartial;
-      case PaymentStatus.unpaid:
-        color = Colors.red;
-        label = l10n.paymentStatusUnpaid;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(
-        label,
-        style:
-            TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/domain/jewellery/jewellery_calculator.dart';
 import 'package:apexbooks/models/customer.dart';
 import 'package:apexbooks/models/invoice.dart';
 import 'package:apexbooks/models/invoice_item.dart';
@@ -143,6 +144,7 @@ class PosService {
           'discount': item.discount,
           'unit_price': item.unitPrice,
           'extra_cost': item.extraCost,
+          'jewellery_tax_treatment': item.jewelleryTaxTreatment.key,
           'discount_per_unit': item.discountPerUnit ? 1 : 0,
           'is_product_saved': 1,
           'product_type': item.product.type,

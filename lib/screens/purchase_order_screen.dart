@@ -1039,6 +1039,21 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
                     ? 'Create Purchase Order'
                     : 'Edit Purchase Order')),
             body: DocumentEditorShell(
+              documentTitle: existingOrder == null
+                  ? 'New Purchase Order'
+                  : 'Edit Purchase Order',
+              documentReference: existingOrder?.orderNumber == null
+                  ? 'Draft purchase order'
+                  : 'PO No. ${existingOrder!.orderNumber}',
+              documentMode: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'purchase', label: Text('Purchase')),
+                  ButtonSegment(value: 'credit', label: Text('Credit')),
+                ],
+                selected: const {'purchase'},
+                showSelectedIcon: false,
+                onSelectionChanged: null,
+              ),
               stateLabel:
                   existingOrder == null ? 'Draft workspace' : 'Editing draft',
               validationErrors: const [],
@@ -1289,21 +1304,16 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<Product>(
-                decoration: const InputDecoration(labelText: 'Product *'),
-                items: products
-                    .map((p) => DropdownMenuItem(
-                          value: p,
-                          child: Text(p.name, overflow: TextOverflow.ellipsis),
-                        ))
-                    .toList(),
-                onChanged: (p) {
-                  selectedProduct = p;
-                  if (p != null) {
-                    priceController.text = p.purchasePrice > 0
-                        ? p.purchasePrice.toStringAsFixed(2)
-                        : p.price.toStringAsFixed(2);
-                  }
+              DocumentItemPicker(
+                products: products,
+                initialValue: selectedProduct?.name ?? '',
+                label: 'Product *',
+                onChanged: (_) {},
+                onSelected: (product) {
+                  selectedProduct = product;
+                  priceController.text = product.purchasePrice > 0
+                      ? product.purchasePrice.toStringAsFixed(2)
+                      : product.price.toStringAsFixed(2);
                 },
               ),
               const SizedBox(height: 12),

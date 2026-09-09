@@ -1,5 +1,7 @@
 import 'package:apexbooks/common/common.dart';
 
+import 'package:apexbooks/domain/jewellery/jewellery_calculator.dart';
+
 // Price glossary — which "price" to use where:
 //
 // product.price          Stored catalog price. Tax-inclusive or exclusive
@@ -42,15 +44,25 @@ class InvoiceLineAmount {
   final double taxRatePercent;
   final double displayTotal;
 
+  /// Jewellery weight lines carry their statutory 3% tax separately from the
+  /// generic product/global tax configuration. Null ⇒ derived from the rate.
+  final double? itemTaxOverride;
+
+  /// True only for a retail jewellery line that must keep its statutory 3%
+  /// treatment even when the document otherwise uses a generic global rate.
+  final bool useTaxOverrideInGlobal;
+
   const InvoiceLineAmount({
     required this.lineTotal,
     required this.grossTotal,
     required this.discountTotal,
     required this.taxRatePercent,
     required this.displayTotal,
+    this.itemTaxOverride,
+    this.useTaxOverrideInGlobal = false,
   });
 
-  double get itemTax => lineTotal * (taxRatePercent / 100);
+  double get itemTax => itemTaxOverride ?? lineTotal * (taxRatePercent / 100);
 }
 
 class InvoiceTotals {
@@ -151,11 +163,44 @@ class InvoiceTotalsCalculator {
     final price = (row['unit_price'] as num?)?.toDouble() ??
         (row['product_price'] as num?)?.toDouble() ??
         0.0;
+    final quantity = (row['quantity'] as num?)?.toDouble() ?? 0.0;
+    final discount = (row['discount'] as num?)?.toDouble() ?? 0.0;
+    final discountPerUnit = (row['discount_per_unit'] as int?) == 1;
+    final metalRateId = row['metal_rate_id'] as String?;
+    if (metalRateId != null && metalRateId.isNotEmpty) {
+      final treatment = jewelleryTaxTreatmentFromKey(
+          row['jewellery_tax_treatment'] as String?);
+      // Jewellery weight line: unit_price is the purity-adjusted
+      // GST-exclusive sell rate/gram and quantity the net grams. Making and
+      // wastage ride on top in the same 3% retail-jewellery tax bucket.
+      final metalBase = (discountPerUnit
+              ? (price - discount) * quantity
+              : price * quantity - discount)
+          .clamp(0.0, double.infinity);
+      final charges = ((row['making_amount'] as num?)?.toDouble() ?? 0.0) +
+          ((row['wastage_amount'] as num?)?.toDouble() ?? 0.0);
+      final base = metalBase + charges;
+      final split = JewelleryCalculator.frozenLineTaxSplit(
+        metalBase: metalBase,
+        makingAmount: charges,
+        wastageAmount: 0,
+        treatment: treatment,
+      );
+      return InvoiceLineAmount(
+        lineTotal: base,
+        grossTotal: price * quantity + charges,
+        discountTotal: discountPerUnit ? discount * quantity : discount,
+        taxRatePercent: jewelleryGstPercent,
+        displayTotal: base,
+        itemTaxOverride: split.metalTax + split.makingTax,
+        useTaxOverrideInGlobal: treatment == JewelleryTaxTreatment.retail3,
+      );
+    }
     return line(
       price: price,
-      quantity: (row['quantity'] as num?)?.toDouble() ?? 0.0,
-      discount: (row['discount'] as num?)?.toDouble() ?? 0.0,
-      discountPerUnit: (row['discount_per_unit'] as int?) == 1,
+      quantity: quantity,
+      discount: discount,
+      discountPerUnit: discountPerUnit,
       extraCost: (row['extra_cost'] as num?)?.toDouble() ?? 0.0,
       taxRatePercent: (row['product_tax_rate'] as num?)?.toDouble() ?? 0.0,
       priceIncludesTax: (row['product_price_includes_tax'] as int?) == 1,
@@ -177,19 +222,25 @@ class InvoiceTotalsCalculator {
     double grossSubtotal = 0;
     double totalDiscount = 0;
     double itemTax = 0;
+    double globalTax = 0;
+    final globalRateFraction = globalTaxRateFormat == TaxRateFormat.percent
+        ? globalTaxRate / 100
+        : globalTaxRate;
 
     for (final line in lines) {
       subtotal += line.lineTotal;
       grossSubtotal += line.grossTotal;
       totalDiscount += line.discountTotal;
       if (taxMode == TaxMode.perItem) itemTax += line.itemTax;
+      if (taxMode == TaxMode.global) {
+        globalTax += line.useTaxOverrideInGlobal
+            ? line.itemTaxOverride ?? line.lineTotal * globalRateFraction
+            : line.lineTotal * globalRateFraction;
+      }
     }
 
     final tax = switch (taxMode) {
-      TaxMode.global => subtotal *
-          (globalTaxRateFormat == TaxRateFormat.percent
-              ? globalTaxRate / 100
-              : globalTaxRate),
+      TaxMode.global => globalTax,
       TaxMode.perItem => itemTax,
       TaxMode.none => 0.0,
     };

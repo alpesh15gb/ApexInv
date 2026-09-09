@@ -1,8 +1,11 @@
 import 'package:apexbooks/models/invoice.dart';
+import 'package:apexbooks/models/verticals.dart';
 
 abstract class InvoiceRepository {
-  Future<void> insertInvoice(Invoice invoice);
-  Future<void> updateInvoice(Invoice invoice);
+  Future<void> insertInvoice(Invoice invoice,
+      {List<OldGoldEntry> oldGoldEntries = const []});
+  Future<void> updateInvoice(Invoice invoice,
+      {List<OldGoldEntry> oldGoldEntries = const []});
   Future<double> getPreviousBalanceDueForInvoice(Invoice invoice);
   Future<double> getPreviousBalanceDueForCustomer({
     required String customerId,
@@ -34,11 +37,15 @@ abstract class InvoiceRepository {
     String orderBy = 'id',
     bool orderAscending = false,
     String? customerId,
+    DateTime? fromDate,
+    DateTime? toDate,
   });
   Future<int> getInvoiceCount({
     String searchQuery = '',
     String? filterType,
     String? customerId,
+    DateTime? fromDate,
+    DateTime? toDate,
   });
   Future<void> softDeleteInvoice(String id);
   Future<void> restoreInvoice(String id);

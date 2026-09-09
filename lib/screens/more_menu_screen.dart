@@ -5,7 +5,9 @@ import 'package:apexbooks/common/app_config.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/navigation/dashboard_destinations.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
+import 'package:apexbooks/providers/industry_provider.dart';
 import 'package:apexbooks/screens/import_screen.dart';
 import 'package:apexbooks/widgets/app/app.dart';
 
@@ -29,6 +31,16 @@ class MoreMenuScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final cfg = ref.watch(appEditionConfigProvider);
+    final industry = ref.watch(industryProfileProvider);
+    bool visible(DashboardTab tab) {
+      if (tab.adminOnly && !user.isAdmin()) return false;
+      final allowed = tab.industries;
+      return allowed == null || allowed.contains(industry);
+    }
+
+    Widget tabTile(DashboardTab tab, {bool showDot = false}) => _tile(
+        context, tab.id, tab.filledIcon, tab.label(l10n),
+        showDot: showDot);
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       child: Column(
@@ -37,45 +49,58 @@ class MoreMenuScreen extends ConsumerWidget {
           _userHeader(context),
           const SizedBox(height: 20),
           _groupHeading(context, l10n.moreSectionDocuments),
-          _section(context, 'Sales (Master)', [
-            _tile(context, 2, Icons.receipt_long_outlined, 'Sales Invoices'),
-            _tile(context, 3, Icons.request_quote_outlined, l10n.navQuotations),
-            _tile(context, 16, Icons.request_page_outlined, 'Proforma Invoice'),
-            _tile(context, 4, Icons.payments_outlined, 'Payment In'),
-            _tile(context, 19, Icons.shopping_bag_outlined, 'Sale Order'),
-            _tile(
-                context, 15, Icons.local_shipping_outlined, 'Delivery Challan'),
-            _tile(context, 13, Icons.note_alt_outlined, 'Credit Note'),
-            _tile(context, 20, Icons.point_of_sale_outlined, 'POS'),
+          if (visible(DashboardTab.metalRates))
+            _section(
+                context, l10n.navMetalRates, [tabTile(DashboardTab.metalRates)]),
+          if (visible(DashboardTab.metalRates)) const SizedBox(height: 16),
+          if (visible(DashboardTab.jobWork)) ...[
+            _section(context, 'Job Work', [tabTile(DashboardTab.jobWork)]),
+            const SizedBox(height: 16),
+          ],
+          _section(context, l10n.navSectionSales, [
+            for (final tab in [
+              DashboardTab.salesInvoices,
+              DashboardTab.estimates,
+              DashboardTab.proforma,
+              DashboardTab.paymentIn,
+              DashboardTab.saleOrders,
+              DashboardTab.deliveryChallan,
+              DashboardTab.creditNote,
+              DashboardTab.pos,
+            ])
+              if (visible(tab)) tabTile(tab),
           ]),
           const SizedBox(height: 16),
-          _section(context, 'Purchase (Master)', [
-            _tile(context, 11, Icons.inventory_outlined, 'Purchase Bills'),
-            _tile(context, 9, Icons.shopping_cart_outlined, 'Purchase Order'),
-            _tile(context, 21, Icons.payments_outlined, 'Payment Out'),
-            _tile(context, 8, Icons.receipt_long_outlined, 'Expenses'),
-            _tile(context, 14, Icons.note_add_outlined, 'Debit Note'),
+          _section(context, l10n.navSectionPurchase, [
+            for (final tab in [
+              DashboardTab.purchaseBills,
+              DashboardTab.purchaseOrders,
+              DashboardTab.paymentOut,
+              DashboardTab.expenses,
+              DashboardTab.debitNote,
+            ])
+              if (visible(tab)) tabTile(tab),
           ]),
           const SizedBox(height: 16),
-          _section(context, 'Cash And Bank', [
-            _tile(context, 22, Icons.account_balance_outlined, 'Bank Accounts'),
-            _tile(context, 23, Icons.account_balance_wallet_outlined,
-                'Cash In Hand'),
-            _tile(context, 24, Icons.confirmation_number_outlined, 'Cheques'),
-            _tile(context, 25, Icons.request_quote_outlined, 'Loan Accounts'),
+          _section(context, l10n.navSectionCashBank, [
+            for (final tab in [
+              DashboardTab.bankAccounts,
+              DashboardTab.cashInHand,
+              DashboardTab.cheques,
+              DashboardTab.loanAccounts,
+            ])
+              if (visible(tab)) tabTile(tab),
           ]),
           const SizedBox(height: 16),
           _section(context, l10n.moreSectionAnalytics, [
-            _tile(context, 7, Icons.bar_chart_outlined, l10n.navReports),
+            tabTile(DashboardTab.reports),
           ]),
           const SizedBox(height: 16),
           _section(context, l10n.moreSectionPreferences, [
-            _tile(context, 10, Icons.settings_outlined, l10n.navSettings,
-                showDot: hasUpdate),
-            _tile(context, 17, Icons.notifications_active_outlined,
-                'Payment Reminders'),
-            if (user.isAdmin())
-              _tile(context, 18, Icons.fact_check_outlined, 'Audit Log'),
+            tabTile(DashboardTab.settings, showDot: hasUpdate),
+            tabTile(DashboardTab.reminders),
+            if (visible(DashboardTab.auditLog))
+              tabTile(DashboardTab.auditLog),
             _pushTile(
               context,
               Icons.upload_file_outlined,

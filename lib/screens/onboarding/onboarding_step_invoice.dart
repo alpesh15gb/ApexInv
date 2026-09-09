@@ -15,6 +15,8 @@ class OnboardingStepInvoice extends StatelessWidget {
   final bool leadingZeros;
   final ValueChanged<bool> onLeadingZerosChanged;
   final TextEditingController taxRateController;
+  final bool isGstRegistered;
+  final ValueChanged<bool> onGstChanged;
 
   const OnboardingStepInvoice({
     super.key,
@@ -26,6 +28,8 @@ class OnboardingStepInvoice extends StatelessWidget {
     required this.leadingZeros,
     required this.onLeadingZerosChanged,
     required this.taxRateController,
+    required this.isGstRegistered,
+    required this.onGstChanged,
   });
 
   @override
@@ -105,9 +109,40 @@ class OnboardingStepInvoice extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          Text('GST registration',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.receipt_long_rounded),
+                  label: Text('GST registered')),
+              ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.money_off_outlined),
+                  label: Text('Non-GST')),
+            ],
+            selected: {isGstRegistered},
+            showSelectedIcon: false,
+            onSelectionChanged: (selection) => onGstChanged(selection.first),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            isGstRegistered
+                ? 'GSTIN, HSN/SAC and GST breakup stay on. You can add GSTIN later in Company Info.'
+                : 'GST fields stay hidden, tax defaults to 0 and new bills use “Bill of Supply”. Change anytime in Settings → Invoice Settings.',
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
           AppTextField(
             controller: taxRateController,
             labelText: l10n.onboardingDefaultTaxRateLabel,
+            helperText:
+                isGstRegistered ? null : 'Tax stays 0 for non-GST businesses.',
+            enabled: isGstRegistered,
             prefixIcon: const Icon(Icons.percent_rounded),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
           ),
@@ -154,6 +189,13 @@ class _CurrencyField extends StatelessWidget {
             prefixIcon: const Icon(Icons.attach_money),
             border: const OutlineInputBorder(),
           ),
+          onSubmitted: (_) {
+            final typed = controller.text.trim().toUpperCase();
+            final match = SupportedCurrencies.all.where(
+                (c) => c.code.toUpperCase() == typed);
+            if (match.isNotEmpty) onChanged(match.first.code);
+            onSubmitted();
+          },
         );
       },
       optionsViewBuilder: (context, onSelected, options) {

@@ -44,6 +44,7 @@ class JournalStore {
   static const srcAdjustment = 'adjustment';
   static const srcLoanMovement = 'loan_movement';
   static const srcAccountOpening = 'account_opening';
+  static const srcOldGold = 'old_gold';
 
   /// Journal source type for a cheque's linked payment row.
   static String? paymentSourceForCheque(String chequeSourceType) {
@@ -382,12 +383,14 @@ class JournalStore {
       ''');
       for (final p in payRows) {
         final method = p['payment_method'] as String? ?? 'Cash';
-        final account = method == 'Check'
-            ? LedgerService.accChequesInHand
-            : display(p['account_id'] as String?,
-                fallback: method == 'Cash'
-                    ? LedgerService.accCash
-                    : LedgerService.accBank);
+        final account = method == LedgerService.receiptMethodOldGold
+            ? LedgerService.accOldGold
+            : method == 'Check'
+                ? LedgerService.accChequesInHand
+                : display(p['account_id'] as String?,
+                    fallback: method == 'Cash'
+                        ? LedgerService.accCash
+                        : LedgerService.accBank);
         await postIfMissing(LedgerPostings.receiptEntry(
           date: DateTime.tryParse(p['d'] as String? ?? '') ?? DateTime.now(),
           customerName: p['customer_name'] as String? ?? '',
@@ -396,6 +399,31 @@ class JournalStore {
           account: account,
           currencyCode: p['currency_code'] as String? ?? 'INR',
           sourceId: p['id'] as String,
+        ));
+      }
+    }
+
+    // 2b. Historical/manual old-gold RCM — mirror of the projection section.
+    if (await _tableExists(db, 'old_gold_entries') &&
+        await _tableExists(db, 'invoices') &&
+        (await _columns(db, 'invoices')).containsAll(['id', 'date'])) {
+      final rcmRows = await db.rawQuery('''
+        SELECT o.id, o.rcm_tax, o.customer_name,
+               i.date AS d, i.currency_code
+        FROM old_gold_entries o
+        LEFT JOIN invoices i ON i.id = o.invoice_id
+        WHERE o.rcm_tax > 0
+        ORDER BY d
+      ''');
+      for (final r in rcmRows) {
+        final rcmTax = (r['rcm_tax'] as num?)?.toDouble() ?? 0;
+        if (rcmTax <= 0) continue;
+        await postIfMissing(LedgerPostings.oldGoldRcmEntry(
+          date: DateTime.tryParse(r['d'] as String? ?? '') ?? DateTime.now(),
+          customerName: r['customer_name'] as String? ?? '',
+          amount: rcmTax,
+          currencyCode: r['currency_code'] as String? ?? 'INR',
+          sourceId: r['id'] as String,
         ));
       }
     }

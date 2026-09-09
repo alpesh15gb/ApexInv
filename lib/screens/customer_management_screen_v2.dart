@@ -7,8 +7,8 @@ import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/utils/formatters.dart';
 import 'package:apexbooks/utils/gstin_validator.dart';
 import 'package:apexbooks/common/common.dart';
-import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/widgets/app/app.dart';
+import 'package:apexbooks/widgets/adaptive/status_chip.dart';
 import 'package:apexbooks/common/supported_currencies.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -45,6 +45,7 @@ class _CustomerManagementScreenV2State
   int _pageSize = 10;
   int _currentPage = 0;
   bool _isLoading = false;
+  String? _loadError;
   String? _companyCountry;
   String get _taxWord => isIndiaCountry(_companyCountry)
       ? AppLocalizations.of(context)!.taxWordGst
@@ -123,7 +124,10 @@ class _CustomerManagementScreenV2State
 
   Future<void> _loadCustomers() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     try {
       if (!mounted) return;
       final customerRepo = ref.read(customerRepositoryProvider);
@@ -169,10 +173,11 @@ class _CustomerManagementScreenV2State
         _filterAndSort();
       });
     } catch (e) {
-      _showSnackBar(
-          AppLocalizations.of(context)!
-              .customerMgmtLoadErrorMessage(e.toString()),
-          isError: true);
+      if (!mounted) return;
+      final message = AppLocalizations.of(context)!
+          .customerMgmtLoadErrorMessage(e.toString());
+      setState(() => _loadError = message);
+      if (_customers.isNotEmpty) _showSnackBar(message, isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -1418,35 +1423,11 @@ class _CustomerManagementScreenV2State
   // _onSortSelectionV2) — no query change, just presentation ordering.
   Widget _sortableHeaderV2(String label, String field) {
     final active = _sortBy == field;
-    return InkWell(
+    return AppSortHeaderLabel(
+      label: label,
+      active: active,
+      ascending: _isAscending,
       onTap: () => _onSortSelectionV2(field, active ? !_isAscending : true),
-      borderRadius: BorderRadius.circular(4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.4,
-              ),
-            ),
-          ),
-          const SizedBox(width: 2),
-          Icon(
-            !active
-                ? Icons.unfold_more
-                : (_isAscending ? Icons.arrow_upward : Icons.arrow_downward),
-            size: 13,
-            color: active ? Colors.white : Colors.white70,
-          ),
-        ],
-      ),
     );
   }
 
@@ -1468,6 +1449,25 @@ class _CustomerManagementScreenV2State
         label,
         style: TextStyle(
             fontSize: 11, fontWeight: FontWeight.w600, color: color.shade700),
+      ),
+    );
+  }
+
+  Widget _loyaltyPillV2(Customer c) {
+    final l10n = AppLocalizations.of(context)!;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.teal.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.teal.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        '${c.loyaltyPoints.toStringAsFixed(0)} ${l10n.loyaltyPointsLabel}',
+        style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF00796B)),
       ),
     );
   }
@@ -1646,153 +1646,87 @@ class _CustomerManagementScreenV2State
     );
   }
 
-  Widget _statCardV2({
-    required String label,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color accent,
-  }) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 170),
-      padding: const EdgeInsets.all(16),
-      decoration: _flatCardDecorationV2(context),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                const SizedBox(height: 6),
-                Text(value,
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: accent, size: 20),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _statCardsRowV2() {
-    final cards = [
-      _statCardV2(
+    final scheme = Theme.of(context).colorScheme;
+    Color tone(StatusTone tone) =>
+        StatusChip.colorsFor(Theme.of(context).brightness, tone).$2;
+    return AppStatGrid(stats: [
+      AppListStat(
         label: AppLocalizations.of(context)!.customerMgmtTotalCustomersLabel,
         value: '${_customers.length}',
         subtitle:
             AppLocalizations.of(context)!.customerMgmtAllCustomersSubtitle,
         icon: Icons.groups_outlined,
-        accent: Theme.of(context).primaryColor,
+        accent: scheme.primary,
       ),
-      _statCardV2(
+      AppListStat(
         label: AppLocalizations.of(context)!.customerMgmtBusinessesLabel,
         value: '$_businessesCountV2',
         subtitle: AppLocalizations.of(context)!
             .customerMgmtRegisteredBusinessesSubtitle,
         icon: Icons.apartment_outlined,
-        accent: Colors.green,
+        accent: tone(StatusTone.success),
       ),
-      _statCardV2(
+      AppListStat(
         label: AppLocalizations.of(context)!.customerMgmtIndividualsLabel,
         value: '$_individualsCountV2',
         subtitle: AppLocalizations.of(context)!
             .customerMgmtIndividualCustomersSubtitle,
         icon: Icons.person_outline,
-        accent: Colors.deepPurple,
+        accent: tone(StatusTone.info),
       ),
-      _statCardV2(
+      AppListStat(
         label: AppLocalizations.of(context)!
             .customerMgmtTaxRegisteredLabel(_taxWord),
         value: '$_gstRegisteredCountV2',
         subtitle: AppLocalizations.of(context)!
             .customerMgmtWithTaxNumberSubtitle(_taxWord),
         icon: Icons.receipt_long_outlined,
-        accent: Colors.orange,
+        accent: tone(StatusTone.warning),
       ),
-    ];
-
-    // Responsive: fit as many equal-width cards per row as the available
-    // width allows (min ~170px each), wrapping to additional rows instead
-    // of squeezing/overflowing on narrow screens.
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        const minCardWidth = 170.0;
-        final perRow =
-            (constraints.maxWidth + spacing) ~/ (minCardWidth + spacing);
-        final columns = perRow.clamp(1, cards.length);
-        final cardWidth =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (final card in cards) SizedBox(width: cardWidth, child: card),
-          ],
-        );
-      },
-    );
+    ]);
   }
 
   Widget _headerBarV2() {
-    final titleBlock = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(AppLocalizations.of(context)!.customerMgmtTitle,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: Theme.of(context).colorScheme.onSurface)),
-        const SizedBox(height: 2),
-        Text(AppLocalizations.of(context)!.customerMgmtSubtitle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      ],
+    final l10n = AppLocalizations.of(context)!;
+    final refreshButton = IconButton(
+      onPressed: _isLoading ? null : _loadCustomers,
+      icon: _isLoading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.refresh),
+      tooltip: l10n.actionRefresh,
     );
-    final actions = Wrap(
-      alignment: WrapAlignment.start,
-      spacing: 8,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
+    final newCustomerButton = AppPrimaryButton(
+      onPressed: () => setState(() => _showAddPanelV2 = true),
+      icon: const Icon(Icons.add, size: 18),
+      label: Text(l10n.customerMgmtNewCustomerButton),
+    );
+    final compactNewCustomerButton = AppPrimaryButton(
+      expanded: true,
+      onPressed: () => setState(() => _showAddPanelV2 = true),
+      icon: const Icon(Icons.add, size: 18),
+      label: Text(l10n.customerMgmtNewCustomerButton),
+    );
+    return AppListHeader(
+      title: l10n.customerMgmtTitle,
+      subtitle: l10n.customerMgmtSubtitle,
+      actions: [
         OutlinedButton.icon(
           onPressed: _showImportDialog,
           icon: const Icon(Icons.upload_file_outlined, size: 16),
-          label: Text(AppLocalizations.of(context)!.actionImport),
+          label: Text(l10n.actionImport),
         ),
         OutlinedButton.icon(
           onPressed: _exportToCSV,
           icon: const Icon(Icons.file_download_outlined, size: 16),
-          label: Text(AppLocalizations.of(context)!.actionExport),
+          label: Text(l10n.actionExport),
         ),
         if (widget.user.isAdmin())
           PopupMenuButton<String>(
-            tooltip:
-                AppLocalizations.of(context)!.invoiceMgmtMoreActionsTooltip,
+            tooltip: l10n.invoiceMgmtMoreActionsTooltip,
             onSelected: (value) {
               if (value == 'export_pdf') _exportToPDF();
               if (value == 'delete_all') _confirmDeleteAll();
@@ -1804,8 +1738,7 @@ class _CustomerManagementScreenV2State
                   children: [
                     const Icon(Icons.picture_as_pdf_outlined, size: 18),
                     const SizedBox(width: 8),
-                    Text(AppLocalizations.of(context)!
-                        .customerMgmtExportPdfMenuLabel),
+                    Text(l10n.customerMgmtExportPdfMenuLabel),
                   ],
                 ),
               ),
@@ -1815,147 +1748,71 @@ class _CustomerManagementScreenV2State
                   children: [
                     const Icon(Icons.delete_sweep, color: Colors.red, size: 18),
                     const SizedBox(width: 8),
-                    Text(
-                        AppLocalizations.of(context)!
-                            .customerMgmtDeleteAllTitle,
+                    Text(l10n.customerMgmtDeleteAllTitle,
                         style: const TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
             ],
-            child: _menuButtonLookV2(Icons.more_horiz,
-                AppLocalizations.of(context)!.commonMoreLabel),
+            child: _menuButtonLookV2(Icons.more_horiz, l10n.commonMoreLabel),
           ),
-        IconButton(
-          onPressed: _isLoading ? null : _loadCustomers,
-          icon: _isLoading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.refresh),
-          tooltip: AppLocalizations.of(context)!.actionRefresh,
-        ),
-        AppPrimaryButton(
-          onPressed: () => setState(() => _showAddPanelV2 = true),
-          icon: const Icon(Icons.add, size: 18),
-          label:
-              Text(AppLocalizations.of(context)!.customerMgmtNewCustomerButton),
-        ),
+        refreshButton,
+        newCustomerButton,
       ],
-    );
-
-    // Compact toolbar: full-width title, New Customer primary, refresh icon,
-    // everything else (Import/Export/PDF/Delete-all) in the More menu.
-    if (context.isCompact) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      compactActions: Row(
         children: [
-          Text(AppLocalizations.of(context)!.customerMgmtTitle,
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: Theme.of(context).colorScheme.onSurface)),
-          const SizedBox(height: 2),
-          Text(AppLocalizations.of(context)!.customerMgmtSubtitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: AppPrimaryButton(
-                  expanded: true,
-                  onPressed: () => setState(() => _showAddPanelV2 = true),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(AppLocalizations.of(context)!
-                      .customerMgmtNewCustomerButton),
-                ),
-              ),
-              IconButton(
-                onPressed: _isLoading ? null : _loadCustomers,
-                icon: _isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh),
-                tooltip: AppLocalizations.of(context)!.actionRefresh,
-              ),
-              PopupMenuButton<String>(
-                tooltip:
-                    AppLocalizations.of(context)!.invoiceMgmtMoreActionsTooltip,
-                onSelected: (value) {
-                  switch (value) {
-                    case 'import':
-                      _showImportDialog();
-                    case 'export_csv':
-                      _exportToCSV();
-                    case 'export_pdf':
-                      _exportToPDF();
-                    case 'delete_all':
-                      _confirmDeleteAll();
-                  }
-                },
-                itemBuilder: (ctx) => [
-                  PopupMenuItem(
-                      value: 'import',
-                      child: Row(children: [
-                        const Icon(Icons.upload_file_outlined, size: 18),
-                        const SizedBox(width: 10),
-                        Text(AppLocalizations.of(context)!.actionImport),
-                      ])),
-                  PopupMenuItem(
-                      value: 'export_csv',
-                      child: Row(children: [
-                        const Icon(Icons.file_download_outlined, size: 18),
-                        const SizedBox(width: 10),
-                        Text(AppLocalizations.of(context)!.actionExport),
-                      ])),
-                  PopupMenuItem(
-                      value: 'export_pdf',
-                      child: Row(children: [
-                        const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                        const SizedBox(width: 10),
-                        Text(AppLocalizations.of(context)!
-                            .customerMgmtExportPdfMenuLabel),
-                      ])),
-                  if (widget.user.isAdmin())
-                    PopupMenuItem(
-                        value: 'delete_all',
-                        child: Row(children: [
-                          const Icon(Icons.delete_sweep,
-                              size: 18, color: Colors.red),
-                          const SizedBox(width: 10),
-                          Text(
-                              AppLocalizations.of(context)!
-                                  .customerMgmtDeleteAllTitle,
-                              style: const TextStyle(color: Colors.red)),
-                        ])),
-                ],
-              ),
+          Expanded(child: compactNewCustomerButton),
+          refreshButton,
+          PopupMenuButton<String>(
+            tooltip: l10n.invoiceMgmtMoreActionsTooltip,
+            onSelected: (value) {
+              switch (value) {
+                case 'import':
+                  _showImportDialog();
+                case 'export_csv':
+                  _exportToCSV();
+                case 'export_pdf':
+                  _exportToPDF();
+                case 'delete_all':
+                  _confirmDeleteAll();
+              }
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem(
+                  value: 'import',
+                  child: Row(children: [
+                    const Icon(Icons.upload_file_outlined, size: 18),
+                    const SizedBox(width: 10),
+                    Text(l10n.actionImport),
+                  ])),
+              PopupMenuItem(
+                  value: 'export_csv',
+                  child: Row(children: [
+                    const Icon(Icons.file_download_outlined, size: 18),
+                    const SizedBox(width: 10),
+                    Text(l10n.actionExport),
+                  ])),
+              PopupMenuItem(
+                  value: 'export_pdf',
+                  child: Row(children: [
+                    const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    const SizedBox(width: 10),
+                    Text(l10n.customerMgmtExportPdfMenuLabel),
+                  ])),
+              if (widget.user.isAdmin())
+                PopupMenuItem(
+                    value: 'delete_all',
+                    child: Row(children: [
+                      const Icon(Icons.delete_sweep,
+                          size: 18, color: Colors.red),
+                      const SizedBox(width: 10),
+                      Text(l10n.customerMgmtDeleteAllTitle,
+                          style: const TextStyle(color: Colors.red)),
+                    ])),
             ],
           ),
         ],
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: titleBlock),
-        Flexible(
-          child: Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: actions.children.toList(),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -2364,7 +2221,14 @@ class _CustomerManagementScreenV2State
                                     .colorScheme
                                     .onSurfaceVariant)),
                       const SizedBox(height: 4),
-                      _typePillV2(c),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 2,
+                        children: [
+                          _typePillV2(c),
+                          if (c.loyaltyPoints > 0) _loyaltyPillV2(c),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -2434,183 +2298,80 @@ class _CustomerManagementScreenV2State
   }
 
   Widget _tableHeaderRowV2([List<Customer>? pageItems]) {
-    // Shared reference: dark gradient header with checkbox + sortable
-    // columns, matching the invoice list screen.
     final items = pageItems ?? const <Customer>[];
     final allSelected = items.isNotEmpty && _isAllPageSelectedV2(items);
     final someSelected =
         items.isNotEmpty && _isSomePageSelectedV2(items) && !allSelected;
-    const style = TextStyle(
-        color: Colors.white,
-        fontSize: 12.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4);
-    return Container(
-      decoration: BoxDecoration(
-        gradient: CustomerManagementScreenColors.topBarBackgroundGradientColor,
-        borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+    return AppTableHeader(
+      leading: AppTableSelection(
+        value: allSelected,
+        tristate: someSelected,
+        onChanged: items.isEmpty ? null : (_) => _toggleSelectAllV2(items),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 44,
-            child: Checkbox(
-              value: allSelected,
-              tristate: someSelected,
-              onChanged:
-                  items.isEmpty ? null : (_) => _toggleSelectAllV2(items),
-              activeColor: Colors.white,
-              checkColor: Theme.of(context).primaryColor,
-              side: const BorderSide(color: Colors.white70, width: 2),
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          SizedBox(
-              width: 56,
-              child: Text(AppLocalizations.of(context)!.customerMgmtColSlNo,
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: style)),
+      children: [
+        AppTableHeaderLabel(AppLocalizations.of(context)!.customerMgmtColSlNo,
+            width: 56),
+        Expanded(
+            flex: 3,
+            child: _sortableHeaderV2(
+                AppLocalizations.of(context)!.customerMgmtColNameBusiness,
+                'name')),
+        if (_visibleColumnsV2['phone'] ?? true)
+          AppTableHeaderLabel(
+              AppLocalizations.of(context)!.customerMgmtColPhone),
+        if (_visibleColumnsV2['email'] ?? true)
+          AppTableHeaderLabel(
+              AppLocalizations.of(context)!.customerMgmtColEmail,
+              flex: 3),
+        if (_visibleColumnsV2['gstin'] ?? true)
+          AppTableHeaderLabel(AppLocalizations.of(context)!
+              .customerMgmtColTaxVatNo(_taxWord.toUpperCase())),
+        if (_visibleColumnsV2['address'] ?? true)
+          AppTableHeaderLabel(
+              AppLocalizations.of(context)!.customerMgmtColAddress,
+              flex: 3),
+        if (_visibleColumnsV2['outstanding'] ?? true)
           Expanded(
-              flex: 3,
+              flex: 2,
               child: _sortableHeaderV2(
-                  AppLocalizations.of(context)!.customerMgmtColNameBusiness,
-                  'name')),
-          if (_visibleColumnsV2['phone'] ?? true)
-            Expanded(
-                flex: 2,
-                child: Text(AppLocalizations.of(context)!.customerMgmtColPhone,
-                    style: style)),
-          if (_visibleColumnsV2['email'] ?? true)
-            Expanded(
-                flex: 3,
-                child: Text(AppLocalizations.of(context)!.customerMgmtColEmail,
-                    style: style)),
-          if (_visibleColumnsV2['gstin'] ?? true)
-            Expanded(
-                flex: 2,
-                child: Text(
-                    AppLocalizations.of(context)!
-                        .customerMgmtColTaxVatNo(_taxWord.toUpperCase()),
-                    style: style)),
-          if (_visibleColumnsV2['address'] ?? true)
-            Expanded(
-                flex: 3,
-                child: Text(
-                    AppLocalizations.of(context)!.customerMgmtColAddress,
-                    style: style)),
-          if (_visibleColumnsV2['outstanding'] ?? true)
-            Expanded(
-                flex: 2,
-                child: _sortableHeaderV2(
-                    AppLocalizations.of(context)!
-                        .invoiceMgmtColOutstanding
-                        .toUpperCase(),
-                    'outstanding')),
-          SizedBox(
-              width: 160,
-              child: Text(AppLocalizations.of(context)!.customerMgmtColActions,
-                  style: style)),
-        ],
-      ),
+                  AppLocalizations.of(context)!
+                      .invoiceMgmtColOutstanding
+                      .toUpperCase(),
+                  'outstanding')),
+        AppTableHeaderLabel(
+            AppLocalizations.of(context)!.customerMgmtColActions,
+            width: 160),
+      ],
     );
   }
 
   Widget _paginationV2(List<Customer> pageItems, int totalPages) {
     final total = _filteredCustomers.length;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-        ),
-      ),
-      // A plain Row with no Expanded/Wrap will overflow horizontally on a
-      // narrow table. A horizontally-scrolling Row keeps this bar's height
-      // constant and never overflows regardless of how narrow it gets.
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              AppLocalizations.of(context)!.customerMgmtShowingRangeLabel(
-                  total == 0 ? 0 : _currentPage * _pageSize + 1,
-                  (_currentPage * _pageSize + _pageSize).clamp(0, total),
-                  total),
-              style: TextStyle(
-                  fontSize: 12.5,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(width: 24),
-            Row(
-              children: [
-                Text(AppLocalizations.of(context)!.customerMgmtRowsPerPageLabel,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                const SizedBox(width: 8),
-                DropdownButton<int>(
-                  value: _pageSize,
-                  underline: const SizedBox(),
-                  itemHeight: 48,
-                  items: [10, 25, 50, 100]
-                      .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
-                      .toList(),
-                  onChanged: (n) {
-                    if (n == null || !mounted) return;
-                    setState(() {
-                      _pageSize = n;
-                      _currentPage = 0;
-                    });
-                  },
-                ),
-                const SizedBox(width: 12),
-                IconButton(
-                  onPressed: _currentPage > 0
-                      ? () => _changePage(_currentPage - 1)
-                      : null,
-                  icon: const Icon(Icons.chevron_left),
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  visualDensity: VisualDensity.compact,
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text('${_currentPage + 1}',
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                    AppLocalizations.of(context)!
-                        .customerMgmtOfTotalPagesLabel(totalPages),
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                IconButton(
-                  onPressed: _currentPage < totalPages - 1
-                      ? () => _changePage(_currentPage + 1)
-                      : null,
-                  icon: const Icon(Icons.chevron_right),
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    return AppPagination(
+      showingLabel: AppLocalizations.of(context)!.customerMgmtShowingRangeLabel(
+          total == 0 ? 0 : _currentPage * _pageSize + 1,
+          (_currentPage * _pageSize + _pageSize).clamp(0, total),
+          total),
+      rowsPerPageLabel:
+          AppLocalizations.of(context)!.customerMgmtRowsPerPageLabel,
+      pageSize: _pageSize,
+      onPageSizeChanged: (n) {
+        if (!mounted) return;
+        setState(() {
+          _pageSize = n;
+          _currentPage = 0;
+        });
+      },
+      currentPage: _currentPage,
+      totalPages: totalPages,
+      onPrevious: _currentPage > 0 ? () => _changePage(_currentPage - 1) : null,
+      onNext: _currentPage < totalPages - 1
+          ? () => _changePage(_currentPage + 1)
+          : null,
+      previousLabel: AppLocalizations.of(context)!.actionPrevious,
+      nextLabel: AppLocalizations.of(context)!.actionNext,
+      pageIndicator:
+          AppPageIndicator(currentPage: _currentPage, totalPages: totalPages),
     );
   }
 
@@ -2638,18 +2399,26 @@ class _CustomerManagementScreenV2State
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _isLoading && _customers.isEmpty
-                ? const SizedBox(height: 240, child: AppLoadingState())
-                : pageItems.isEmpty
-                    ? SizedBox(height: 240, child: _buildEmptyState())
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: pageItems.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) =>
-                            _customerCardV2(pageItems[index], index),
-                      ),
+            AppListStateView(
+              state: _isLoading && _customers.isEmpty
+                  ? AppListState.loading
+                  : _loadError != null && _customers.isEmpty
+                      ? AppListState.error
+                      : pageItems.isEmpty
+                          ? AppListState.empty
+                          : AppListState.data,
+              errorMessage: _loadError,
+              onRetry: _loadCustomers,
+              emptyState: _buildEmptyState(),
+              data: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: pageItems.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) =>
+                    _customerCardV2(pageItems[index], index),
+              ),
+            ),
             _paginationV2(pageItems, totalPages),
           ],
         ),
@@ -2701,17 +2470,25 @@ class _CustomerManagementScreenV2State
                 ],
               ),
             ),
-          _isLoading && _customers.isEmpty
-              ? const SizedBox(height: 240, child: AppLoadingState())
-              : pageItems.isEmpty
-                  ? SizedBox(height: 240, child: _buildEmptyState())
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: pageItems.length,
-                      itemBuilder: (context, index) =>
-                          _tableRowV2(pageItems[index], index),
-                    ),
+          AppListStateView(
+            state: _isLoading && _customers.isEmpty
+                ? AppListState.loading
+                : _loadError != null && _customers.isEmpty
+                    ? AppListState.error
+                    : pageItems.isEmpty
+                        ? AppListState.empty
+                        : AppListState.data,
+            errorMessage: _loadError,
+            onRetry: _loadCustomers,
+            emptyState: _buildEmptyState(),
+            data: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: pageItems.length,
+              itemBuilder: (context, index) =>
+                  _tableRowV2(pageItems[index], index),
+            ),
+          ),
           _paginationV2(pageItems, totalPages),
         ],
       ),

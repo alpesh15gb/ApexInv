@@ -10,12 +10,12 @@ import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/providers/industry_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/providers/theme_provider.dart';
 import 'package:apexbooks/widgets/language_picker.dart';
 import 'package:apexbooks/widgets/adaptive/adaptive_field_grid.dart';
 import 'package:apexbooks/widgets/adaptive/sticky_action_bar.dart';
-import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/models/company_info.dart';
 import 'package:apexbooks/widgets/app/app.dart';
 
@@ -66,6 +66,7 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
   bool _showAddress = true;
   bool _showLogo = true;
   BusinessType _businessType = BusinessType.both;
+  IndustryProfile _industry = IndustryProfile.retail;
 
   File? _selectedLogoFile;
   String? _base64Logo;
@@ -88,6 +89,7 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
       settingsRepo.getSetting(SettingKey.showUpiQr),
       settingsRepo.getShowBankDetails(),
       settingsRepo.getBusinessType(),
+      settingsRepo.getSetting(SettingKey.industryProfile),
       settingsRepo.getShowPhone(),
       settingsRepo.getShowEmail(),
       settingsRepo.getShowCompanyName(),
@@ -107,14 +109,15 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
     final showQrStr = results[4] as String?;
     final showBankDetails = results[5] as bool;
     final businessType = results[6] as BusinessType;
-    final showPhone = results[7] as bool;
-    final showEmail = results[8] as bool;
-    final showCompanyName = results[9] as bool;
-    final showPan = results[10] as bool;
-    final showFssai = results[11] as bool;
-    final showWebsite = results[12] as bool;
-    final showAddress = results[13] as bool;
-    final showLogo = results[14] as bool;
+    final industryKey = results[7] as String?;
+    final showPhone = results[8] as bool;
+    final showEmail = results[9] as bool;
+    final showCompanyName = results[10] as bool;
+    final showPan = results[11] as bool;
+    final showFssai = results[12] as bool;
+    final showWebsite = results[13] as bool;
+    final showAddress = results[14] as bool;
+    final showLogo = results[15] as bool;
 
     if (info == null) return;
 
@@ -136,6 +139,7 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
       _showUpiQr = showQrStr == 'true';
       _showBankDetails = showBankDetails;
       _businessType = businessType;
+      _industry = industryProfileFromKey(industryKey);
       _showPhone = showPhone;
       _showEmail = showEmail;
       _showCompanyName = showCompanyName;
@@ -252,6 +256,7 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
         settingsRepo.setBankAccounts(bankAccounts),
         settingsRepo.setShowBankDetails(_showBankDetails),
         settingsRepo.setBusinessType(_businessType),
+        saveIndustryProfile(ref, _industry),
         settingsRepo.setShowPhone(_showPhone),
         settingsRepo.setShowEmail(_showEmail),
         settingsRepo.setShowCompanyName(_showCompanyName),
@@ -745,6 +750,31 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
                                                   .onSurfaceVariant),
                                         ),
                                         const SizedBox(height: 12),
+                                        SegmentedButton<IndustryProfile>(
+                                          segments: [
+                                            ButtonSegment(
+                                              value: IndustryProfile.retail,
+                                              label: Text(l10n
+                                                  .industryRetailLabel),
+                                              icon: const Icon(
+                                                  Icons.storefront_outlined,
+                                                  size: 16),
+                                            ),
+                                            ButtonSegment(
+                                              value: IndustryProfile.jewellery,
+                                              label: Text(l10n
+                                                  .industryJewelleryLabel),
+                                              icon: const Icon(
+                                                  Icons.diamond_outlined,
+                                                  size: 16),
+                                            ),
+                                          ],
+                                          selected: {_industry},
+                                          onSelectionChanged: (val) =>
+                                              _confirmIndustryChange(
+                                                  val.first),
+                                        ),
+                                        const SizedBox(height: 12),
                                         SegmentedButton<BusinessType>(
                                           segments: [
                                             ButtonSegment(
@@ -1216,7 +1246,8 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
             Text(l10n.companyInfoShowOnPdfLabel,
                 style: TextStyle(
                     fontSize: AppFontSize.xsmall,
-                    color: CompanyInfoScreenColors.sectionHeadingColor)),
+                    color:
+                        Theme.of(context).colorScheme.onSurfaceVariant)),
             _pdfVisibilityToggle(
                 _showLogo, (val) => setState(() => _showLogo = val)),
           ],
@@ -1245,7 +1276,7 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
           l10n.companyInfoLogoRequirementsHint,
           style: TextStyle(
             fontSize: AppFontSize.xsmall,
-            color: CompanyInfoScreenColors.sectionHeadingColor,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
             height: 1.6,
           ),
           textAlign: TextAlign.center,
@@ -1294,6 +1325,16 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
             filled: true,
             fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
+          onSubmitted: (_) {
+            final typed = controller.text.trim();
+            if (typed.isNotEmpty) {
+              setState(() => _selectedCountry = typed);
+            }
+            onSubmitted();
+          },
+          // Keep manually typed values when Save Changes is tapped without
+          // pressing Enter or choosing an autocomplete option (BUG-20).
+          onChanged: (value) => _selectedCountry = value.trim(),
         );
       },
       optionsViewBuilder: (context, onSelected, options) {
@@ -1452,6 +1493,34 @@ class _CompanyInfoScreenState extends ConsumerState<CompanyInfoScreen> {
     if (result != null && mounted) {
       setState(() => controller.text = result);
     }
+  }
+
+  /// Switching trades hides the other trade's features everywhere, so it
+  /// asks first. The choice applies on save, like every other setting here.
+  Future<void> _confirmIndustryChange(IndustryProfile value) async {
+    if (value == _industry || !mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.industryChangeDialogTitle),
+        content: Text(l10n.industryChangeDialogBody(
+            value == IndustryProfile.jewellery
+                ? l10n.industryJewelleryLabel
+                : l10n.industryRetailLabel)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.actionSave),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) setState(() => _industry = value);
   }
 
   /// Compact "show on invoice PDF" toggle used as a field's trailing icon.

@@ -92,8 +92,31 @@ void main() {
     // `description` is the line-level text typed on the invoice;
     // `product_description` is the product's own text, snapshotted at
     // invoice time. Both must exist — the first falls back to the second.
-    expect(colNames, containsAll(['description', 'product_description']));
+    expect(
+      colNames,
+      containsAll([
+        'description',
+        'product_description',
+        'jewellery_tax_treatment',
+      ]),
+    );
 
+    await db.close();
+  });
+
+  test('fresh create metal rates have separate buyback and sell columns',
+      () async {
+    final db = await openDatabase(
+      inMemoryDatabasePath,
+      version: currentVersion,
+      onCreate: (db, v) => DatabaseHelper().createDbForTest(db, v),
+    );
+    final cols = await db.rawQuery('PRAGMA table_info(metal_rates)');
+    final colNames = cols.map((r) => r['name']).toSet();
+    expect(
+      colNames,
+      containsAll(['rate_per_gram', 'sell_rate_per_gram', 'buy_rate_per_gram']),
+    );
     await db.close();
   });
 

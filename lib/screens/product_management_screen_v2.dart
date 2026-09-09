@@ -16,13 +16,18 @@ import 'package:csv/csv.dart';
 
 import 'package:intl/intl.dart';
 import 'package:apexbooks/common/common.dart';
-import 'package:apexbooks/common/app_colors.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/models/jewellery_attributes.dart';
 import 'package:apexbooks/models/product.dart';
 import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/providers/industry_provider.dart';
 import 'package:apexbooks/utils/formatters.dart';
+import 'package:apexbooks/screens/barcode_labels_screen.dart';
 import 'package:apexbooks/screens/settings/product_columns_settings_screen.dart';
+import 'package:apexbooks/widgets/adaptive/status_chip.dart';
 import 'package:apexbooks/widgets/app/app.dart';
+import 'package:apexbooks/widgets/jewellery/pieces_sheet.dart';
+import 'package:apexbooks/widgets/jewellery/variants_sheet.dart';
 
 class ProductManagementScreenV2 extends ConsumerStatefulWidget {
   final User user;
@@ -48,10 +53,9 @@ class _ProductManagementScreenV2State
   String _sortBy = 'name';
   bool _isAscending = true;
   bool _isLoading = false;
+  final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final ScrollController _horizontalScrollController = ScrollController();
-  Timer? _searchDebounce;
-  int _loadRequestId = 0;
 
   // Form controllers
   final _nameController = TextEditingController();
@@ -69,6 +73,17 @@ class _ProductManagementScreenV2State
   String _selectedUnit = '';
   final _formKey = GlobalKey<FormState>();
 
+  // Jewellery form controllers (add form; gated by industry profile)
+  final _jewGrossController = TextEditingController();
+  final _jewStoneController = TextEditingController();
+  final _jewNetController = TextEditingController();
+  final _jewMakingValueController = TextEditingController();
+  final _jewWastageController = TextEditingController();
+  final _jewHuidController = TextEditingController();
+  String _jewMetal = 'gold';
+  String _jewPurity = '22K';
+  String _jewMakingType = 'fixed';
+
   // Metadata form controllers (add form)
   final _storageLocationController = TextEditingController();
   final _containerNumberController = TextEditingController();
@@ -82,10 +97,14 @@ class _ProductManagementScreenV2State
 
   String _currencySymbol = '₹';
   BusinessType _businessType = BusinessType.both;
-  String _typeFilter = 'both'; // 'both' | 'product' | 'service'
   String _newItemType = 'product'; // type for the add-product form
   bool _unlimitedStock = false;
   bool _priceIncludesTax = false;
+
+  String get _defaultProductTaxRate =>
+      ref.read(industryProfileProvider) == IndustryProfile.jewellery
+          ? '3'
+          : '18';
 
   // ── V2 state ──────────────────────────────────────────────────────────
   // V2 loads the full product list once (for the stat cards / tab counts)
@@ -96,6 +115,7 @@ class _ProductManagementScreenV2State
   List<Product> _allProductsV2 = [];
   Map<String, ProductMetadata> _productMetadataV2 = {};
   bool _statsLoadingV2 = false;
+  String? _loadError;
   int _activeTabV2 =
       0; // 0 all, 1 products, 2 services, 3 low stock, 4 out of stock
   bool _showAddPanelV2 = false;
@@ -136,10 +156,9 @@ class _ProductManagementScreenV2State
   @override
   void initState() {
     super.initState();
-    _taxRateController.text = "18";
+    _taxRateController.text = _defaultProductTaxRate;
     _defaultDiscountController.text = "0";
     _loadBusinessType();
-    _loadProducts();
     _loadCurrency();
     _loadDateFormat();
     _loadStatsV2();
@@ -279,7 +298,6 @@ class _ProductManagementScreenV2State
     final bt = await ref.read(settingsRepositoryProvider).getBusinessType();
     setState(() {
       _businessType = bt;
-      _typeFilter = bt == BusinessType.both ? 'both' : bt.key;
       _newItemType = bt == BusinessType.service ? 'service' : 'product';
     });
   }
@@ -306,62 +324,37 @@ class _ProductManagementScreenV2State
     _customUnitController.dispose();
     _barcodeController.dispose();
     _reorderLevelController.dispose();
+    _jewGrossController.dispose();
+    _jewStoneController.dispose();
+    _jewNetController.dispose();
+    _jewMakingValueController.dispose();
+    _jewWastageController.dispose();
+    _jewHuidController.dispose();
     _storageLocationController.dispose();
     _containerNumberController.dispose();
     _batchNumberController.dispose();
     _supplierNameController.dispose();
     _skuCodeController.dispose();
     _notesController.dispose();
+    _searchController.dispose();
     _searchFocusNode.dispose();
     _horizontalScrollController.dispose();
-    _searchDebounce?.cancel();
     super.dispose();
-  }
-
-  Future<void> _loadProducts() async {
-    final requestId = ++_loadRequestId;
-    if (!mounted) return;
-    setState(() => _isLoading = true);
-    try {
-      final productRepo = ref.read(productRepositoryProvider);
-      final results = await Future.wait([
-        productRepo.getProductsPaginated(
-            offset: _currentPage * _pageSize,
-            limit: _pageSize,
-            query: _searchQuery,
-            orderBy: _sortBy,
-            orderASC: _isAscending,
-            type: _typeFilter),
-        productRepo.getTotalProductCount(),
-      ]);
-      final result = results[0] as List<Product>;
-      final allCount = results[1] as int;
-
-      if (requestId != _loadRequestId || !mounted) return;
-      setState(() {
-        _products = result;
-        _totalProducts = allCount;
-        _allProductsCount = allCount;
-      });
-    } catch (e) {
-      if (requestId != _loadRequestId || !mounted) return;
-      _showSnackBar(
-          AppLocalizations.of(context)!
-              .productMgmtLoadErrorMessage(e.toString()),
-          isError: true);
-    } finally {
-      if (requestId == _loadRequestId && mounted)
-        setState(() => _isLoading = false);
-    }
   }
 
   Future<void> _addProduct() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final price = double.parse(_priceController.text.trim());
+    // Weight-billed jewellery is priced from the daily sell rate, so a catalog
+    // fallback price is optional rather than a misleading mandatory value.
+    final price = double.tryParse(_priceController.text.trim()) ?? 0.0;
     final purchasePrice =
         double.tryParse(_purchasePriceController.text.trim()) ?? 0.0;
-    if (!await _confirmIfSellingAtLoss(price, purchasePrice)) return;
+    final isJewellery =
+        ref.read(industryProfileProvider) == IndustryProfile.jewellery;
+    if (!isJewellery && !await _confirmIfSellingAtLoss(price, purchasePrice)) {
+      return;
+    }
     if (!mounted) return;
     final l10n = AppLocalizations.of(context)!;
     setState(() => _isLoading = true);
@@ -371,9 +364,11 @@ class _ProductManagementScreenV2State
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         price: price,
-        stock: _unlimitedStock ? 0 : int.parse(_stockController.text.trim()),
+        stock: _unlimitedStock
+            ? 0
+            : (double.tryParse(_stockController.text.trim()) ?? 0),
         hsncode: _hsnCodeController.text.trim(),
-        tax_rate: int.parse(_taxRateController.text.trim()),
+        tax_rate: double.tryParse(_taxRateController.text.trim()) ?? 0,
         type: _newItemType,
         defaultDiscount:
             double.tryParse(_defaultDiscountController.text.trim()) ?? 0.0,
@@ -389,6 +384,11 @@ class _ProductManagementScreenV2State
       );
 
       await ref.read(productRepositoryProvider).insertProduct(newProduct);
+      if (ref.read(industryProfileProvider) == IndustryProfile.jewellery) {
+        await ref.read(jewelleryRepositoryProvider).upsertAttributes(
+              _jewelleryAttributesFor(newProduct.id),
+            );
+      }
       await ref.read(productRepositoryProvider).upsertProductMetadata(
             ProductMetadata(
               productId: newProduct.id,
@@ -403,7 +403,7 @@ class _ProductManagementScreenV2State
             ),
           );
       _clearForm();
-      await _loadProducts();
+      await _loadStatsV2();
       _showSnackBar(l10n.productMgmtAddedMessage);
     } catch (e) {
       _showSnackBar(l10n.productMgmtAddErrorMessage(e.toString()),
@@ -413,8 +413,48 @@ class _ProductManagementScreenV2State
     }
   }
 
+  /// Jewellery attributes captured by the add panel for [productId].
+  /// Net weight falls back to gross − stone when the field is left blank.
+  JewelleryAttributes _jewelleryAttributesFor(String productId) {
+    final gross = double.tryParse(_jewGrossController.text.trim()) ?? 0.0;
+    final stone = double.tryParse(_jewStoneController.text.trim()) ?? 0.0;
+    final netText = _jewNetController.text.trim();
+    return JewelleryAttributes(
+      productId: productId,
+      metal: _jewMetal,
+      purity: _jewPurity,
+      grossWeight: gross,
+      stoneWeight: stone,
+      netWeight: netText.isEmpty
+          ? (gross - stone).clamp(0.0, double.infinity)
+          : (double.tryParse(netText) ?? 0.0),
+      makingType: _jewMakingType,
+      makingValue:
+          double.tryParse(_jewMakingValueController.text.trim()) ?? 0.0,
+      wastagePercent: double.tryParse(_jewWastageController.text.trim()) ?? 0.0,
+      huid: _jewHuidController.text.trim().toUpperCase(),
+    );
+  }
+
+  void _resetJewelleryForm() {
+    _jewGrossController.clear();
+    _jewStoneController.clear();
+    _jewNetController.clear();
+    _jewMakingValueController.clear();
+    _jewWastageController.clear();
+    _jewHuidController.clear();
+    if (mounted) {
+      setState(() {
+        _jewMetal = 'gold';
+        _jewPurity = '22K';
+        _jewMakingType = 'fixed';
+      });
+    }
+  }
+
   void _clearForm() {
     _formKey.currentState?.reset();
+    _resetJewelleryForm();
     _nameController.clear();
     _aliasNameController.clear();
     _descriptionController.clear();
@@ -424,7 +464,7 @@ class _ProductManagementScreenV2State
     _stockController.clear();
     _hsnCodeController.clear();
     _taxRateController.clear();
-    _taxRateController.text = "18";
+    _taxRateController.text = _defaultProductTaxRate;
     _barcodeController.clear();
     _reorderLevelController.clear();
     _customUnitController.clear();
@@ -645,7 +685,9 @@ class _ProductManagementScreenV2State
       inputFormatters: isPrice
           ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$'))]
           : (isStock || isTaxRate)
-              ? [FilteringTextInputFormatter.digitsOnly]
+              // Fractional stock (1.5 kg) and decimal GST slabs (0.25%,
+              // 1.5%) are legal — digits-only blocked every decimal (BUG-11).
+              ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}$'))]
               : null,
       decoration: InputDecoration(
           labelText: label,
@@ -680,21 +722,22 @@ class _ProductManagementScreenV2State
                 )
               : null),
       validator: (value) {
-        if (value == null || value.trim().isEmpty) {
-          if (isRequired) return l10n.fieldRequiredMessage(label);
+        final text = value?.trim() ?? '';
+        if (text.isEmpty) {
+          return isRequired ? l10n.fieldRequiredMessage(label) : null;
         }
         if (isPrice) {
-          final price = double.tryParse(value!);
+          final price = double.tryParse(text);
           if (price == null || price < 0)
             return l10n.fieldEnterValidPriceMessage;
         }
         if (isStock) {
-          final stock = int.tryParse(value!);
+          final stock = double.tryParse(value!);
           if (stock == null || stock < 0)
             return l10n.fieldEnterValidStockMessage;
         }
         if (isTaxRate) {
-          final tax = int.tryParse(value!);
+          final tax = double.tryParse(value!);
           if (tax == null || tax < 0 || tax > 100)
             return l10n.fieldTaxRangeMessage;
         }
@@ -733,7 +776,7 @@ class _ProductManagementScreenV2State
 
     if (result == true) {
       await ref.read(productRepositoryProvider).deleteProduct(product.id);
-      await _loadProducts();
+      await _loadStatsV2();
       _showSnackBar(l10n.productMgmtDeletedMessage);
     }
   }
@@ -1084,8 +1127,8 @@ class _ProductManagementScreenV2State
         final unitStr = getField(row, 'unit');
         final unlimitedStockStr = getField(row, 'unlimited_stock');
         final priceIncludesTaxStr = getField(row, 'price_includes_tax');
-        final taxRate = taxStr.isEmpty ? 0 : (int.tryParse(taxStr) ?? 0);
-        final stock = stockStr.isEmpty ? 0 : (int.tryParse(stockStr) ?? 0);
+        final taxRate = taxStr.isEmpty ? 0 : (double.tryParse(taxStr) ?? 0);
+        final stock = stockStr.isEmpty ? 0 : (double.tryParse(stockStr) ?? 0);
         final unlimitedStock = unlimitedStockStr == '1' ||
             unlimitedStockStr.toLowerCase() == 'true';
         final priceIncludesTax = priceIncludesTaxStr == '1' ||
@@ -1329,7 +1372,7 @@ class _ProductManagementScreenV2State
           if (meta != null) await repo.upsertProductMetadata(meta);
         }
       }
-      await _loadProducts();
+      await _loadStatsV2();
       final imported =
           newProducts.length + overwriteFlags.where((f) => f).length;
       _showSnackBar(l10n.productMgmtImportedMessage(imported));
@@ -1371,7 +1414,7 @@ class _ProductManagementScreenV2State
     setState(() => _isLoading = true);
     try {
       await ref.read(productRepositoryProvider).deleteAllProducts();
-      await _loadProducts();
+      await _loadStatsV2();
       _showSnackBar(l10n.productMgmtAllDeletedMessage);
     } catch (e) {
       if (!mounted) return;
@@ -1585,7 +1628,10 @@ class _ProductManagementScreenV2State
 
   Future<void> _loadStatsV2() async {
     if (!mounted) return;
-    setState(() => _statsLoadingV2 = true);
+    setState(() {
+      _statsLoadingV2 = true;
+      _loadError = null;
+    });
     try {
       final repo = ref.read(productRepositoryProvider);
       final all = await repo.getAllProducts();
@@ -1593,6 +1639,7 @@ class _ProductManagementScreenV2State
       if (!mounted) return;
       setState(() {
         _allProductsV2 = all;
+        _allProductsCount = all.length;
         _productMetadataV2 = metadata;
         // Presentation-only: drop checkbox state for rows that no longer exist.
         _selectedIdsV2.removeWhere((id) => !all.any((p) => p.id == id));
@@ -1600,10 +1647,10 @@ class _ProductManagementScreenV2State
       _applyClientFilterV2();
     } catch (e) {
       if (!mounted) return;
-      _showSnackBar(
-          AppLocalizations.of(context)!
-              .productMgmtLoadErrorMessage(e.toString()),
-          isError: true);
+      final message = AppLocalizations.of(context)!
+          .productMgmtLoadErrorMessage(e.toString());
+      setState(() => _loadError = message);
+      if (_allProductsV2.isNotEmpty) _showSnackBar(message, isError: true);
     } finally {
       if (mounted) setState(() => _statsLoadingV2 = false);
     }
@@ -1653,7 +1700,9 @@ class _ProductManagementScreenV2State
       list = list.where((p) =>
           p.name.toLowerCase().contains(q) ||
           (p.aliasName ?? '').toLowerCase().contains(q) ||
-          p.hsncode.toLowerCase().contains(q));
+          p.hsncode.toLowerCase().contains(q) ||
+          p.barcode.toLowerCase().contains(q) ||
+          p.description.toLowerCase().contains(q));
     }
     final sorted = list.toList()
       ..sort((a, b) {
@@ -1697,9 +1746,7 @@ class _ProductManagementScreenV2State
       _searchQuery = query;
       _currentPage = 0;
     });
-    _searchDebounce?.cancel();
-    _searchDebounce =
-        Timer(const Duration(milliseconds: 300), _applyClientFilterV2);
+    _applyClientFilterV2();
   }
 
   // Combines v1's separate sort-field + sort-direction controls into the
@@ -1754,6 +1801,11 @@ class _ProductManagementScreenV2State
     await _loadStatsV2();
   }
 
+  void _openBarcodeLabels() {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const BarcodeLabelsScreen()));
+  }
+
   BoxDecoration _flatCardDecorationV2(BuildContext context) => BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
@@ -1799,35 +1851,11 @@ class _ProductManagementScreenV2State
   // _onSortSelectionV2) — no query change, just presentation ordering.
   Widget _sortableHeaderV2(String label, String field) {
     final active = _sortBy == field;
-    return InkWell(
+    return AppSortHeaderLabel(
+      label: label,
+      active: active,
+      ascending: _isAscending,
       onTap: () => _onSortSelectionV2(field, active ? !_isAscending : true),
-      borderRadius: BorderRadius.circular(4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.4,
-              ),
-            ),
-          ),
-          const SizedBox(width: 2),
-          Icon(
-            !active
-                ? Icons.unfold_more
-                : (_isAscending ? Icons.arrow_upward : Icons.arrow_downward),
-            size: 13,
-            color: active ? Colors.white : Colors.white70,
-          ),
-        ],
-      ),
     );
   }
 
@@ -1994,276 +2022,141 @@ class _ProductManagementScreenV2State
     );
   }
 
-  Widget _statCardV2({
-    required String label,
-    required String value,
-    required IconData icon,
-    required Color accent,
-    String? subtitle,
-  }) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 170),
-      padding: const EdgeInsets.all(16),
-      decoration: _flatCardDecorationV2(context),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                const SizedBox(height: 6),
-                Text(value,
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                Text(subtitle ?? '',
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: accent, size: 20),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _statCardsRowV2() {
     final l10n = AppLocalizations.of(context)!;
-    final cards = [
-      _statCardV2(
+    final scheme = Theme.of(context).colorScheme;
+    Color tone(StatusTone tone) =>
+        StatusChip.colorsFor(Theme.of(context).brightness, tone).$2;
+    return AppStatGrid(stats: [
+      AppListStat(
         label: l10n.productMgmtAllProductsLabel,
         value: '$_allCountV2',
         subtitle: l10n.productMgmtTotalItemsSubtitle,
         icon: Icons.inventory_2_outlined,
-        accent: Theme.of(context).primaryColor,
+        accent: scheme.primary,
       ),
-      _statCardV2(
+      AppListStat(
         label: l10n.navProducts,
         value: '$_productsCountV2',
         subtitle: l10n.productMgmtTangibleProductsSubtitle,
         icon: Icons.widgets_outlined,
-        accent: Colors.green,
+        accent: tone(StatusTone.success),
       ),
-      _statCardV2(
+      AppListStat(
         label: l10n.productMgmtServicesTabLabel,
         value: '$_servicesCountV2',
         subtitle: l10n.productMgmtNonTangibleServicesSubtitle,
         icon: Icons.design_services_outlined,
-        accent: Colors.orange,
+        accent: tone(StatusTone.info),
       ),
-      _statCardV2(
+      AppListStat(
         label: l10n.productMgmtLowStockTabLabel,
         value: '$_lowStockCountV2',
         subtitle: l10n.productMgmtNeedAttentionSubtitle,
         icon: Icons.warning_amber_rounded,
-        accent: Colors.red,
+        accent: tone(StatusTone.danger),
       ),
-    ];
-
-    // Responsive: fit as many equal-width cards per row as the available
-    // width allows (min ~170px each, see _statCardV2), wrapping to
-    // additional rows instead of squeezing/overflowing on narrow screens.
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        const minCardWidth = 170.0;
-        final perRow =
-            (constraints.maxWidth + spacing) ~/ (minCardWidth + spacing);
-        final columns = perRow.clamp(1, cards.length);
-        final cardWidth =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (final card in cards) SizedBox(width: cardWidth, child: card),
-          ],
-        );
-      },
-    );
+    ]);
   }
 
   Widget _headerBarV2() {
     final l10n = AppLocalizations.of(context)!;
-    // Compact toolbar: title/subtitle get the full width, New Product is
-    // the primary action, everything else lives in the More menu.
-    if (context.isCompact) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(l10n.productMgmtTitle,
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: Theme.of(context).colorScheme.onSurface)),
-          const SizedBox(height: 2),
-          Text(l10n.productMgmtSubtitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: AppPrimaryButton(
-                  expanded: true,
-                  onPressed: () {
-                    setState(() {
-                      _showAddPanelV2 = true;
-                    });
-                  },
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(l10n.productMgmtNewProductButton),
-                ),
-              ),
-              IconButton(
-                onPressed: _statsLoadingV2
-                    ? null
-                    : () async {
-                        await _loadStatsV2();
-                      },
-                icon: _statsLoadingV2
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh),
-                tooltip: l10n.actionRefresh,
-              ),
-              _compactMoreMenuV2(l10n),
-            ],
-          ),
-        ],
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(AppLocalizations.of(context)!.productMgmtTitle,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: Theme.of(context).colorScheme.onSurface)),
-              const SizedBox(height: 2),
-              Text(AppLocalizations.of(context)!.productMgmtSubtitle,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            ],
-          ),
+    Future<void> refresh() => _loadStatsV2();
+    final refreshButton = IconButton(
+      onPressed: _statsLoadingV2 ? null : () => refresh(),
+      icon: _statsLoadingV2
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.refresh),
+      tooltip: l10n.actionRefresh,
+    );
+    final newProductButton = AppPrimaryButton(
+      onPressed: () => setState(() => _showAddPanelV2 = true),
+      icon: const Icon(Icons.add, size: 18),
+      label: Text(l10n.productMgmtNewProductButton),
+    );
+    return AppListHeader(
+      title: l10n.productMgmtTitle,
+      subtitle: l10n.productMgmtSubtitle,
+      actions: [
+        OutlinedButton.icon(
+          onPressed: () async {
+            await _showImportDialog();
+            await _loadStatsV2();
+          },
+          icon: const Icon(Icons.upload_file_outlined, size: 16),
+          label: Text(l10n.actionImport),
         ),
-        Flexible(
-          child: Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () async {
-                  await _showImportDialog();
-                  await _loadStatsV2();
-                },
-                icon: const Icon(Icons.upload_file_outlined, size: 16),
-                label: Text(AppLocalizations.of(context)!.actionImport),
-              ),
-              OutlinedButton.icon(
-                onPressed: _exportToCSV,
-                icon: const Icon(Icons.file_download_outlined, size: 16),
-                label: Text(AppLocalizations.of(context)!.actionExport),
-              ),
-              if (widget.user.isAdmin())
-                PopupMenuButton<String>(
-                  tooltip: AppLocalizations.of(context)!
-                      .invoiceMgmtMoreActionsTooltip,
-                  onSelected: (value) async {
-                    if (value == 'export_pdf') await _exportToPDF();
-                    if (value == 'delete_all') {
-                      await _confirmDeleteAll();
-                      await _loadStatsV2();
-                    }
-                  },
-                  itemBuilder: (ctx) => [
-                    PopupMenuItem<String>(
-                      value: 'export_pdf',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                          const SizedBox(width: 8),
-                          Text(AppLocalizations.of(context)!
-                              .customerMgmtExportPdfMenuLabel),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'delete_all',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.delete_sweep,
-                              color: Colors.red, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                              AppLocalizations.of(context)!
-                                  .productMgmtDeleteAllTitle,
-                              style: const TextStyle(color: Colors.red)),
-                        ],
-                      ),
-                    ),
+        OutlinedButton.icon(
+          onPressed: _exportToCSV,
+          icon: const Icon(Icons.file_download_outlined, size: 16),
+          label: Text(l10n.actionExport),
+        ),
+        if (widget.user.isAdmin())
+          PopupMenuButton<String>(
+            tooltip: l10n.invoiceMgmtMoreActionsTooltip,
+            onSelected: (value) async {
+              if (value == 'export_pdf') await _exportToPDF();
+              if (value == 'labels') _openBarcodeLabels();
+              if (value == 'delete_all') {
+                await _confirmDeleteAll();
+                await _loadStatsV2();
+              }
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem<String>(
+                value: 'export_pdf',
+                child: Row(
+                  children: [
+                    const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    const SizedBox(width: 8),
+                    Text(l10n.customerMgmtExportPdfMenuLabel),
                   ],
-                  child: _menuButtonLookV2(Icons.more_horiz,
-                      AppLocalizations.of(context)!.commonMoreLabel),
                 ),
-              IconButton(
-                onPressed: _statsLoadingV2
-                    ? null
-                    : () async {
-                        await _loadStatsV2();
-                      },
-                icon: _statsLoadingV2
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh),
-                tooltip: AppLocalizations.of(context)!.actionRefresh,
               ),
-              AppPrimaryButton(
-                onPressed: () {
-                  setState(() {
-                    _showAddPanelV2 = true;
-                  });
-                },
-                icon: const Icon(Icons.add, size: 18),
-                label: Text(
-                    AppLocalizations.of(context)!.productMgmtNewProductButton),
+              const PopupMenuItem<String>(
+                value: 'labels',
+                child: Row(
+                  children: [
+                    Icon(Icons.qr_code_2_outlined, size: 18),
+                    SizedBox(width: 8),
+                    Text('Barcode labels'),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'delete_all',
+                child: Row(
+                  children: [
+                    const Icon(Icons.delete_sweep, color: Colors.red, size: 18),
+                    const SizedBox(width: 8),
+                    Text(l10n.productMgmtDeleteAllTitle,
+                        style: const TextStyle(color: Colors.red)),
+                  ],
+                ),
               ),
             ],
+            child: _menuButtonLookV2(Icons.more_horiz, l10n.commonMoreLabel),
           ),
-        ),
+        refreshButton,
+        newProductButton,
       ],
+      compactActions: Row(
+        children: [
+          Expanded(
+            child: AppPrimaryButton(
+              expanded: true,
+              onPressed: () => setState(() => _showAddPanelV2 = true),
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(l10n.productMgmtNewProductButton),
+            ),
+          ),
+          refreshButton,
+          _compactMoreMenuV2(l10n),
+        ],
+      ),
     );
   }
 
@@ -2281,6 +2174,8 @@ class _ProductManagementScreenV2State
             await _exportToCSV();
           case 'export_pdf':
             await _exportToPDF();
+          case 'labels':
+            _openBarcodeLabels();
           case 'delete_all':
             await _confirmDeleteAll();
             await _loadStatsV2();
@@ -2311,6 +2206,13 @@ class _ProductManagementScreenV2State
               const Icon(Icons.picture_as_pdf_outlined, size: 18),
               const SizedBox(width: 10),
               Text(l10n.customerMgmtExportPdfMenuLabel),
+            ])),
+        const PopupMenuItem(
+            value: 'labels',
+            child: Row(children: [
+              Icon(Icons.qr_code_2_outlined, size: 18),
+              SizedBox(width: 10),
+              Text('Barcode labels'),
             ])),
         if (widget.user.isAdmin())
           PopupMenuItem(
@@ -2377,6 +2279,7 @@ class _ProductManagementScreenV2State
     )['label'] as String;
 
     final searchField = TextField(
+      controller: _searchController,
       focusNode: _searchFocusNode,
       onChanged: _onSearchChangedV2,
       decoration: InputDecoration(
@@ -2562,6 +2465,7 @@ class _ProductManagementScreenV2State
   Future<void> _scanBarcodeIntoSearch() async {
     final code = await BarcodeScannerSheet.show(context);
     if (code == null || code.isEmpty || !mounted) return;
+    _searchController.text = code;
     _onSearchChangedV2(code);
   }
 
@@ -2840,71 +2744,54 @@ class _ProductManagementScreenV2State
 
   Widget _tableHeaderRowV2([List<Product>? pageItems]) {
     final l10n = AppLocalizations.of(context)!;
-    // Shared reference: dark gradient header with checkbox + sortable
-    // columns, matching the invoice list screen.
     final items = pageItems ?? const <Product>[];
     final allSelected = items.isNotEmpty && _isAllPageSelectedV2(items);
     final someSelected =
         items.isNotEmpty && _isSomePageSelectedV2(items) && !allSelected;
-    const style = TextStyle(
-        color: Colors.white,
-        fontSize: 12.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4);
-    return Container(
-      decoration: BoxDecoration(
-        gradient: ProductManagementScreenColors.topBarBackgroundGradientColor,
-        borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+    return AppTableHeader(
+      leading: AppTableSelection(
+        value: allSelected,
+        tristate: someSelected,
+        onChanged: items.isEmpty ? null : (_) => _toggleSelectAllV2(items),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 44,
-            child: Checkbox(
-              value: allSelected,
-              tristate: someSelected,
-              onChanged:
-                  items.isEmpty ? null : (_) => _toggleSelectAllV2(items),
-              activeColor: Colors.white,
-              checkColor: Theme.of(context).primaryColor,
-              side: const BorderSide(color: Colors.white70, width: 2),
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-          SizedBox(
-              width: 56, child: Text(l10n.productMgmtColSlNo, style: style)),
-          Expanded(
-              flex: 3,
-              child: _sortableHeaderV2(l10n.productMgmtColNameAlias, 'name')),
-          if (_columnsConfig.hsncode)
-            Expanded(
-                flex: 2, child: Text(l10n.productMgmtColHsnSac, style: style)),
+      children: [
+        AppTableHeaderLabel(l10n.productMgmtColSlNo, width: 56),
+        Expanded(
+            flex: 3,
+            child: _sortableHeaderV2(l10n.productMgmtColNameAlias, 'name')),
+        if (_columnsConfig.hsncode)
+          AppTableHeaderLabel(l10n.productMgmtColHsnSac),
+        Expanded(
+            flex: 2,
+            child: _sortableHeaderV2(l10n.productMgmtColPrice, 'price')),
+        if (_columnsConfig.purchasePrice)
+          AppTableHeaderLabel(l10n.productMgmtColPurchase),
+        if (_columnsConfig.stock)
           Expanded(
               flex: 2,
-              child: _sortableHeaderV2(l10n.productMgmtColPrice, 'price')),
-          if (_columnsConfig.purchasePrice)
-            Expanded(
-                flex: 2,
-                child: Text(l10n.productMgmtColPurchase, style: style)),
-          if (_columnsConfig.stock)
-            Expanded(
-                flex: 2,
-                child: _sortableHeaderV2(l10n.productMgmtColStock, 'stock')),
-          if (_columnsConfig.taxRate)
-            Expanded(
-                flex: 1,
-                child: Text(l10n.productMgmtColTaxPercent, style: style)),
-          if (_columnsConfig.productMetadata && _columnsConfig.metaExpiryDate)
-            Expanded(
-                flex: 2,
-                child: Text(l10n.productMgmtColExpiryDate, style: style)),
-          SizedBox(
-              width: 120,
-              child: Text(l10n.customerMgmtColActions, style: style)),
-        ],
-      ),
+              child: _sortableHeaderV2(l10n.productMgmtColStock, 'stock')),
+        if (_columnsConfig.taxRate)
+          AppTableHeaderLabel(l10n.productMgmtColTaxPercent, flex: 1),
+        if (_columnsConfig.productMetadata && _columnsConfig.metaExpiryDate)
+          AppTableHeaderLabel(l10n.productMgmtColExpiryDate),
+        AppTableHeaderLabel(l10n.customerMgmtColActions, width: 120),
+      ],
+    );
+  }
+
+  Widget _listStateV2({required Widget data}) {
+    return AppListStateView(
+      state: _statsLoadingV2 && _allProductsV2.isEmpty
+          ? AppListState.loading
+          : _loadError != null && _allProductsV2.isEmpty
+              ? AppListState.error
+              : _products.isEmpty
+                  ? AppListState.empty
+                  : AppListState.data,
+      errorMessage: _loadError,
+      onRetry: _loadStatsV2,
+      emptyState: _buildEmptyState(),
+      data: data,
     );
   }
 
@@ -2930,18 +2817,16 @@ class _ProductManagementScreenV2State
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _statsLoadingV2 && _allProductsV2.isEmpty
-                ? const SizedBox(height: 240, child: AppLoadingState())
-                : _products.isEmpty
-                    ? SizedBox(height: 240, child: _buildEmptyState())
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _products.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) =>
-                            _productCardV2(_products[index], index),
-                      ),
+            _listStateV2(
+              data: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _products.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) =>
+                    _productCardV2(_products[index], index),
+              ),
+            ),
             _paginationV2(totalPages),
           ],
         ),
@@ -2993,17 +2878,15 @@ class _ProductManagementScreenV2State
                 ],
               ),
             ),
-          _statsLoadingV2 && _allProductsV2.isEmpty
-              ? const SizedBox(height: 240, child: AppLoadingState())
-              : _products.isEmpty
-                  ? SizedBox(height: 240, child: _buildEmptyState())
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _products.length,
-                      itemBuilder: (context, index) =>
-                          _tableRowV2(_products[index], index),
-                    ),
+          _listStateV2(
+            data: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _products.length,
+              itemBuilder: (context, index) =>
+                  _tableRowV2(_products[index], index),
+            ),
+          ),
           _paginationV2(totalPages),
         ],
       ),
@@ -3151,104 +3034,169 @@ class _ProductManagementScreenV2State
 
   Widget _paginationV2(int totalPages) {
     final l10n = AppLocalizations.of(context)!;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-        ),
-      ),
-      // Was a Wrap(alignment: spaceBetween, ...): when the row got narrow it
-      // would silently wrap onto a second line, growing this widget's
-      // height and stealing space the table's Expanded(ListView) needed —
-      // the direct cause of the reported "RenderFlex overflowed by 55
-      // pixels" error. A horizontally-scrolling Row keeps this bar's
-      // height constant no matter how narrow the table gets.
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
+    return AppPagination(
+      showingLabel: l10n.productMgmtShowingRangeLabel(
+          _totalProducts == 0 ? 0 : _currentPage * _pageSize + 1,
+          (_currentPage * _pageSize + _pageSize).clamp(0, _totalProducts),
+          _totalProducts),
+      rowsPerPageLabel: l10n.customerMgmtRowsPerPageLabel,
+      pageSize: _pageSize,
+      onPageSizeChanged: (n) {
+        if (!mounted) return;
+        setState(() {
+          _pageSize = n;
+          _currentPage = 0;
+        });
+        _applyClientFilterV2();
+      },
+      currentPage: _currentPage,
+      totalPages: totalPages,
+      onPrevious:
+          _currentPage > 0 ? () => _changePageV2(_currentPage - 1) : null,
+      onNext: _currentPage < totalPages - 1
+          ? () => _changePageV2(_currentPage + 1)
+          : null,
+      previousLabel: l10n.actionPrevious,
+      nextLabel: l10n.actionNext,
+      pageIndicator:
+          AppPageIndicator(currentPage: _currentPage, totalPages: totalPages),
+    );
+  }
+
+  /// Jewellery details section of the add panel. Visible only under the
+  /// jewellery profile; retail users never see these fields (retail.md §5.3).
+  Widget _jewellerySectionV2() {
+    final l10n = AppLocalizations.of(context)!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabelV2(l10n.jewellerySectionTitle),
+        Text(l10n.jewellerySectionSubtitle,
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 12),
+        Row(
           children: [
-            Text(
-              l10n.productMgmtShowingRangeLabel(
-                  _totalProducts == 0 ? 0 : _currentPage * _pageSize + 1,
-                  (_currentPage * _pageSize + _pageSize)
-                      .clamp(0, _totalProducts),
-                  _totalProducts),
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 12.5,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                value: _jewMetal,
+                decoration: const InputDecoration(labelText: null).copyWith(
+                  labelText: l10n.jewelleryMetalLabel,
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'gold', child: Text('Gold')),
+                  DropdownMenuItem(value: 'silver', child: Text('Silver')),
+                ],
+                onChanged: (v) {
+                  if (v == null || !mounted) return;
+                  setState(() => _jewMetal = v);
+                },
+              ),
             ),
-            const SizedBox(width: 24),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(l10n.customerMgmtRowsPerPageLabel,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                const SizedBox(width: 8),
-                DropdownButton<int>(
-                  value: _pageSize,
-                  underline: const SizedBox(),
-                  itemHeight: 48,
-                  items: [10, 25, 50, 100]
-                      .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
-                      .toList(),
-                  onChanged: (n) {
-                    if (n == null || !mounted) return;
-                    setState(() {
-                      _pageSize = n;
-                      _currentPage = 0;
-                    });
-                    _applyClientFilterV2();
-                  },
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                value: _jewPurity,
+                decoration: const InputDecoration(labelText: null).copyWith(
+                  labelText: l10n.jewelleryPurityLabel,
                 ),
-                const SizedBox(width: 12),
-                IconButton(
-                  onPressed: _currentPage > 0
-                      ? () => _changePageV2(_currentPage - 1)
-                      : null,
-                  icon: const Icon(Icons.chevron_left),
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  visualDensity: VisualDensity.compact,
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text('${_currentPage + 1}',
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 4),
-                Text(l10n.customerMgmtOfTotalPagesLabel(totalPages),
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                IconButton(
-                  onPressed: _currentPage < totalPages - 1
-                      ? () => _changePageV2(_currentPage + 1)
-                      : null,
-                  icon: const Icon(Icons.chevron_right),
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
+                items: [
+                  for (final purity in [
+                    '24K',
+                    '22K',
+                    '18K',
+                    '14K',
+                    '999',
+                    '925'
+                  ])
+                    DropdownMenuItem(value: purity, child: Text(purity)),
+                ],
+                onChanged: (v) {
+                  if (v == null || !mounted) return;
+                  setState(() => _jewPurity = v);
+                },
+              ),
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildFormField(_jewGrossController,
+                  l10n.jewelleryGrossWeightLabel, Icons.scale_outlined,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  isPrice: true,
+                  required: false),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildFormField(_jewStoneController,
+                  l10n.jewelleryStoneWeightLabel, Icons.scale_outlined,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  isPrice: true,
+                  required: false),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildFormField(_jewNetController, l10n.jewelleryNetWeightLabel,
+            Icons.scale_outlined,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            isPrice: true,
+            required: false,
+            helperText: l10n.jewelleryNetWeightHint),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: _jewMakingType,
+          decoration: const InputDecoration(labelText: null).copyWith(
+            labelText: l10n.jewelleryMakingTypeLabel,
+          ),
+          items: [
+            DropdownMenuItem(
+                value: 'fixed', child: Text(l10n.jewelleryMakingFixedLabel)),
+            DropdownMenuItem(
+                value: 'per_gram',
+                child: Text(l10n.jewelleryMakingPerGramLabel)),
+            DropdownMenuItem(
+                value: 'percent',
+                child: Text(l10n.jewelleryMakingPercentLabel)),
+          ],
+          onChanged: (v) {
+            if (v == null || !mounted) return;
+            setState(() => _jewMakingType = v);
+          },
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildFormField(_jewMakingValueController,
+                  l10n.jewelleryMakingValueLabel, Icons.handyman_outlined,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  isPrice: true,
+                  required: false),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildFormField(_jewWastageController,
+                  l10n.jewelleryWastageLabel, Icons.percent,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  isPrice: true,
+                  required: false),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildFormField(_jewHuidController, l10n.jewelleryHuidLabel,
+            Icons.verified_outlined,
+            maxLength: 6, required: false, helperText: l10n.jewelleryHuidHint),
+      ],
     );
   }
 
@@ -3259,6 +3207,8 @@ class _ProductManagementScreenV2State
   // Information) instead of the old Basic Information / Advanced tabs.
   Widget _addPanelFormV2() {
     final l10n = AppLocalizations.of(context)!;
+    final isJewellery =
+        ref.watch(industryProfileProvider) == IndustryProfile.jewellery;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3291,12 +3241,20 @@ class _ProductManagementScreenV2State
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: _buildFormField(_priceController,
-                  l10n.productMgmtSalePriceLabel, Icons.attach_money,
+              child: _buildFormField(
+                  _priceController,
+                  isJewellery
+                      ? l10n.productMgmtJewelleryFallbackPriceLabel
+                      : l10n.productMgmtSalePriceLabel,
+                  Icons.attach_money,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   isPrice: true,
+                  required: !isJewellery,
                   prefixText: '$_currencySymbol ',
+                  helperText: isJewellery
+                      ? l10n.productMgmtJewellerySalePriceHelper
+                      : null,
                   onSubmitted: _addProductV2),
             ),
             if (_columnsConfig.purchasePrice) ...[
@@ -3304,13 +3262,18 @@ class _ProductManagementScreenV2State
               Expanded(
                 child: _buildFormField(
                     _purchasePriceController,
-                    l10n.productMgmtPurchasePriceLabel,
+                    isJewellery
+                        ? l10n.productMgmtJewelleryAcquisitionCostLabel
+                        : l10n.productMgmtPurchasePriceLabel,
                     Icons.shopping_cart_outlined,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     isPrice: true,
-                    required: _newItemType != 'service',
-                    prefixText: '$_currencySymbol '),
+                    required: _newItemType != 'service' && !isJewellery,
+                    prefixText: '$_currencySymbol ',
+                    helperText: isJewellery
+                        ? l10n.productMgmtJewelleryPurchasePriceHelper
+                        : null),
               ),
             ],
           ],
@@ -3408,6 +3371,11 @@ class _ProductManagementScreenV2State
               title: Text(l10n.productMgmtUnlimitedStockLabel),
               subtitle: Text(l10n.productMgmtTrackInfiniteStockSubtitle),
             ),
+        ],
+        if (ref.watch(industryProfileProvider) ==
+            IndustryProfile.jewellery) ...[
+          const SizedBox(height: 20),
+          _jewellerySectionV2(),
         ],
         if (_columnsConfig.productMetadata) ...[
           const SizedBox(height: 8),
@@ -3650,6 +3618,26 @@ class _ProductManagementScreenV2State
 
     String itemType = product.type;
     String unit = product.unit;
+    final isJewellery =
+        ref.read(industryProfileProvider) == IndustryProfile.jewellery;
+    final existingJew = isJewellery
+        ? await ref.read(jewelleryRepositoryProvider).getAttributes(product.id)
+        : null;
+    if (!mounted) return;
+    String jewMetal = existingJew?.metal ?? 'gold';
+    String jewPurity = existingJew?.purity ?? '22K';
+    String jewMakingType = existingJew?.makingType ?? 'fixed';
+    final jewGrossCtrl = TextEditingController(
+        text: existingJew == null ? '' : existingJew.grossWeight.toString());
+    final jewStoneCtrl = TextEditingController(
+        text: existingJew == null ? '' : existingJew.stoneWeight.toString());
+    final jewNetCtrl = TextEditingController(
+        text: existingJew == null ? '' : existingJew.netWeight.toString());
+    final jewMakingValueCtrl = TextEditingController(
+        text: existingJew == null ? '' : existingJew.makingValue.toString());
+    final jewWastageCtrl = TextEditingController(
+        text: existingJew == null ? '' : existingJew.wastagePercent.toString());
+    final jewHuidCtrl = TextEditingController(text: existingJew?.huid ?? '');
     bool priceIncludesTax = product.priceIncludesTax;
     bool unlimitedStock = !_columnsConfig.stock ? true : product.unlimitedStock;
     DateTime? expiryDate = _parseIsoDate(metadata?.expiryDate);
@@ -3658,6 +3646,12 @@ class _ProductManagementScreenV2State
     bool isSaving = false;
 
     void disposeAll() {
+      jewGrossCtrl.dispose();
+      jewStoneCtrl.dispose();
+      jewNetCtrl.dispose();
+      jewMakingValueCtrl.dispose();
+      jewWastageCtrl.dispose();
+      jewHuidCtrl.dispose();
       nameCtrl.dispose();
       aliasCtrl.dispose();
       descCtrl.dispose();
@@ -3694,6 +3688,7 @@ class _ProductManagementScreenV2State
             bool isTaxRate = false,
             bool isRequired = false,
             String? prefixText,
+            String? helperText,
           }) {
             return _buildDialogTextField(
               controller,
@@ -3708,6 +3703,7 @@ class _ProductManagementScreenV2State
               isTaxRate: isTaxRate,
               isRequired: isRequired,
               prefixText: prefixText,
+              helperText: helperText,
             );
           }
 
@@ -3729,20 +3725,47 @@ class _ProductManagementScreenV2State
           Future<void> save() async {
             if (isSaving) return;
             if (!formKey.currentState!.validate()) return;
-            final price = double.parse(priceCtrl.text.trim());
+            final price = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
             final purchasePrice =
                 double.tryParse(purchaseCtrl.text.trim()) ?? 0.0;
-            if (!await _confirmIfSellingAtLoss(price, purchasePrice)) return;
+            if (!isJewellery &&
+                !await _confirmIfSellingAtLoss(price, purchasePrice)) {
+              return;
+            }
             setDialogState(() => isSaving = true);
+            JewelleryAttributes? jewAttrs;
+            if (ref.read(industryProfileProvider) ==
+                IndustryProfile.jewellery) {
+              jewAttrs = JewelleryAttributes(
+                productId: product.id,
+                metal: jewMetal,
+                purity: jewPurity,
+                grossWeight: double.tryParse(jewGrossCtrl.text.trim()) ?? 0.0,
+                stoneWeight: double.tryParse(jewStoneCtrl.text.trim()) ?? 0.0,
+                netWeight: jewNetCtrl.text.trim().isEmpty
+                    ? ((double.tryParse(jewGrossCtrl.text.trim()) ?? 0.0) -
+                            (double.tryParse(jewStoneCtrl.text.trim()) ?? 0.0))
+                        .clamp(0.0, double.infinity)
+                    : (double.tryParse(jewNetCtrl.text.trim()) ?? 0.0),
+                makingType: jewMakingType,
+                makingValue:
+                    double.tryParse(jewMakingValueCtrl.text.trim()) ?? 0.0,
+                wastagePercent:
+                    double.tryParse(jewWastageCtrl.text.trim()) ?? 0.0,
+                huid: jewHuidCtrl.text.trim().toUpperCase(),
+              );
+            }
             try {
               final updated = Product(
                 id: product.id,
                 name: nameCtrl.text.trim(),
                 description: descCtrl.text.trim(),
                 price: price,
-                stock: unlimitedStock ? 0 : int.parse(stockCtrl.text.trim()),
+                stock: unlimitedStock
+                    ? 0
+                    : (double.tryParse(stockCtrl.text.trim()) ?? 0),
                 hsncode: hsnCtrl.text.trim(),
-                tax_rate: int.parse(taxCtrl.text.trim()),
+                tax_rate: double.tryParse(taxCtrl.text.trim()) ?? 0,
                 type: itemType,
                 defaultDiscount:
                     double.tryParse(discountCtrl.text.trim()) ?? 0.0,
@@ -3757,6 +3780,11 @@ class _ProductManagementScreenV2State
                 barcode: barcodeCtrl.text.trim(),
               );
               await ref.read(productRepositoryProvider).updateProduct(updated);
+              if (jewAttrs != null) {
+                await ref
+                    .read(jewelleryRepositoryProvider)
+                    .upsertAttributes(jewAttrs);
+              }
               await ref.read(productRepositoryProvider).upsertProductMetadata(
                     ProductMetadata(
                       productId: updated.id,
@@ -3923,26 +3951,42 @@ class _ProductManagementScreenV2State
                                   Expanded(
                                     child: field(
                                         priceCtrl,
-                                        l10n.productMgmtPriceLabel,
+                                        isJewellery
+                                            ? l10n
+                                                .productMgmtJewelleryFallbackPriceLabel
+                                            : l10n.productMgmtPriceLabel,
                                         Icons.attach_money,
                                         keyboardType: const TextInputType
                                             .numberWithOptions(decimal: true),
                                         isPrice: true,
-                                        isRequired: true,
-                                        prefixText: '$_currencySymbol '),
+                                        isRequired: !isJewellery,
+                                        prefixText: '$_currencySymbol ',
+                                        helperText: isJewellery
+                                            ? l10n
+                                                .productMgmtJewellerySalePriceHelper
+                                            : null),
                                   ),
                                   if (_columnsConfig.purchasePrice) ...[
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: field(
                                           purchaseCtrl,
-                                          l10n.productMgmtPurchasePriceLabel,
+                                          isJewellery
+                                              ? l10n
+                                                  .productMgmtJewelleryAcquisitionCostLabel
+                                              : l10n
+                                                  .productMgmtPurchasePriceLabel,
                                           Icons.shopping_cart_outlined,
                                           keyboardType: const TextInputType
                                               .numberWithOptions(decimal: true),
                                           isPrice: true,
-                                          isRequired: true,
-                                          prefixText: '$_currencySymbol '),
+                                          isRequired: !isJewellery &&
+                                              itemType != 'service',
+                                          prefixText: '$_currencySymbol ',
+                                          helperText: isJewellery
+                                              ? l10n
+                                                  .productMgmtJewelleryPurchasePriceHelper
+                                              : null),
                                     ),
                                   ],
                                 ],
@@ -4089,6 +4133,236 @@ class _ProductManagementScreenV2State
                                     subtitle: Text(l10n
                                         .productMgmtTrackInfiniteStockSubtitle),
                                   ),
+                              ],
+                              if (isJewellery) ...[
+                                const SizedBox(height: 20),
+                                sectionLabel(l10n.jewellerySectionTitle),
+                                const SizedBox(height: 4),
+                                Text(l10n.jewellerySectionSubtitle,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(dialogContext)
+                                            .colorScheme
+                                            .onSurfaceVariant)),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: jewMetal,
+                                        decoration: InputDecoration(
+                                            labelText:
+                                                l10n.jewelleryMetalLabel),
+                                        items: const [
+                                          DropdownMenuItem(
+                                              value: 'gold',
+                                              child: Text('Gold')),
+                                          DropdownMenuItem(
+                                              value: 'silver',
+                                              child: Text('Silver')),
+                                        ],
+                                        onChanged: !isEdit
+                                            ? null
+                                            : (v) {
+                                                if (v == null) return;
+                                                setDialogState(
+                                                    () => jewMetal = v);
+                                              },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        value: jewPurity,
+                                        decoration: InputDecoration(
+                                            labelText:
+                                                l10n.jewelleryPurityLabel),
+                                        items: [
+                                          for (final purity in [
+                                            '24K',
+                                            '22K',
+                                            '18K',
+                                            '14K',
+                                            '999',
+                                            '925'
+                                          ])
+                                            DropdownMenuItem(
+                                                value: purity,
+                                                child: Text(purity)),
+                                        ],
+                                        onChanged: !isEdit
+                                            ? null
+                                            : (v) {
+                                                if (v == null) return;
+                                                setDialogState(
+                                                    () => jewPurity = v);
+                                              },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: field(
+                                          jewGrossCtrl,
+                                          l10n.jewelleryGrossWeightLabel,
+                                          Icons.scale_outlined,
+                                          keyboardType: const TextInputType
+                                              .numberWithOptions(
+                                              decimal: true)),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: field(
+                                          jewStoneCtrl,
+                                          l10n.jewelleryStoneWeightLabel,
+                                          Icons.scale_outlined,
+                                          keyboardType: const TextInputType
+                                              .numberWithOptions(
+                                              decimal: true)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                field(jewNetCtrl, l10n.jewelleryNetWeightLabel,
+                                    Icons.scale_outlined,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true)),
+                                const SizedBox(height: 12),
+                                DropdownButtonFormField<String>(
+                                  value: jewMakingType,
+                                  decoration: InputDecoration(
+                                      labelText: l10n.jewelleryMakingTypeLabel),
+                                  items: [
+                                    DropdownMenuItem(
+                                        value: 'fixed',
+                                        child: Text(
+                                            l10n.jewelleryMakingFixedLabel)),
+                                    DropdownMenuItem(
+                                        value: 'per_gram',
+                                        child: Text(
+                                            l10n.jewelleryMakingPerGramLabel)),
+                                    DropdownMenuItem(
+                                        value: 'percent',
+                                        child: Text(
+                                            l10n.jewelleryMakingPercentLabel)),
+                                  ],
+                                  onChanged: !isEdit
+                                      ? null
+                                      : (v) {
+                                          if (v == null) return;
+                                          setDialogState(
+                                              () => jewMakingType = v);
+                                        },
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: field(
+                                          jewMakingValueCtrl,
+                                          l10n.jewelleryMakingValueLabel,
+                                          Icons.handyman_outlined,
+                                          keyboardType: const TextInputType
+                                              .numberWithOptions(
+                                              decimal: true)),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: field(
+                                          jewWastageCtrl,
+                                          l10n.jewelleryWastageLabel,
+                                          Icons.percent,
+                                          keyboardType: const TextInputType
+                                              .numberWithOptions(
+                                              decimal: true)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                field(jewHuidCtrl, l10n.jewelleryHuidLabel,
+                                    Icons.verified_outlined,
+                                    maxLength: 6),
+                                if (isEdit && isJewellery) ...[
+                                  const SizedBox(height: 12),
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () => showJewelleryPiecesSheet(
+                                      dialogContext,
+                                      productId: product.id,
+                                      productName: product.name,
+                                    ),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                            color: Theme.of(dialogContext)
+                                                .colorScheme
+                                                .outlineVariant),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.style_outlined,
+                                              size: 18),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              l10n.piecesTitle,
+                                              style: const TextStyle(
+                                                  fontSize: 13.5),
+                                            ),
+                                          ),
+                                          const Icon(
+                                              Icons.chevron_right_rounded,
+                                              size: 20,
+                                              color: Colors.grey),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                              if (isEdit) ...[
+                                const SizedBox(height: 12),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () => showProductVariantsSheet(
+                                    dialogContext,
+                                    productId: product.id,
+                                    productName: product.name,
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                          color: Theme.of(dialogContext)
+                                              .colorScheme
+                                              .outlineVariant),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.tune, size: 18),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            l10n.variantsTitle,
+                                            style:
+                                                const TextStyle(fontSize: 13.5),
+                                          ),
+                                        ),
+                                        const Icon(Icons.chevron_right_rounded,
+                                            size: 20, color: Colors.grey),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ],
                               if (_columnsConfig.productMetadata) ...[
                                 const SizedBox(height: 8),
@@ -4368,7 +4642,9 @@ class _ProductManagementScreenV2State
       inputFormatters: isPrice
           ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$'))]
           : (isStock || isTaxRate)
-              ? [FilteringTextInputFormatter.digitsOnly]
+              // Fractional stock (1.5 kg) and decimal GST slabs (0.25%,
+              // 1.5%) are legal — digits-only blocked every decimal (BUG-11).
+              ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}$'))]
               : null,
       decoration: InputDecoration(
           labelText: label,
@@ -4409,12 +4685,12 @@ class _ProductManagementScreenV2State
             return l10n.fieldEnterValidPriceMessage;
         }
         if (isStock) {
-          final stock = int.tryParse(value);
+          final stock = double.tryParse(value);
           if (stock == null || stock < 0)
             return l10n.fieldEnterValidStockMessage;
         }
         if (isTaxRate) {
-          final tax = int.tryParse(value);
+          final tax = double.tryParse(value);
           if (tax == null || tax < 0 || tax > 100) {
             return l10n.fieldTaxRangeMessage;
           }

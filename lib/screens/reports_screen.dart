@@ -733,6 +733,41 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
   }
 
+  /// Saves a JSON payload without the Excel UTF-8 BOM and with a .json
+  /// extension — the GST portal / Offline Tool reject BOM-prefixed JSON
+  /// ("Invalid JSON format at line 1 column 1"), so CSV-specific handling
+  /// must never be applied to GSTR JSON exports.
+  Future<void> _saveJson(String jsonString, String filename) async {
+    final l10n = AppLocalizations.of(context)!;
+    final jsonBytes = utf8.encode(jsonString);
+    String? savePath;
+    try {
+      savePath = await FilePicker.platform.saveFile(
+        dialogTitle: l10n.reportsSaveCsvReportTitle,
+        fileName: filename,
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: Platform.isAndroid ? jsonBytes : null,
+      );
+    } catch (_) {
+      // FilePicker not supported on this platform, fall back to Documents dir
+      final dir = await getApplicationDocumentsDirectory();
+      savePath = '${dir.path}/$filename';
+    }
+    if (savePath == null) return; // user cancelled
+    if (!Platform.isAndroid) {
+      await File(savePath).writeAsBytes(jsonBytes);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.reportsSavedAtMessage(savePath)),
+        action: SnackBarAction(label: l10n.actionOk, onPressed: () {}),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
   Future<void> _savePdf(Uint8List bytes, String filename) async {
     final l10n = AppLocalizations.of(context)!;
     String? savePath;
@@ -824,22 +859,18 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     final isCurrentTabLoading = _tabLoading[_selectedIndex] == true;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor:
-            Theme.of(context).appBarTheme.backgroundColor ?? primary,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(AppLocalizations.of(context)!.navReports,
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(AppLocalizations.of(context)!.navReports),
         actions: [
           if (isCurrentTabLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Center(
                   child: SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))),
+                          color: Theme.of(context).colorScheme.primary,
+                          strokeWidth: 2))),
             )
           else
             IconButton(
@@ -2652,7 +2683,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     try {
       final (from, to) = _range;
       final f = await GstrExportService.buildGstr1Json(from: from, to: to);
-      await _saveCsv(f.csv, f.filename);
+      await _saveJson(f.csv, f.filename);
       if (!mounted) return;
       setState(() {
         _isExportingGstr = false;
@@ -2680,7 +2711,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     try {
       final (from, to) = _range;
       final f = await GstrExportService.buildGstr3bJson(from: from, to: to);
-      await _saveCsv(f.csv, f.filename);
+      await _saveJson(f.csv, f.filename);
       if (!mounted) return;
       setState(() {
         _isExportingGstr = false;

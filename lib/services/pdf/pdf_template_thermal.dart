@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:apexbooks/common/common.dart';
+import 'package:apexbooks/domain/jewellery/jewellery_calculator.dart';
 import 'package:apexbooks/models/company_info.dart';
 import 'package:apexbooks/models/invoice.dart';
 import 'package:apexbooks/utils/amount_in_words.dart';
@@ -140,7 +141,13 @@ pw.Page buildThermalTemplate(
                           style: const pw.TextStyle(fontSize: smallFs)),
                     ),
                     if (showItemTax) ...[
-                      pw.Text('${item.product.tax_rate}%',
+                      pw.Text(
+                          item.isJewelleryLine
+                              ? item.jewelleryTaxTreatment ==
+                                      JewelleryTaxTreatment.legacySplit
+                                  ? '3%+5%'
+                                  : '${jewelleryGstPercent}%'
+                              : '${item.product.tax_rate}%',
                           style: const pw.TextStyle(fontSize: smallFs)),
                       pw.SizedBox(width: 4),
                     ],
@@ -157,6 +164,36 @@ pw.Page buildThermalTemplate(
                     item.printedDescription,
                     style: const pw.TextStyle(
                         fontSize: smallFs, color: PdfColors.grey700),
+                  ),
+                ),
+              if (item.isJewelleryLine)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(left: 12),
+                  child: pw.Text(
+                    '${(item.netWeight ?? item.quantity).toStringAsFixed(3)}g × '
+                    '$currencySymbol${item.effectivePrice.toStringAsFixed(2)}/g'
+                    '${(item.makingAmount ?? 0) > 0 ? ' · Making $currencySymbol${item.makingAmount!.toStringAsFixed(2)}' : ''}'
+                    '${(item.wastageAmount ?? 0) > 0 ? ' · Wastage $currencySymbol${item.wastageAmount!.toStringAsFixed(2)}' : ''}',
+                    style: const pw.TextStyle(
+                        fontSize: smallFs, color: PdfColors.grey600),
+                  ),
+                ),
+              if (item.isJewelleryLine &&
+                  (item.huidSnapshot?.isNotEmpty == true ||
+                      item.tagNoSnapshot?.isNotEmpty == true))
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(left: 12),
+                  child: pw.Text(
+                    [
+                      if (item.tagNoSnapshot?.isNotEmpty == true)
+                        'Tag #${item.tagNoSnapshot}',
+                      if (item.huidSnapshot?.isNotEmpty == true)
+                        'HUID: ${item.huidSnapshot}',
+                      if (item.puritySnapshot?.isNotEmpty == true)
+                        item.puritySnapshot!,
+                    ].join(' · '),
+                    style: const pw.TextStyle(
+                        fontSize: smallFs, color: PdfColors.grey600),
                   ),
                 ),
               if (showDiscount && item.totalDiscount > 0)
@@ -204,7 +241,13 @@ pw.Page buildThermalTemplate(
                   if (showItemTax)
                     pw.SizedBox(
                       width: 18,
-                      child: pw.Text('${item.product.tax_rate}%',
+                      child: pw.Text(
+                          item.isJewelleryLine
+                              ? item.jewelleryTaxTreatment ==
+                                      JewelleryTaxTreatment.legacySplit
+                                  ? '3%+5%'
+                                  : '${jewelleryGstPercent}%'
+                              : '${item.product.tax_rate}%',
                           style: const pw.TextStyle(fontSize: smallFs)),
                     ),
                   pw.SizedBox(

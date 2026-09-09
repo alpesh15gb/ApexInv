@@ -9,6 +9,7 @@ import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/company_info.dart';
 import 'package:apexbooks/models/user.dart';
+import 'package:apexbooks/providers/industry_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/screens/dashboard_screen.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_appearance.dart';
@@ -16,6 +17,7 @@ import 'package:apexbooks/screens/onboarding/onboarding_step_cloud.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_company.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_done.dart';
 import 'package:apexbooks/screens/onboarding/onboarding_step_invoice.dart';
+import 'package:apexbooks/screens/onboarding/onboarding_step_trade.dart';
 import 'package:apexbooks/screens/settings/cloud_sync_screen.dart';
 import 'package:apexbooks/utils/app_logger.dart';
 import 'package:apexbooks/widgets/app/app.dart';
@@ -34,7 +36,7 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  static const _stepCount = 5;
+  static const _stepCount = 6;
   // Keeps form fields readable instead of stretching edge-to-edge on
   // desktop/tablet windows; has no effect once the window is narrower
   // than this (mobile just fills the available width as before).
@@ -51,12 +53,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   String? _base64Logo;
   CompanyInfo? _existingCompanyInfo;
 
-  // Step 2 — Invoice
+  // Step 2 — Trade (retail | jewellery). Defaults to retail so skipping
+  // preserves today's behaviour for existing installs.
+  IndustryProfile _industry = IndustryProfile.retail;
+
+  // Step 3 — Invoice
   String _selectedCurrencyCode = 'INR';
   DateFormatOption _selectedDateFormat = DateFormatOption.ddmmyyyy;
   final _startingNumberController = TextEditingController(text: '1');
   bool _leadingZeros = true;
   final _taxRateController = TextEditingController(text: '18');
+  // GST registration choice. Defaults to true so existing behaviour
+  // (GST fields on) is preserved unless the user picks Non-GST.
+  bool _isGstRegistered = true;
 
   // Step 3 — Appearance
   PageSize _pageSize = PageSize.a4;
@@ -91,6 +100,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       settingsRepo.getPageSize(),
       settingsRepo.getInvoiceTemplate(),
       settingsRepo.getSetting(SettingKey.cloudSyncChoice), // 9
+      settingsRepo.getShowGstFields(), // 10
+      settingsRepo.getSetting(SettingKey.industryProfile), // 11
     ]);
 
     if (!mounted) return;
@@ -111,6 +122,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       _pageSize = results[7] as PageSize;
       _template = results[8] as InvoiceTemplate;
       _cloudChoice = (results[9] as String?) ?? '';
+      _isGstRegistered = results[10] as bool;
+      _industry = industryProfileFromKey(results[11] as String?);
     });
   }
 
@@ -171,7 +184,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<void> _saveInvoiceStep() async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
-    final taxRate = double.tryParse(_taxRateController.text.trim()) ?? 18.0;
+    final typedRate = double.tryParse(_taxRateController.text.trim()) ?? 18.0;
+    // Non-GST businesses must not charge GST: force 0% and hide GST UI.
+    final effectiveRate = _isGstRegistered ? typedRate : 0.0;
     await Future.wait([
       settingsRepo.setCurrency(_selectedCurrencyCode),
       settingsRepo.setDateFormat(_selectedDateFormat),
@@ -182,9 +197,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               .toString()),
       settingsRepo.setSetting(
           SettingKey.invoiceLeadingZeros, _leadingZeros.toString()),
+      settingsRepo.setSetting(SettingKey.defaultTaxRate,
+          effectiveRate.clamp(0, 100).toStringAsFixed(1)),
       settingsRepo.setSetting(
-          SettingKey.defaultTaxRate, taxRate.clamp(0, 100).toStringAsFixed(1)),
+          SettingKey.showGstFields, _isGstRegistered.toString()),
+      if (!_isGstRegistered)
+        settingsRepo.setSetting(SettingKey.showCgstSgst, 'false'),
+      // Non-GST bills use Bill of Supply; going back to GST restores the
+      // plain default so a stale Bill of Supply is not left behind.
+      if (!_isGstRegistered)
+        settingsRepo.setDefaultInvoiceTitle('Bill of Supply')
+      else
+        settingsRepo.setDefaultInvoiceTitle(null),
     ]);
+  }
+
+  Future<void> _saveTradeStep() async {
+    await saveIndustryProfile(ref, _industry);
   }
 
   Future<void> _saveAppearanceStep() async {
@@ -218,10 +247,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         case 0:
           await _saveCompanyStep();
         case 1:
-          await _saveInvoiceStep();
+          await _saveTradeStep();
         case 2:
-          await _saveAppearanceStep();
+          await _saveInvoiceStep();
         case 3:
+          await _saveAppearanceStep();
+        case 4:
           await ref
               .read(settingsRepositoryProvider)
               .setSetting(SettingKey.cloudSyncChoice, _cloudChoice);
@@ -247,33 +278,41 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _finish() async {
     if (_isBusy) return;
     setState(() => _isBusy = true);
-    await Future.wait([
-      ref
-          .read(settingsRepositoryProvider)
-          .setSetting(SettingKey.onboardingCompleted, 'true'),
-      // Explicit opt-in only: an unchecked box records 'denied'.
-      ref.read(settingsRepositoryProvider).setSetting(
-          SettingKey.analyticsConsent,
-          _analyticsConsented ? 'granted' : 'denied'),
-    ]);
-    if (!mounted) return;
-    final wantsCloudNow = _cloudChoice == 'enabled';
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => DashboardScreen(widget.user)),
-    );
-    // User picked "Sign in to cloud sync" — land them on the sign-in form
-    // immediately, framed with a back bar so they can leave anytime.
-    if (wantsCloudNow) {
-      Navigator.push(
+    try {
+      await Future.wait([
+        ref
+            .read(settingsRepositoryProvider)
+            .setSetting(SettingKey.onboardingCompleted, 'true'),
+        ref.read(settingsRepositoryProvider).setSetting(
+            SettingKey.analyticsConsent,
+            _analyticsConsented ? 'granted' : 'denied'),
+      ]);
+      if (!mounted) return;
+      final wantsCloudNow = _cloudChoice == 'enabled';
+      Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: const Text('Cloud Sync')),
-            body: const SafeArea(child: CloudSyncScreen()),
-          ),
-        ),
+        MaterialPageRoute(builder: (context) => DashboardScreen(widget.user)),
       );
+      if (wantsCloudNow) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('Cloud Sync')),
+              body: const SafeArea(child: CloudSyncScreen()),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Setup failed: $e. Please try again.'),
+        behavior: SnackBarBehavior.floating,
+        showCloseIcon: true,
+      ));
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
     }
   }
 
@@ -286,11 +325,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           subtitle: l10n.onboardingStepCompanySubtitle
         ),
       1 => (
+          icon: Icons.storefront_rounded,
+          title: l10n.onboardingStepTradeTitle,
+          subtitle: l10n.onboardingStepTradeSubtitle
+        ),
+      2 => (
           icon: Icons.receipt_long_rounded,
           title: l10n.onboardingStepInvoiceTitle,
           subtitle: l10n.onboardingStepInvoiceSubtitle
         ),
-      2 => (
+      3 => (
           icon: Icons.palette_rounded,
           title: l10n.onboardingStepAppearanceTitle,
           subtitle: l10n.onboardingStepAppearanceSubtitle
@@ -363,7 +407,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ],
                       ),
                     ),
-                    if (_currentStep < 4) ...[
+                    if (_currentStep < 5) ...[
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
@@ -411,6 +455,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             base64Logo: _base64Logo,
                             onPickLogo: _pickLogo,
                           ),
+                          OnboardingStepTrade(
+                            selected: _industry,
+                            onChanged: (profile) =>
+                                setState(() => _industry = profile),
+                          ),
                           OnboardingStepInvoice(
                             selectedCurrencyCode: _selectedCurrencyCode,
                             onCurrencyChanged: (c) =>
@@ -423,6 +472,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             onLeadingZerosChanged: (v) =>
                                 setState(() => _leadingZeros = v),
                             taxRateController: _taxRateController,
+                            isGstRegistered: _isGstRegistered,
+                            onGstChanged: (v) => setState(() {
+                              _isGstRegistered = v;
+                              if (!v) {
+                                _taxRateController.text = '0';
+                              } else if (_taxRateController.text.trim() ==
+                                      '0' ||
+                                  _taxRateController.text.trim().isEmpty) {
+                                _taxRateController.text = '18';
+                              }
+                            }),
                           ),
                           OnboardingStepAppearance(
                             pageSize: _pageSize,
@@ -458,7 +518,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                               label: Text(l10n.actionBack),
                             ),
                           const Spacer(),
-                          if (_currentStep < 4)
+                          if (_currentStep < 5)
                             TextButton(
                               onPressed: _isBusy ? null : _handleSkip,
                               child: Text(l10n.actionSkip),
@@ -467,13 +527,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           AppPrimaryButton(
                             onPressed: _isBusy
                                 ? null
-                                : (_currentStep < 4 ? _handleNext : _finish),
+                                : (_currentStep < 5 ? _handleNext : _finish),
                             icon: _isBusy
                                 ? null
-                                : Icon(_currentStep < 4
+                                : Icon(_currentStep < 5
                                     ? Icons.arrow_forward_rounded
                                     : Icons.rocket_launch_rounded),
-                            label: Text(_currentStep < 4
+                            label: Text(_currentStep < 5
                                 ? l10n.actionNext
                                 : l10n.actionGetStarted),
                             loading: _isBusy,

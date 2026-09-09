@@ -39,6 +39,7 @@ class LedgerService {
   static const accInterestExpense = '6100 Interest Expense';
   static const accBankFees = '6110 Bank and Loan Fees';
   static const accReceivable = '1100 Accounts Receivable';
+  static const accOldGold = '1300 Old Gold Stock';
   static const accPayable = '2000 Accounts Payable';
   static const accGstOutput = '2200 GST Output Payable';
   static const accGstInput = '1400 GST Input Credit (ITC)';
@@ -49,6 +50,15 @@ class LedgerService {
   static const accOtherIncome = '4100 Other Income';
   static const accPurchases = '5000 Purchases';
   static const accExpenses = '6000 Operating Expenses';
+
+  /// Payment method that books metal received from the customer instead of
+  /// cash (old-gold exchange, retail.md P3). The receipt leg debits Old
+  /// Gold Stock so AR still nets to the printed payable total.
+  static const receiptMethodOldGold = 'Old gold exchange';
+
+  /// Historical/manual RCM rate retained to replay existing journal entries.
+  /// New customer old-gold exchanges never infer RCM from a GSTIN.
+  static const double oldGoldRcmPercent = 3.0;
 
   /// Opening balance source: settings key 'opening_capital' (default 0).
   static Future<double> getOpeningCapital() async {
@@ -71,8 +81,8 @@ class LedgerService {
     DateTime? to,
     String? currencyCode,
   }) async {
-    final projected =
-        await getProjectedJournal(from: from, to: to, currencyCode: currencyCode);
+    final projected = await getProjectedJournal(
+        from: from, to: to, currencyCode: currencyCode);
     final db = await _db.database;
     if (!await JournalStore.hasTables(db)) return projected;
     final persisted = await JournalStore.readEntries(db,
@@ -174,10 +184,12 @@ class LedgerService {
     ''', [if (currencyCode != null) currencyCode]);
     for (final p in payments) {
       final method = p['payment_method'] as String? ?? 'Cash';
-      final account = method == 'Check'
-          ? accChequesInHand
-          : accountName(p['account_id'] as String?,
-              fallback: method == 'Cash' ? accCash : accBank);
+      final account = method == receiptMethodOldGold
+          ? accOldGold
+          : method == 'Check'
+              ? accChequesInHand
+              : accountName(p['account_id'] as String?,
+                  fallback: method == 'Cash' ? accCash : accBank);
       entries.add(LedgerPostings.receiptEntry(
         date: DateTime.tryParse(p['d'] as String? ?? '') ?? DateTime.now(),
         customerName: p['customer_name'] as String? ?? '',
@@ -187,6 +199,37 @@ class LedgerService {
         currencyCode: p['currency_code'] as String? ?? 'INR',
         sourceId: p['id'] as String,
       ));
+    }
+
+    // 2b. Historical/manual old-gold RCM rows. New exchanges write zero; this
+    // replay preserves the audit trail of pre-policy-change entries.
+    final oldGoldTable = await db.rawQuery(
+        "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='old_gold_entries'");
+    final invoiceDateCol = await db.rawQuery(
+        "SELECT COUNT(*) AS n FROM pragma_table_info('invoices') WHERE name='date'");
+    if ((oldGoldTable.first['n'] as int? ?? 0) == 1 &&
+        (invoiceDateCol.first['n'] as int? ?? 0) == 1) {
+      final rcmRows = await db.rawQuery('''
+        SELECT o.id, o.rcm_tax, o.customer_name,
+               i.date AS d, i.currency_code
+        FROM old_gold_entries o
+        LEFT JOIN invoices i ON i.id = o.invoice_id
+        WHERE o.rcm_tax > 0
+        ${dateFilter('i.date')}
+        ${currencyCode == null ? '' : 'AND i.currency_code = ?'}
+        ORDER BY d
+      ''', [if (currencyCode != null) currencyCode]);
+      for (final r in rcmRows) {
+        final rcmTax = (r['rcm_tax'] as num?)?.toDouble() ?? 0;
+        if (rcmTax <= 0) continue;
+        entries.add(LedgerPostings.oldGoldRcmEntry(
+          date: DateTime.tryParse(r['d'] as String? ?? '') ?? DateTime.now(),
+          customerName: r['customer_name'] as String? ?? '',
+          amount: rcmTax,
+          currencyCode: r['currency_code'] as String? ?? 'INR',
+          sourceId: r['id'] as String,
+        ));
+      }
     }
 
     // 3. Expenses → expense / Cash
@@ -340,8 +383,8 @@ class LedgerService {
           notes: row['notes'] as String?,
           amount: amount,
           account: accountName(accountId),
-          currencyCode: accountById[accountId]?['currency_code'] as String? ??
-              'INR',
+          currencyCode:
+              accountById[accountId]?['currency_code'] as String? ?? 'INR',
           sourceId: row['id'] as String,
         ));
       } else {
@@ -725,8 +768,7 @@ class LedgerPostings {
         LedgerLine(
             account: LedgerService.accReceivable, debit: payable, credit: 0),
         LedgerLine(account: LedgerService.accSales, debit: 0, credit: net),
-        LedgerLine(
-            account: LedgerService.accGstOutput, debit: 0, credit: tax),
+        LedgerLine(account: LedgerService.accGstOutput, debit: 0, credit: tax),
         if (roundOffLine != null) roundOffLine,
       ],
       sourceType: JournalStore.srcInvoice,
@@ -746,9 +788,9 @@ class LedgerPostings {
     if (!isPostingType(type)) return null;
     final taxMode = TaxModeExtension.fromKey(header['tax_mode'] as String?);
     final taxRate = (header['tax_rate'] as num?)?.toDouble() ?? 0.0;
-    final additional = AdditionalCost.listFromJson(
-            header['additional_costs'] as String?)
-        .fold(0.0, (sum, c) => sum + c.amount);
+    final additional =
+        AdditionalCost.listFromJson(header['additional_costs'] as String?)
+            .fold(0.0, (sum, c) => sum + c.amount);
     final totals = InvoiceTotalsCalculator.totals(
       lines: itemRows.map((r) => InvoiceTotalsCalculator.lineFromDbRow(r,
           taxMode: taxMode, globalTaxRatePercent: taxRate * 100)),
@@ -764,7 +806,8 @@ class LedgerPostings {
     final payable = InvoiceTotalsCalculator.payableTotal(totals.total,
         enabled: (header['round_off'] as int?) == 1);
     return saleEntry(
-      date: DateTime.tryParse(header['date'] as String? ?? '') ?? DateTime.now(),
+      date:
+          DateTime.tryParse(header['date'] as String? ?? '') ?? DateTime.now(),
       type: type,
       customerName: header['customer_name'] as String? ?? '',
       currencySymbol: header['currency_symbol'] as String? ?? '₹',
@@ -819,6 +862,30 @@ class LedgerPostings {
         LedgerLine(account: account, debit: 0, credit: amount),
       ],
       sourceType: JournalStore.srcExpense,
+      sourceId: sourceId,
+      currencyCode: currencyCode,
+    );
+  }
+
+  /// Historical/manual old-gold RCM booked as an ITC / RCM-payable pair on
+  /// the invoice date. New customer exchanges must not create this entry from
+  /// the customer's registration status alone. Source id is the old-gold row.
+  static JournalEntry oldGoldRcmEntry({
+    required DateTime date,
+    required String customerName,
+    required double amount,
+    required String currencyCode,
+    required String sourceId,
+  }) {
+    return JournalEntry(
+      date: date,
+      description: 'Old gold RCM — $customerName (sec 9(4))',
+      lines: [
+        LedgerLine(
+            account: LedgerService.accGstInput, debit: amount, credit: 0),
+        LedgerLine(account: '2250 GST RCM Payable', debit: 0, credit: amount),
+      ],
+      sourceType: JournalStore.srcOldGold,
       sourceId: sourceId,
       currencyCode: currencyCode,
     );
@@ -884,8 +951,7 @@ class LedgerPostings {
         lines: [
           LedgerLine(
               account: LedgerService.accPurchases, debit: net, credit: 0),
-          LedgerLine(
-              account: LedgerService.accGstInput, debit: tax, credit: 0),
+          LedgerLine(account: LedgerService.accGstInput, debit: tax, credit: 0),
           LedgerLine(
               account: LedgerService.accGstOutput, debit: 0, credit: tax),
           ...cashLeg,
@@ -929,8 +995,7 @@ class LedgerPostings {
       date: date,
       description: 'Purchase payment — $supplierName',
       lines: [
-        LedgerLine(
-            account: LedgerService.accPayable, debit: amount, credit: 0),
+        LedgerLine(account: LedgerService.accPayable, debit: amount, credit: 0),
         LedgerLine(account: account, debit: 0, credit: amount),
       ],
       sourceType: JournalStore.srcPurchasePayment,
@@ -1013,9 +1078,7 @@ class LedgerPostings {
             ]
           : [
               LedgerLine(
-                  account: LedgerService.accCapital,
-                  debit: -amount,
-                  credit: 0),
+                  account: LedgerService.accCapital, debit: -amount, credit: 0),
               LedgerLine(account: account, debit: 0, credit: -amount),
             ],
       sourceType: JournalStore.srcAdjustment,
@@ -1075,9 +1138,7 @@ class LedgerPostings {
           LedgerLine(
               account: LedgerService.accBankFees, debit: fees, credit: 0),
         LedgerLine(
-            account: account,
-            debit: 0,
-            credit: principal + interest + fees),
+            account: account, debit: 0, credit: principal + interest + fees),
       ],
       sourceType: JournalStore.srcLoanMovement,
       sourceId: sourceId,
@@ -1100,9 +1161,7 @@ class LedgerPostings {
           ? [
               LedgerLine(account: account, debit: opening, credit: 0),
               LedgerLine(
-                  account: LedgerService.accCapital,
-                  debit: 0,
-                  credit: opening),
+                  account: LedgerService.accCapital, debit: 0, credit: opening),
             ]
           : [
               LedgerLine(

@@ -103,6 +103,7 @@ class Product {
       'unit': unit,
       'unlimited_stock': unlimitedStock ? 1 : 0,
       'price_includes_tax': priceIncludesTax ? 1 : 0,
+      'barcode': barcode,
     };
   }
 

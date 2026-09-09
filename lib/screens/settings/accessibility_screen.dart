@@ -2,11 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:apexbooks/common/common.dart';
-import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
-import 'package:apexbooks/providers/repositories.dart';
 import 'package:apexbooks/widgets/app/app.dart';
 
 class AccessibilityScreen extends ConsumerStatefulWidget {
@@ -18,70 +15,8 @@ class AccessibilityScreen extends ConsumerStatefulWidget {
 }
 
 class _AccessibilityScreenState extends ConsumerState<AccessibilityScreen> {
-  String _createInvoiceLayout = 'v2';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCreateInvoiceLayout();
-  }
-
-  Future<void> _loadCreateInvoiceLayout() async {
-    final layout = await ref
-        .read(settingsRepositoryProvider)
-        .getSetting(SettingKey.createInvoiceLayout);
-    if (!mounted) return;
-    setState(() => _createInvoiceLayout = layout ?? 'v2');
-  }
-
-  Future<void> _setCreateInvoiceLayout(String value) async {
-    if (value == _createInvoiceLayout) return;
-    await ref
-        .read(settingsRepositoryProvider)
-        .setSetting(SettingKey.createInvoiceLayout, value);
-    if (!mounted) return;
-    setState(() => _createInvoiceLayout = value);
-  }
-
-  Widget _layoutText(AppLocalizations l10n) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-            _createInvoiceLayout == 'v1'
-                ? l10n.accessibilityClassicLayoutLabel
-                : l10n.accessibilityNewLayoutLabel,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 2),
-        Text(l10n.accessibilityLayoutDescription,
-            style: TextStyle(
-                fontSize: AppFontSize.xsmall,
-                color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      ],
-    );
-  }
-
-  Widget _layoutToggle(AppLocalizations l10n) {
-    return SegmentedButton<String>(
-      segments: [
-        ButtonSegment(
-            value: 'v2',
-            icon: const Icon(Icons.auto_awesome, size: 16),
-            label: Text(l10n.dashboardLayoutNew)),
-        ButtonSegment(
-            value: 'v1',
-            icon: const Icon(Icons.history, size: 16),
-            label: Text(l10n.dashboardLayoutClassic)),
-      ],
-      selected: {_createInvoiceLayout},
-      onSelectionChanged: (selection) =>
-          _setCreateInvoiceLayout(selection.first),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).primaryColor;
     final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
@@ -90,10 +25,6 @@ class _AccessibilityScreenState extends ConsumerState<AccessibilityScreen> {
           : Theme.of(context).colorScheme.surfaceContainerHighest,
       appBar: AppBar(
         title: Text(l10n.settingsNavAccessibilityLabel),
-        backgroundColor:
-            Theme.of(context).appBarTheme.backgroundColor ?? primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: false,
       ),
       body: SingleChildScrollView(
@@ -104,41 +35,6 @@ class _AccessibilityScreenState extends ConsumerState<AccessibilityScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(l10n.accessibilityCreateInvoiceLayoutSectionTitle,
-                    style: const TextStyle(
-                        fontSize: AppFontSize.large,
-                        fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                // Text(
-                //   'Switching mid-edit discards any unsaved changes on the invoice form — save or finish the invoice first.',
-                //   style: TextStyle(
-                //       fontSize: AppFontSize.small,
-                //       color: Theme.of(context).colorScheme.onSurfaceVariant),
-                // ),
-                const SizedBox(height: 16),
-                AppCard(
-                  padding: const EdgeInsets.all(20),
-                  child: context.isCompact
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _layoutText(l10n),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: _layoutToggle(l10n),
-                            ),
-                          ],
-                        )
-                      : Row(
-                          children: [
-                            Expanded(child: _layoutText(l10n)),
-                            const SizedBox(width: 16),
-                            _layoutToggle(l10n),
-                          ],
-                        ),
-                ),
-                const SizedBox(height: 24),
                 if (!Platform.isAndroid) ...[
                   Text(l10n.dashboardKeyboardShortcutsTitle,
                       style: const TextStyle(

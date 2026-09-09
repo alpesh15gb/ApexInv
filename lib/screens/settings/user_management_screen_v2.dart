@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/providers/repositories.dart';
-import 'package:apexbooks/common/breakpoints.dart';
 import 'package:apexbooks/common/constants.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
 import 'package:apexbooks/models/user.dart';
 import 'package:apexbooks/utils/password_utils.dart';
+import 'package:apexbooks/widgets/adaptive/status_chip.dart';
 import 'package:apexbooks/widgets/app/app.dart';
 
 class UserManagementScreenV2 extends ConsumerStatefulWidget {
@@ -22,6 +22,7 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
   List<User> _users = [];
   List<User> _filteredUsers = [];
   bool _isLoading = false;
+  String? _loadError;
 
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
@@ -37,7 +38,7 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
   bool _showAddPanelV2 = false;
   String _roleFilterV2 = 'all'; // 'all' | 'admin' | 'user'
   int _currentPageV2 = 0;
-  final int _pageSizeV2 = 10;
+  int _pageSizeV2 = 10;
   final Set<String> _selectedIdsV2 = {};
 
   @override
@@ -52,7 +53,10 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
   }
 
   Future<void> _loadUsers() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
 
     try {
       if (widget.currentUser.isAdmin()) {
@@ -78,9 +82,10 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
     } catch (e) {
       setState(() => _isLoading = false);
       if (!mounted) return;
-      _showSnackBar(
-          AppLocalizations.of(context)!.userMgmtLoadErrorMessage(e.toString()),
-          Colors.red);
+      final message = AppLocalizations.of(context)!
+          .userMgmtLoadErrorMessage(e.toString());
+      setState(() => _loadError = message);
+      if (_users.isNotEmpty) _showSnackBar(message, Colors.red);
     }
   }
 
@@ -823,153 +828,73 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
     );
   }
 
-  Widget _statCardV2({
-    required String label,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color accent,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _flatCardDecorationV2(context),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                const SizedBox(height: 6),
-                Text(value,
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: accent, size: 20),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _statCardsRowV2() {
-    final cards = <Widget>[
-      _statCardV2(
+    final scheme = Theme.of(context).colorScheme;
+    Color tone(StatusTone tone) =>
+        StatusChip.colorsFor(Theme.of(context).brightness, tone).$2;
+    return AppStatGrid(stats: [
+      AppListStat(
         label: 'Total Users',
         value: '${_users.length}',
         subtitle: 'All users',
         icon: Icons.groups_outlined,
-        accent: Theme.of(context).primaryColor,
+        accent: scheme.primary,
       ),
-      _statCardV2(
+      AppListStat(
         label: 'Admin Users',
         value: '$_adminCountV2',
         subtitle: 'Full access',
         icon: Icons.admin_panel_settings_outlined,
-        accent: Colors.purple,
+        accent: tone(StatusTone.info),
       ),
-      _statCardV2(
+      AppListStat(
         label: 'Regular Users',
         value: '$_regularCountV2',
         subtitle: 'Standard access',
         icon: Icons.person_outline,
-        accent: Colors.blue,
+        accent: tone(StatusTone.neutral),
       ),
-    ];
-    if (context.isCompact) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          const gap = 12.0;
-          final width = (constraints.maxWidth - gap) / 2;
-          return Wrap(
-            spacing: gap,
-            runSpacing: gap,
-            children: [
-              for (final card in cards) SizedBox(width: width, child: card),
-            ],
-          );
-        },
-      );
-    }
-    return Row(
-      children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          if (i > 0) const SizedBox(width: 12),
-          Expanded(child: cards[i]),
-        ],
-      ],
-    );
+    ]);
   }
 
   Widget _headerBarV2() {
     final l10n = AppLocalizations.of(context)!;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(l10n.userMgmtTitle,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: Theme.of(context).colorScheme.onSurface)),
-              const SizedBox(height: 2),
-              Text(l10n.userMgmtSubtitle,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            ],
+    final refreshButton = IconButton(
+      onPressed: _isLoading ? null : _loadUsers,
+      icon: _isLoading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.refresh),
+      tooltip: l10n.actionRefresh,
+    );
+    return AppListHeader(
+      title: l10n.userMgmtTitle,
+      subtitle: l10n.userMgmtSubtitle,
+      actions: [
+        refreshButton,
+        if (widget.currentUser.isAdmin())
+          AppPrimaryButton(
+            onPressed: _openAddPanelV2,
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(l10n.userMgmtAddUserButton),
           ),
-        ),
-        Flexible(
-          child: Wrap(
-            alignment: WrapAlignment.end,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              IconButton(
-                onPressed: _isLoading ? null : _loadUsers,
-                icon: _isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh),
-                tooltip: l10n.actionRefresh,
-              ),
-              if (widget.currentUser.isAdmin())
-                AppPrimaryButton(
-                  onPressed: _openAddPanelV2,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(l10n.userMgmtAddUserButton),
-                ),
-            ],
-          ),
-        ),
       ],
+      compactActions: Row(
+        children: [
+          if (widget.currentUser.isAdmin())
+            Expanded(
+              child: AppPrimaryButton(
+                expanded: true,
+                onPressed: _openAddPanelV2,
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(l10n.userMgmtAddUserButton),
+              ),
+            ),
+          refreshButton,
+        ],
+      ),
     );
   }
 
@@ -1015,55 +940,34 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
   }
 
   Widget _tableHeaderRowV2() {
-    TextStyle style = TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: Theme.of(context).colorScheme.onSurfaceVariant);
     final pageItems = _pagedUsersV2();
     final allSelected = pageItems.isNotEmpty &&
         pageItems.every((u) => _selectedIdsV2.contains(u.id));
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant, width: 1.4),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (widget.currentUser.isAdmin())
-            SizedBox(
+    return AppTableHeader(
+      leading: widget.currentUser.isAdmin()
+          ? AppTableSelection(
               width: 36,
-              child: Checkbox(
-                value: allSelected,
-                onChanged: (v) {
-                  if (!mounted) return;
-                  setState(() {
-                    if (v == true) {
-                      _selectedIdsV2.addAll(pageItems.map((u) => u.id));
-                    } else {
-                      _selectedIdsV2.removeAll(pageItems.map((u) => u.id));
-                    }
-                  });
-                },
-              ),
-            ),
-          Expanded(
-              flex: 3,
-              child: Text(AppLocalizations.of(context)!.userMgmtColUser,
-                  style: style)),
-          Expanded(
-              flex: 2,
-              child: Text(AppLocalizations.of(context)!.userMgmtColRole,
-                  style: style)),
-          SizedBox(
-              width: 164,
-              child: Text(AppLocalizations.of(context)!.customerMgmtColActions,
-                  style: style)),
-        ],
-      ),
+              value: allSelected,
+              onChanged: (v) {
+                if (!mounted) return;
+                setState(() {
+                  if (v == true) {
+                    _selectedIdsV2.addAll(pageItems.map((u) => u.id));
+                  } else {
+                    _selectedIdsV2.removeAll(pageItems.map((u) => u.id));
+                  }
+                });
+              },
+            )
+          : null,
+      children: [
+        AppTableHeaderLabel(AppLocalizations.of(context)!.userMgmtColUser,
+            flex: 3),
+        AppTableHeaderLabel(AppLocalizations.of(context)!.userMgmtColRole),
+        AppTableHeaderLabel(
+            AppLocalizations.of(context)!.customerMgmtColActions,
+            width: 164),
+      ],
     );
   }
 
@@ -1208,109 +1112,64 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
     return start < end ? list.sublist(start, end) : <User>[];
   }
 
+  Widget _bulkMenuV2() {
+    final l10n = AppLocalizations.of(context)!;
+    if (!widget.currentUser.isAdmin()) return const SizedBox.shrink();
+    return PopupMenuButton<String>(
+      enabled: _selectedIdsV2.isNotEmpty,
+      tooltip: l10n.userMgmtBulkActionsTooltip,
+      onSelected: (value) {
+        if (value == 'delete') _bulkDeleteSelectedV2();
+      },
+      itemBuilder: (ctx) => [
+        PopupMenuItem(
+          value: 'delete',
+          enabled: _selectedIdsV2.isNotEmpty,
+          child: Row(
+            children: [
+              const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+              const SizedBox(width: 8),
+              Text(l10n.userMgmtDeleteSelectedMenuLabel,
+                  style: const TextStyle(color: Colors.red)),
+            ],
+          ),
+        ),
+      ],
+      child: _menuButtonLookV2(Icons.checklist,
+          '${l10n.userMgmtBulkActionsLabel}'
+          '${_selectedIdsV2.isNotEmpty ? ' (${_selectedIdsV2.length})' : ''}'),
+    );
+  }
+
   Widget _paginationV2() {
     final l10n = AppLocalizations.of(context)!;
     final total = _roleFilteredUsersV2.length;
     final totalPages = total == 0 ? 1 : ((total - 1) ~/ _pageSizeV2) + 1;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-        ),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Row(
-              children: [
-                if (widget.currentUser.isAdmin())
-                  PopupMenuButton<String>(
-                    enabled: _selectedIdsV2.isNotEmpty,
-                    tooltip: l10n.userMgmtBulkActionsTooltip,
-                    onSelected: (value) {
-                      if (value == 'delete') _bulkDeleteSelectedV2();
-                    },
-                    itemBuilder: (ctx) => [
-                      PopupMenuItem(
-                        value: 'delete',
-                        enabled: _selectedIdsV2.isNotEmpty,
-                        child: Row(
-                          children: [
-                            const Icon(Icons.delete_outline,
-                                color: Colors.red, size: 18),
-                            const SizedBox(width: 8),
-                            Text(l10n.userMgmtDeleteSelectedMenuLabel,
-                                style: const TextStyle(color: Colors.red)),
-                          ],
-                        ),
-                      ),
-                    ],
-                    child: _menuButtonLookV2(
-                        Icons.checklist,
-                        '${l10n.userMgmtBulkActionsLabel}'
-                        '${_selectedIdsV2.isNotEmpty ? ' (${_selectedIdsV2.length})' : ''}'),
-                  ),
-                const SizedBox(width: 12),
-                Text(
-                    l10n.userMgmtShowingRangeLabel(
-                        total == 0 ? 0 : _currentPageV2 * _pageSizeV2 + 1,
-                        (_currentPageV2 * _pageSizeV2 + _pageSizeV2)
-                            .clamp(0, total),
-                        total),
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-            const SizedBox(width: 24),
-            Row(
-              children: [
-                IconButton(
-                  onPressed: _currentPageV2 > 0
-                      ? () => setState(() => _currentPageV2--)
-                      : null,
-                  icon: const Icon(Icons.chevron_left),
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  visualDensity: VisualDensity.compact,
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text('${_currentPageV2 + 1}',
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 4),
-                Text(l10n.customerMgmtOfTotalPagesLabel(totalPages),
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                IconButton(
-                  onPressed: _currentPageV2 < totalPages - 1
-                      ? () => setState(() => _currentPageV2++)
-                      : null,
-                  icon: const Icon(Icons.chevron_right),
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    return AppPagination(
+      leading: _bulkMenuV2(),
+      showingLabel: l10n.userMgmtShowingRangeLabel(
+          total == 0 ? 0 : _currentPageV2 * _pageSizeV2 + 1,
+          (_currentPageV2 * _pageSizeV2 + _pageSizeV2).clamp(0, total),
+          total),
+      rowsPerPageLabel: l10n.customerMgmtRowsPerPageLabel,
+      pageSize: _pageSizeV2,
+      onPageSizeChanged: (n) {
+        if (!mounted) return;
+        setState(() {
+          _pageSizeV2 = n;
+          _currentPageV2 = 0;
+        });
+      },
+      currentPage: _currentPageV2,
+      totalPages: totalPages,
+      onPrevious: _currentPageV2 > 0 ? () => setState(() => _currentPageV2--) : null,
+      onNext: _currentPageV2 < totalPages - 1
+          ? () => setState(() => _currentPageV2++)
+          : null,
+      previousLabel: l10n.actionPrevious,
+      nextLabel: l10n.actionNext,
+      pageIndicator: AppPageIndicator(
+          currentPage: _currentPageV2, totalPages: totalPages),
     );
   }
 
@@ -1328,24 +1187,29 @@ class _UserManagementScreenV2State extends ConsumerState<UserManagementScreenV2>
         mainAxisSize: MainAxisSize.min,
         children: [
           _tableHeaderRowV2(),
-          _isLoading && _users.isEmpty
-              ? const SizedBox(height: 240, child: AppLoadingState())
-              : pageItems.isEmpty
-                  ? SizedBox(
-                      height: 240,
-                      child: AppEmptyState(
-                        icon: Icons.person_search_outlined,
-                        title: AppLocalizations.of(context)!
-                            .userMgmtNoUsersFoundMessage,
-                      ),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: pageItems.length,
-                      itemBuilder: (context, index) =>
-                          _tableRowV2(pageItems[index]),
-                    ),
+          AppListStateView(
+            state: _isLoading && _users.isEmpty
+                ? AppListState.loading
+                : _loadError != null && _users.isEmpty
+                    ? AppListState.error
+                    : pageItems.isEmpty
+                        ? AppListState.empty
+                        : AppListState.data,
+            errorMessage: _loadError,
+            onRetry: _loadUsers,
+            emptyState: AppEmptyState(
+              icon: Icons.person_search_outlined,
+              title: AppLocalizations.of(context)!
+                  .userMgmtNoUsersFoundMessage,
+            ),
+            data: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: pageItems.length,
+              itemBuilder: (context, index) =>
+                  _tableRowV2(pageItems[index]),
+            ),
+          ),
           _paginationV2(),
         ],
       ),

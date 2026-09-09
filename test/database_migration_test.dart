@@ -184,13 +184,12 @@ void main() {
 
     // Old data survived the full chain.
     final invoice =
-        (await db.query('invoices', where: 'id = ?', whereArgs: ['i1']))
-            .first;
+        (await db.query('invoices', where: 'id = ?', whereArgs: ['i1'])).first;
     expect(invoice['notes'], 'Pre-migration invoice');
     expect(invoice['customer_name'], 'Old Customer');
 
-    final item = (await db.query('invoice_items',
-            where: 'invoice_id = ?', whereArgs: ['i1']))
+    final item = (await db
+            .query('invoice_items', where: 'invoice_id = ?', whereArgs: ['i1']))
         .first;
     expect(item['product_name'], 'Old Product');
     expect(item['quantity'], 2);
@@ -200,9 +199,9 @@ void main() {
     expect(invoice['tax_mode'], 'global');
     expect(invoice['customer_business_name'], '');
 
-    final user = (await db.query('users',
-            where: 'username = ?', whereArgs: ['admin']))
-        .first;
+    final user =
+        (await db.query('users', where: 'username = ?', whereArgs: ['admin']))
+            .first;
     expect(user['salt'], isNull); // no salt was ever set for this legacy row
     expect(user['password_changed'], 0); // forced reset for admin, per v8 step
 
@@ -221,6 +220,62 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'purchase_bill_payments'");
     expect(paymentTables, hasLength(1));
 
+    await db.close();
+  });
+
+  test('v61 migrations preserve legacy rates and jewellery tax treatment',
+      () async {
+    final db = await openDatabase(
+      inMemoryDatabasePath,
+      version: 61,
+      onCreate: (db, _) async {
+        await db.execute('''
+          CREATE TABLE metal_rates (
+            id TEXT PRIMARY KEY,
+            metal TEXT NOT NULL,
+            purity TEXT NOT NULL,
+            rate_per_gram REAL NOT NULL,
+            effective_date TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE _migration_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version INTEGER,
+            step TEXT,
+            status TEXT,
+            message TEXT,
+            applied_at TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE invoice_items (
+            id TEXT PRIMARY KEY,
+            metal_rate_id TEXT
+          )
+        ''');
+      },
+    );
+    await db.insert('metal_rates', {
+      'id': 'legacy-rate',
+      'metal': 'gold',
+      'purity': '22K',
+      'rate_per_gram': 5000.0,
+      'effective_date': '2026-09-09',
+    });
+    await db.insert('invoice_items', {
+      'id': 'legacy-jewellery-line',
+      'metal_rate_id': 'legacy-rate',
+    });
+
+    await DatabaseHelper().upgradeDbForTest(db, 61, DatabaseHelper().dbVersion);
+
+    final row = (await db.query('metal_rates')).single;
+    expect(row['sell_rate_per_gram'], 5000.0);
+    expect(row['buy_rate_per_gram'], 5000.0);
+    expect(row['rate_per_gram'], 5000.0);
+    final invoiceItem = (await db.query('invoice_items')).single;
+    expect(invoiceItem['jewellery_tax_treatment'], 'legacy_split');
     await db.close();
   });
 }

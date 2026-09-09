@@ -19,7 +19,7 @@ class DatabaseHelper {
   static String? _path;
   static String? get path => _path;
   static Database? _database;
-  final dbVersion = 57;
+  final dbVersion = 63;
 
   /// Emits when the sync engine finishes applying pulled remote rows, so the
   /// UI layer can refresh its lists. Write-side signaling needs no stream:
@@ -82,7 +82,8 @@ class DatabaseHelper {
         business_name TEXT DEFAULT '',
         credit_limit REAL DEFAULT 0,
         credit_limit_enabled INTEGER DEFAULT 0,
-        payment_term_id TEXT DEFAULT ''
+        payment_term_id TEXT DEFAULT '',
+        loyalty_points REAL DEFAULT 0
       )
     ''');
 
@@ -160,7 +161,9 @@ class DatabaseHelper {
         recurring_next_date TEXT,
         sales_channel TEXT DEFAULT 'invoice',
         source_order_id TEXT,
-        round_off INTEGER DEFAULT 0
+        round_off INTEGER DEFAULT 0,
+        industry TEXT DEFAULT '',
+        loyalty_points REAL DEFAULT 0
       )
     ''');
 
@@ -186,8 +189,146 @@ class DatabaseHelper {
         product_unit TEXT DEFAULT '',
         unit TEXT,
         product_price_includes_tax INTEGER DEFAULT 0,
-        description TEXT
+        description TEXT,
+        metal_rate_id TEXT,
+        net_weight REAL DEFAULT 0,
+        making_amount REAL DEFAULT 0,
+        wastage_amount REAL DEFAULT 0,
+        jewellery_tax_treatment TEXT DEFAULT 'retail_3',
+        jewellery_piece_id TEXT,
+        huid_snapshot TEXT,
+        tag_no_snapshot TEXT,
+        purity_snapshot TEXT,
+        gross_weight_snapshot REAL,
+        variant_snapshot_id TEXT,
+        variant_snapshot_name TEXT
       )
+    ''');
+
+    // `rate_per_gram` remains for compatible restores/sync with v61 and
+    // older clients. New code reads the explicit buy/sell columns.
+    await db.execute('''
+      CREATE TABLE metal_rates (
+        id TEXT PRIMARY KEY,
+        metal TEXT NOT NULL,
+        purity TEXT NOT NULL,
+        rate_per_gram REAL NOT NULL,
+        sell_rate_per_gram REAL NOT NULL DEFAULT 0,
+        buy_rate_per_gram REAL NOT NULL DEFAULT 0,
+        effective_date TEXT NOT NULL,
+        company_id TEXT DEFAULT 'local',
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_metal_rates_day
+      ON metal_rates(metal, purity, effective_date)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE jewellery_attributes (
+        product_id TEXT PRIMARY KEY,
+        metal TEXT,
+        purity TEXT,
+        gross_weight REAL DEFAULT 0,
+        stone_weight REAL DEFAULT 0,
+        net_weight REAL DEFAULT 0,
+        making_type TEXT,
+        making_value REAL DEFAULT 0,
+        wastage_percent REAL DEFAULT 0,
+        huid TEXT,
+        company_id TEXT DEFAULT 'local',
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE jewellery_pieces (
+        id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        tag_no TEXT NOT NULL,
+        huid TEXT,
+        purity TEXT,
+        gross_weight REAL DEFAULT 0,
+        stone_weight REAL DEFAULT 0,
+        net_weight REAL DEFAULT 0,
+        status TEXT DEFAULT 'in_stock',
+        sold_invoice_id TEXT,
+        company_id TEXT DEFAULT 'local',
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_jewellery_pieces_product
+      ON jewellery_pieces(product_id)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE old_gold_entries (
+        id TEXT PRIMARY KEY,
+        invoice_id TEXT,
+        customer_id TEXT,
+        customer_name TEXT,
+        metal TEXT NOT NULL,
+        purity TEXT,
+        gross_weight REAL DEFAULT 0,
+        net_weight REAL DEFAULT 0,
+        rate_per_gram REAL DEFAULT 0,
+        amount REAL DEFAULT 0,
+        rcm_tax REAL DEFAULT 0,
+        company_id TEXT DEFAULT 'local',
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_old_gold_invoice
+      ON old_gold_entries(invoice_id)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE job_work_orders (
+        id TEXT PRIMARY KEY,
+        karigar TEXT NOT NULL,
+        metal TEXT NOT NULL,
+        purity TEXT,
+        description TEXT,
+        issued_gross REAL DEFAULT 0,
+        issued_stone REAL DEFAULT 0,
+        issued_date TEXT,
+        status TEXT DEFAULT 'open',
+        received_net REAL DEFAULT 0,
+        wastage_percent REAL DEFAULT 0,
+        received_date TEXT,
+        company_id TEXT DEFAULT 'local',
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_job_work_status
+      ON job_work_orders(status)
+    ''');
+
+    await db.execute('''
+      CREATE TABLE product_variants (
+        id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        value TEXT NOT NULL,
+        extra_price REAL DEFAULT 0,
+        stock REAL DEFAULT 0,
+        barcode TEXT,
+        company_id TEXT DEFAULT 'local',
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_product_variants_product
+      ON product_variants(product_id)
     ''');
 
     await db.execute('''
@@ -1914,6 +2055,278 @@ class DatabaseHelper {
       // installs get it via installSyncCapture; this step covers upgrades.
       await _runMigrationStep(db, 55, 'create_sync_conflicts', () async {
         await createSyncConflictsTable(db);
+      });
+    }
+    if (oldVersion < 58) {
+      // Jewellery vertical foundation (retail.md P1). Purely additive:
+      // two new tables, jewellery columns on invoice_items, and an
+      // industry snapshot on invoices. Existing rows keep working —
+      // NULL/empty jewellery fields mean "retail line".
+      await _runMigrationStep(db, 58, 'create_metal_rates', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS metal_rates (
+            id TEXT PRIMARY KEY,
+            metal TEXT NOT NULL,
+            purity TEXT NOT NULL,
+            rate_per_gram REAL NOT NULL,
+            effective_date TEXT NOT NULL,
+            company_id TEXT DEFAULT 'local',
+            updated_at TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_metal_rates_day
+          ON metal_rates(metal, purity, effective_date)
+        ''');
+      });
+      await _runMigrationStep(db, 58, 'create_jewellery_attributes', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS jewellery_attributes (
+            product_id TEXT PRIMARY KEY,
+            metal TEXT,
+            purity TEXT,
+            gross_weight REAL DEFAULT 0,
+            stone_weight REAL DEFAULT 0,
+            net_weight REAL DEFAULT 0,
+            making_type TEXT,
+            making_value REAL DEFAULT 0,
+            wastage_percent REAL DEFAULT 0,
+            huid TEXT,
+            company_id TEXT DEFAULT 'local',
+            updated_at TEXT
+          )
+        ''');
+      });
+      await _runMigrationStep(db, 58, 'add_jewellery_columns_to_invoice_items',
+          () async {
+        final tables = await db
+            .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+        final tableNames = tables.map((t) => t['name'] as String?).toSet();
+        if (!tableNames.contains('invoice_items')) return;
+        final cols = await db.rawQuery('PRAGMA table_info(invoice_items)');
+        final names = cols.map((c) => c['name'] as String?).toSet();
+        for (final entry in {
+          'metal_rate_id': 'TEXT',
+          'net_weight': 'REAL DEFAULT 0',
+          'making_amount': 'REAL DEFAULT 0',
+          'wastage_amount': 'REAL DEFAULT 0',
+          'jewellery_piece_id': 'TEXT',
+        }.entries) {
+          if (!names.contains(entry.key)) {
+            await db.execute(
+                'ALTER TABLE invoice_items ADD COLUMN ${entry.key} ${entry.value}');
+          }
+        }
+      });
+      await _runMigrationStep(db, 58, 'add_industry_to_invoices', () async {
+        final tables = await db
+            .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+        final tableNames = tables.map((t) => t['name'] as String?).toSet();
+        if (!tableNames.contains('invoices')) return;
+        final cols = await db.rawQuery('PRAGMA table_info(invoices)');
+        final names = cols.map((c) => c['name'] as String?).toSet();
+        if (!names.contains('industry')) {
+          await db.execute(
+              "ALTER TABLE invoices ADD COLUMN industry TEXT DEFAULT ''");
+        }
+      });
+    }
+    if (oldVersion < 59) {
+      // Piece-level jewellery stock (retail.md P2). Purely additive: one
+      // new table; every write is captured for sync via the standard pass.
+      await _runMigrationStep(db, 59, 'create_jewellery_pieces', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS jewellery_pieces (
+            id TEXT PRIMARY KEY,
+            product_id TEXT NOT NULL,
+            tag_no TEXT NOT NULL,
+            huid TEXT,
+            purity TEXT,
+            gross_weight REAL DEFAULT 0,
+            stone_weight REAL DEFAULT 0,
+            net_weight REAL DEFAULT 0,
+            status TEXT DEFAULT 'in_stock',
+            sold_invoice_id TEXT,
+            company_id TEXT DEFAULT 'local',
+            updated_at TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_jewellery_pieces_product
+          ON jewellery_pieces(product_id)
+        ''');
+        await addSyncColumns(db, 'jewellery_pieces');
+        await installSyncCapture(db);
+      });
+    }
+    if (oldVersion < 60) {
+      // P3 + P4 foundation (retail.md §6). Purely additive: old-gold
+      // exchange and karigar job-work tables (P3), product variants (P4),
+      // and the loyalty award snapshot on invoices. Existing rows keep
+      // working — NULL/0 loyalty fields mean "no points".
+      await _runMigrationStep(db, 60, 'create_old_gold_entries', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS old_gold_entries (
+            id TEXT PRIMARY KEY,
+            invoice_id TEXT,
+            customer_id TEXT,
+            customer_name TEXT,
+            metal TEXT NOT NULL,
+            purity TEXT,
+            gross_weight REAL DEFAULT 0,
+            net_weight REAL DEFAULT 0,
+            rate_per_gram REAL DEFAULT 0,
+            amount REAL DEFAULT 0,
+            rcm_tax REAL DEFAULT 0,
+            company_id TEXT DEFAULT 'local',
+            updated_at TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_old_gold_invoice
+          ON old_gold_entries(invoice_id)
+        ''');
+      });
+      await _runMigrationStep(db, 60, 'create_job_work_orders', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS job_work_orders (
+            id TEXT PRIMARY KEY,
+            karigar TEXT NOT NULL,
+            metal TEXT NOT NULL,
+            purity TEXT,
+            description TEXT,
+            issued_gross REAL DEFAULT 0,
+            issued_stone REAL DEFAULT 0,
+            issued_date TEXT,
+            status TEXT DEFAULT 'open',
+            received_net REAL DEFAULT 0,
+            wastage_percent REAL DEFAULT 0,
+            received_date TEXT,
+            company_id TEXT DEFAULT 'local',
+            updated_at TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_job_work_status
+          ON job_work_orders(status)
+        ''');
+      });
+      await _runMigrationStep(db, 60, 'create_product_variants', () async {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS product_variants (
+            id TEXT PRIMARY KEY,
+            product_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            value TEXT NOT NULL,
+            extra_price REAL DEFAULT 0,
+            stock REAL DEFAULT 0,
+            barcode TEXT,
+            company_id TEXT DEFAULT 'local',
+            updated_at TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE INDEX IF NOT EXISTS idx_product_variants_product
+          ON product_variants(product_id)
+        ''');
+      });
+      await _runMigrationStep(db, 60, 'add_loyalty_columns', () async {
+        final tables = await db
+            .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+        final tableNames = tables.map((t) => t['name'] as String?).toSet();
+        for (final entry in {
+          'customers': 'loyalty_points REAL DEFAULT 0',
+          'invoices': 'loyalty_points REAL DEFAULT 0',
+        }.entries) {
+          if (!tableNames.contains(entry.key)) continue;
+          final cols = await db.rawQuery('PRAGMA table_info(${entry.key})');
+          final names = cols.map((c) => c['name'] as String?).toSet();
+          if (!names.contains('loyalty_points')) {
+            await db
+                .execute('ALTER TABLE ${entry.key} ADD COLUMN ${entry.value}');
+          }
+        }
+        await addSyncColumns(db, 'old_gold_entries');
+        await addSyncColumns(db, 'job_work_orders');
+        await addSyncColumns(db, 'product_variants');
+        await installSyncCapture(db);
+      });
+    }
+    if (oldVersion < 61) {
+      // Jewellery piece identity snapshot + retail variant snapshot on
+      // invoice_items (HIGH-07, HIGH-02 fixes). Purely additive columns;
+      // existing rows keep NULL which means "no snapshot" for legacy data.
+      await _runMigrationStep(db, 61, 'add_piece_variant_snapshots', () async {
+        final tables = await db
+            .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+        final tableNames = tables.map((t) => t['name'] as String?).toSet();
+        if (!tableNames.contains('invoice_items')) return;
+        final cols = await db.rawQuery('PRAGMA table_info(invoice_items)');
+        final names = cols.map((c) => c['name'] as String?).toSet();
+        for (final entry in {
+          'huid_snapshot': 'TEXT',
+          'tag_no_snapshot': 'TEXT',
+          'purity_snapshot': 'TEXT',
+          'gross_weight_snapshot': 'REAL',
+          'variant_snapshot_id': 'TEXT',
+          'variant_snapshot_name': 'TEXT',
+        }.entries) {
+          if (!names.contains(entry.key)) {
+            await db.execute(
+                'ALTER TABLE invoice_items ADD COLUMN ${entry.key} ${entry.value}');
+          }
+        }
+      });
+    }
+    if (oldVersion < 62) {
+      // Split the legacy daily market rate into explicit retail sell and old
+      // gold buyback rates. Existing entries intentionally start with no
+      // spread, preserving prior invoices and valuations until edited.
+      await _runMigrationStep(db, 62, 'split_metal_buy_sell_rates', () async {
+        final tables = await db
+            .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+        final tableNames = tables.map((t) => t['name'] as String?).toSet();
+        if (!tableNames.contains('metal_rates')) return;
+        final cols = await db.rawQuery('PRAGMA table_info(metal_rates)');
+        final names = cols.map((c) => c['name'] as String?).toSet();
+        if (!names.contains('sell_rate_per_gram')) {
+          await db.execute(
+              'ALTER TABLE metal_rates ADD COLUMN sell_rate_per_gram REAL NOT NULL DEFAULT 0');
+        }
+        if (!names.contains('buy_rate_per_gram')) {
+          await db.execute(
+              'ALTER TABLE metal_rates ADD COLUMN buy_rate_per_gram REAL NOT NULL DEFAULT 0');
+        }
+        await db.execute('''
+          UPDATE metal_rates
+          SET sell_rate_per_gram = CASE
+                WHEN sell_rate_per_gram <= 0 THEN rate_per_gram
+                ELSE sell_rate_per_gram
+              END,
+              buy_rate_per_gram = CASE
+                WHEN buy_rate_per_gram <= 0 THEN rate_per_gram
+                ELSE buy_rate_per_gram
+              END
+          WHERE sell_rate_per_gram <= 0 OR buy_rate_per_gram <= 0
+        ''');
+      });
+    }
+    if (oldVersion < 63) {
+      // Invoices issued before this release used the former 3%/5% calculation.
+      // Stamp them as legacy so PDF, totals, reports, and GSTR exports replay
+      // the amount that was originally issued rather than silently repricing.
+      await _runMigrationStep(db, 63, 'freeze_legacy_jewellery_tax_treatment',
+          () async {
+        final tables = await db
+            .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+        final tableNames = tables.map((t) => t['name'] as String?).toSet();
+        if (!tableNames.contains('invoice_items')) return;
+        final cols = await db.rawQuery('PRAGMA table_info(invoice_items)');
+        final names = cols.map((c) => c['name'] as String?).toSet();
+        if (!names.contains('jewellery_tax_treatment')) {
+          await db.execute(
+              "ALTER TABLE invoice_items ADD COLUMN jewellery_tax_treatment TEXT DEFAULT 'legacy_split'");
+        }
       });
     }
     if (oldVersion < 56) {

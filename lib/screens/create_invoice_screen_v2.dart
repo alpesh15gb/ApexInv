@@ -9,8 +9,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:apexbooks/common/common.dart';
 import 'package:apexbooks/domain/invoice_totals_calculator.dart';
+import 'package:apexbooks/domain/jewellery/jewellery_calculator.dart';
 import 'package:apexbooks/l10n/app_localizations.dart';
+import 'package:apexbooks/models/jewellery_attributes.dart';
+import 'package:apexbooks/models/jewellery_piece.dart';
+import 'package:apexbooks/models/metal_rate.dart';
 import 'package:apexbooks/providers/app_config_provider.dart';
+import 'package:apexbooks/providers/industry_provider.dart';
+import 'package:apexbooks/models/verticals.dart';
+import 'package:apexbooks/database/product_variant_service.dart';
 import 'package:apexbooks/providers/invoice_provider.dart';
 import 'package:apexbooks/providers/repositories.dart';
 import 'package:uuid/uuid.dart';
@@ -717,6 +724,18 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
       if (showPrevBalance && selectedCustomer != null) {
         await _loadPreviousBalanceDue(selectedCustomer);
       }
+      if (isEditing &&
+          ref.watch(industryProfileProvider) == IndustryProfile.jewellery) {
+        try {
+          final entries = await ref
+              .read(jewelleryRepositoryProvider)
+              .getOldGoldForInvoice(widget.invoiceToEdit!.id);
+          if (!mounted) return;
+          setState(() => _oldGoldEntries = entries);
+        } catch (_) {
+          // Exchange rows are metadata; never block the editor on them.
+        }
+      }
       _completeInitialLoad();
     } catch (e) {
       if (!mounted) return;
@@ -735,7 +754,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     }
   }
 
-  void addInvoiceProductPrompt(Product product) {
+  Future<void> addInvoiceProductPrompt(Product product) async {
     final quantityController = TextEditingController();
     final discountController = TextEditingController(
         text: product.defaultDiscount > 0
@@ -755,12 +774,131 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     String dialogUnit = product.unit;
     int insertAt = invoiceItems.length + 1;
 
+    // ── Jewellery prefill (retail.md P1/P2): attributes seed the weight
+    // fields, the rate for the invoice date is frozen into the line, and
+    // tagged pieces are offered for pick-by-piece sale. ──
+    final isJewelleryShop =
+        ref.read(industryProfileProvider) == IndustryProfile.jewellery;
+    JewelleryAttributes? jewellery;
+    MetalRate? metalRate;
+    List<JewelleryPiece> inStockPieces = const [];
+    if (isJewelleryShop && !product.id.startsWith('custom-')) {
+      try {
+        final repo = ref.read(jewelleryRepositoryProvider);
+        jewellery = await repo.getAttributes(product.id);
+        if (jewellery != null) {
+          final results = await Future.wait([
+            repo.getRateForDate(
+                metal: jewellery.metal,
+                purity: jewellery.purity,
+                date: _selectedOrderDate),
+            repo.getPiecesForProduct(product.id),
+          ]);
+          metalRate = results[0] as MetalRate?;
+          inStockPieces = (results[1] as List<JewelleryPiece>)
+              .where((p) => p.isInStock)
+              .toList();
+        }
+      } catch (_) {
+        // Rates/attributes are an enhancement, never a hard dependency.
+        jewellery = null;
+        metalRate = null;
+        inStockPieces = const [];
+      }
+    }
+    if (!mounted) return;
+    bool billByWeight = jewellery != null && metalRate != null;
+    String seedWeight(double v) =>
+        billByWeight && jewellery != null && v > 0 ? v.toString() : '';
+    final grossWeightController =
+        TextEditingController(text: seedWeight(jewellery?.grossWeight ?? 0));
+    final stoneWeightController =
+        TextEditingController(text: seedWeight(jewellery?.stoneWeight ?? 0));
+    final netWeightController =
+        TextEditingController(text: seedWeight(jewellery?.netWeight ?? 0));
+    final makingValueController = TextEditingController(
+        text: billByWeight && jewellery.makingValue > 0
+            ? jewellery.makingValue.toString()
+            : '0');
+    final wastageController = TextEditingController(
+        text: billByWeight && jewellery.wastagePercent > 0
+            ? jewellery.wastagePercent.toString()
+            : '0');
+    MakingType makingType = makingTypeFromKey(jewellery?.makingType);
+    // Pick-by-piece (retail.md P2): the tagged piece being sold, if any.
+    JewelleryPiece? pickedPiece;
+
+    // Variants (retail.md P4): sellable options with a price delta.
+    List<ProductVariant> variants = const [];
+    ProductVariant? pickedVariant;
+    if (!product.id.startsWith('custom-')) {
+      try {
+        variants = await ProductVariantService.getForProduct(product.id);
+      } catch (_) {
+        variants = const [];
+      }
+    }
+
     Future<void> addInvoiceProductImpl() async {
-      final qty = !_showQuantity
-          ? 1.0
-          : _fractionalQuantity
-              ? (double.tryParse(quantityController.text) ?? 1.0)
-              : (int.tryParse(quantityController.text) ?? 1).toDouble();
+      final gross = double.tryParse(grossWeightController.text) ?? 0.0;
+      final stone = double.tryParse(stoneWeightController.text) ?? 0.0;
+      final netOverride = double.tryParse(netWeightController.text);
+      final net = billByWeight
+          ? (netOverride ?? JewelleryCalculator.netWeight(gross, stone))
+          : 0.0;
+      if (billByWeight) {
+        if (gross < 0 || stone < 0 || net < 0) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Weights must be non-negative.'),
+              behavior: SnackBarBehavior.floating,
+              showCloseIcon: true));
+          return;
+        }
+        if (stone > gross) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Stone weight cannot exceed gross weight.'),
+              behavior: SnackBarBehavior.floating,
+              showCloseIcon: true));
+          return;
+        }
+        if (netOverride != null && net > gross) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Net weight cannot exceed gross weight.'),
+              behavior: SnackBarBehavior.floating,
+              showCloseIcon: true));
+          return;
+        }
+        if (net <= 0 || metalRate == null || jewellery == null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .jewelleryRateMissingMessage(
+                    MetalRate.metalLabel(jewellery?.metal ?? 'gold'),
+                    jewellery?.purity ?? '22K')),
+            behavior: SnackBarBehavior.floating,
+            showCloseIcon: true,
+          ));
+          return;
+        }
+      }
+      JewelleryLineAmount? weightLine;
+      if (billByWeight && metalRate != null && jewellery != null) {
+        weightLine = JewelleryCalculator.line(
+          grossWeight: net + stone,
+          stoneWeight: stone,
+          purity: jewellery.purity,
+          ratePerGram: metalRate.sellRatePerGram,
+          makingType: makingType,
+          makingValue: double.tryParse(makingValueController.text) ?? 0.0,
+          wastagePercent: double.tryParse(wastageController.text) ?? 0.0,
+        );
+      }
+      final qty = billByWeight
+          ? net
+          : !_showQuantity
+              ? 1.0
+              : _fractionalQuantity
+                  ? (double.tryParse(quantityController.text) ?? 1.0)
+                  : (int.tryParse(quantityController.text) ?? 1).toDouble();
       final discount = double.tryParse(discountController.text) ?? 0.0;
       final parsedUnitPrice = double.tryParse(unitPriceController.text);
       if (!qty.isFinite ||
@@ -774,8 +912,13 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         );
         return;
       }
-      final unitPrice =
-          (parsedUnitPrice != null && parsedUnitPrice != product.price)
+      // Weight lines carry the purity-specific frozen rate as their price;
+      // the metal_rates row id travels along so old bills re-render exactly.
+      // The rate is looked up by the item's own purity, so it is already
+      // purity-adjusted — never multiply purityFactor in again (BUG-05).
+      final unitPrice = weightLine != null
+          ? metalRate!.sellRatePerGram
+          : (parsedUnitPrice != null && parsedUnitPrice != product.price)
               ? parsedUnitPrice
               : null;
       final extraCost = double.tryParse(extraCostController.text);
@@ -786,9 +929,19 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         );
         return;
       }
+      final metalRateId = weightLine != null ? metalRate!.id : null;
+      final lineNetWeight = weightLine != null ? net : null;
+      final lineMaking = weightLine?.makingAmount;
+      final lineWastage = weightLine?.wastageAmount;
 
-      // Check stock
-      if (!product.unlimitedStock && product.stock > 0 && qty > product.stock) {
+      // Check stock (piece count). Weight-billed jewellery lines hold net
+      // grams in [qty] but the tray holds discrete pieces — compare one
+      // piece per weight line so 12.45g never triggers a false "Only 5 in
+      // stock" warning (BUG-06).
+      final stockQty = weightLine != null ? 1.0 : qty;
+      if (!product.unlimitedStock &&
+          product.stock > 0 &&
+          stockQty > product.stock) {
         // Insufficient stock — ask user if they want to add anyway
         Navigator.pop(context);
         final addAnyway = await showDialog<bool>(
@@ -799,7 +952,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             content: Text(
               AppLocalizations.of(context)!
                   .createInvoiceInsufficientStockMessage(
-                      product.stock.toInt(), qty),
+                      product.stock.toInt(), stockQty),
             ),
             actions: [
               TextButton(
@@ -826,7 +979,20 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                   extraCost: extraCost,
                   unit: dialogUnit.trim(),
                   description: descriptionController.text.trim(),
-                  discountPerUnit: discountPerUnit),
+                  discountPerUnit: discountPerUnit,
+                  metalRateId: metalRateId,
+                  netWeight: lineNetWeight,
+                  makingAmount: lineMaking,
+                  wastageAmount: lineWastage,
+                  jewelleryPieceId: pickedPiece?.id,
+                  huidSnapshot: pickedPiece?.huid,
+                  tagNoSnapshot: pickedPiece?.tagNo,
+                  puritySnapshot: pickedPiece?.purity,
+                  grossWeightSnapshot: pickedPiece?.grossWeight,
+                  variantSnapshotId: pickedVariant?.id,
+                  variantSnapshotName: pickedVariant != null
+                      ? '${pickedVariant!.name}: ${pickedVariant!.value}'
+                      : null),
               insertAt: insertAt);
         }
       } else if (!product.unlimitedStock && product.stock <= 0) {
@@ -863,7 +1029,20 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                   extraCost: extraCost,
                   unit: dialogUnit.trim(),
                   description: descriptionController.text.trim(),
-                  discountPerUnit: discountPerUnit),
+                  discountPerUnit: discountPerUnit,
+                  metalRateId: metalRateId,
+                  netWeight: lineNetWeight,
+                  makingAmount: lineMaking,
+                  wastageAmount: lineWastage,
+                  jewelleryPieceId: pickedPiece?.id,
+                  huidSnapshot: pickedPiece?.huid,
+                  tagNoSnapshot: pickedPiece?.tagNo,
+                  puritySnapshot: pickedPiece?.purity,
+                  grossWeightSnapshot: pickedPiece?.grossWeight,
+                  variantSnapshotId: pickedVariant?.id,
+                  variantSnapshotName: pickedVariant != null
+                      ? '${pickedVariant!.name}: ${pickedVariant!.value}'
+                      : null),
               insertAt: insertAt);
         }
       } else {
@@ -877,7 +1056,20 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                 extraCost: extraCost,
                 unit: dialogUnit.trim(),
                 description: descriptionController.text.trim(),
-                discountPerUnit: discountPerUnit),
+                discountPerUnit: discountPerUnit,
+                metalRateId: metalRateId,
+                netWeight: lineNetWeight,
+                makingAmount: lineMaking,
+                wastageAmount: lineWastage,
+                jewelleryPieceId: pickedPiece?.id,
+                huidSnapshot: pickedPiece?.huid,
+                tagNoSnapshot: pickedPiece?.tagNo,
+                puritySnapshot: pickedPiece?.purity,
+                grossWeightSnapshot: pickedPiece?.grossWeight,
+                variantSnapshotId: pickedVariant?.id,
+                variantSnapshotName: pickedVariant != null
+                    ? '${pickedVariant!.name}: ${pickedVariant!.value}'
+                    : null),
             insertAt: insertAt);
       }
     }
@@ -1045,7 +1237,353 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                       ),
                     );
                   }),
-                  if (_showQuantity) ...[
+                  if (variants.isNotEmpty) ...[
+                    DropdownButtonFormField<ProductVariant>(
+                      value: pickedVariant,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: AppLocalizations.of(context)!.variantsTitle,
+                        helperText: pickedVariant != null &&
+                                pickedVariant!.extraPrice > 0
+                            ? '+$_currencySymbol${pickedVariant!.extraPrice.toStringAsFixed(2)} applied'
+                            : null,
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: [
+                        DropdownMenuItem<ProductVariant>(
+                          child: Text(
+                              AppLocalizations.of(context)!.commonNoneLabel),
+                        ),
+                        for (final variant in variants)
+                          DropdownMenuItem(
+                            value: variant,
+                            child: Text(
+                              '${variant.name}: ${variant.value}'
+                              '${variant.extraPrice > 0 ? ' (+$_currencySymbol${variant.extraPrice.toStringAsFixed(2)})' : ''}',
+                            ),
+                          ),
+                      ],
+                      onChanged: (variant) => setDialogState(() {
+                        if (variant == null) {
+                          pickedVariant = null;
+                          unitPriceController.text = product.price.toString();
+                          return;
+                        }
+                        pickedVariant = variant;
+                        unitPriceController.text =
+                            (product.price + variant.extraPrice).toString();
+                      }),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (jewellery != null) ...[
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      value: billByWeight,
+                      title: Text(AppLocalizations.of(context)!
+                          .invoiceJewelleryUseWeightLabel),
+                      subtitle: metalRate == null
+                          ? Text(
+                              AppLocalizations.of(context)!
+                                  .jewelleryRateMissingMessage(
+                                      MetalRate.metalLabel(jewellery.metal),
+                                      jewellery.purity),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.error))
+                          : Text(
+                              '${AppLocalizations.of(context)!.invoiceRateAsOnLabel(metalRate.dateKey)} · $_currencySymbol${metalRate.sellRatePerGram.toStringAsFixed(2)}/g',
+                              style: const TextStyle(fontSize: 12)),
+                      secondary: const Icon(Icons.scale_outlined),
+                      onChanged: metalRate == null
+                          ? null
+                          : (v) => setDialogState(() => billByWeight = v),
+                    ),
+                    if (billByWeight && metalRate != null) ...[
+                      if (inStockPieces.isNotEmpty) ...[
+                        DropdownButtonFormField<JewelleryPiece>(
+                          value: pickedPiece,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: AppLocalizations.of(context)!
+                                .invoiceJewelleryPickPiece,
+                            helperText: pickedPiece != null
+                                ? AppLocalizations.of(context)!
+                                    .invoiceJewelleryPieceWeightHint
+                                : null,
+                            isDense: true,
+                            border: const OutlineInputBorder(),
+                          ),
+                          items: [
+                            DropdownMenuItem<JewelleryPiece>(
+                              child: Text(AppLocalizations.of(context)!
+                                  .commonNoneLabel),
+                            ),
+                            for (final piece in inStockPieces)
+                              DropdownMenuItem(
+                                value: piece,
+                                child: Text(
+                                  '#${piece.tagNo} · ${piece.netWeight > 0 ? piece.netWeight : (piece.grossWeight - piece.stoneWeight).clamp(0.0, double.infinity)} g'
+                                  '${piece.huid.isNotEmpty ? ' · ${piece.huid}' : ''}',
+                                ),
+                              ),
+                          ],
+                          onChanged: (piece) => setDialogState(() {
+                            if (piece == null) {
+                              pickedPiece = null;
+                              return;
+                            }
+                            pickedPiece = piece;
+                            billByWeight = true;
+                            grossWeightController.text = piece.grossWeight > 0
+                                ? piece.grossWeight.toString()
+                                : '';
+                            stoneWeightController.text = piece.stoneWeight > 0
+                                ? piece.stoneWeight.toString()
+                                : '';
+                            netWeightController.text = piece.netWeight > 0
+                                ? piece.netWeight.toString()
+                                : '';
+                          }),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: grossWeightController,
+                              decoration: InputDecoration(
+                                labelText: AppLocalizations.of(context)!
+                                    .jewelleryGrossWeightLabel,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.]')),
+                              ],
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: stoneWeightController,
+                              decoration: InputDecoration(
+                                labelText: AppLocalizations.of(context)!
+                                    .jewelleryStoneWeightLabel,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.]')),
+                              ],
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: netWeightController,
+                              decoration: InputDecoration(
+                                labelText: AppLocalizations.of(context)!
+                                    .jewelleryNetWeightLabel,
+                                hintText: AppLocalizations.of(context)!
+                                    .jewelleryNetWeightHint,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.]')),
+                              ],
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: DropdownButtonFormField<MakingType>(
+                              value: makingType,
+                              isDense: true,
+                              decoration: InputDecoration(
+                                labelText: AppLocalizations.of(context)!
+                                    .jewelleryMakingTypeLabel,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                              items: [
+                                DropdownMenuItem(
+                                    value: MakingType.fixed,
+                                    child: Text(AppLocalizations.of(context)!
+                                        .jewelleryMakingFixedLabel)),
+                                DropdownMenuItem(
+                                    value: MakingType.perGram,
+                                    child: Text(AppLocalizations.of(context)!
+                                        .jewelleryMakingPerGramLabel)),
+                                DropdownMenuItem(
+                                    value: MakingType.percent,
+                                    child: Text(AppLocalizations.of(context)!
+                                        .jewelleryMakingPercentLabel)),
+                              ],
+                              onChanged: (v) => setDialogState(
+                                  () => makingType = v ?? MakingType.fixed),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: makingValueController,
+                              decoration: InputDecoration(
+                                labelText: AppLocalizations.of(context)!
+                                    .jewelleryMakingValueLabel,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.]')),
+                              ],
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: wastageController,
+                              decoration: InputDecoration(
+                                labelText: AppLocalizations.of(context)!
+                                    .jewelleryWastageLabel,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.]')),
+                              ],
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Builder(builder: (context) {
+                        final gross =
+                            double.tryParse(grossWeightController.text) ?? 0.0;
+                        final stone =
+                            double.tryParse(stoneWeightController.text) ?? 0.0;
+                        final netOverride =
+                            double.tryParse(netWeightController.text);
+                        final net = netOverride ??
+                            JewelleryCalculator.netWeight(gross, stone);
+                        final preview = net <= 0
+                            ? null
+                            : JewelleryCalculator.line(
+                                grossWeight: net + stone,
+                                stoneWeight: stone,
+                                purity: jewellery!.purity,
+                                ratePerGram: metalRate!.sellRatePerGram,
+                                makingType: makingType,
+                                makingValue: double.tryParse(
+                                        makingValueController.text) ??
+                                    0.0,
+                                wastagePercent:
+                                    double.tryParse(wastageController.text) ??
+                                        0.0,
+                              );
+                        final theme = Theme.of(context);
+                        if (preview == null) return const SizedBox.shrink();
+                        String money(double v) =>
+                            '$_currencySymbol${v.toStringAsFixed(2)}';
+                        Row row(String label, String value,
+                                {bool bold = false}) =>
+                            Row(
+                              children: [
+                                Expanded(
+                                    child: Text(label,
+                                        style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: bold
+                                                ? FontWeight.w700
+                                                : FontWeight.w400,
+                                            color: bold
+                                                ? null
+                                                : theme.colorScheme
+                                                    .onSurfaceVariant))),
+                                Text(value,
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: bold
+                                            ? FontWeight.w700
+                                            : FontWeight.w500)),
+                              ],
+                            );
+                        return Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              row(
+                                  AppLocalizations.of(context)!
+                                      .invoiceMetalValueLabel,
+                                  money(preview.metalValue)),
+                              const SizedBox(height: 3),
+                              row(
+                                  AppLocalizations.of(context)!
+                                      .invoiceWastageLabel,
+                                  money(preview.wastageAmount)),
+                              const SizedBox(height: 3),
+                              row(
+                                  AppLocalizations.of(context)!
+                                      .invoiceMakingLabel,
+                                  money(preview.makingAmount)),
+                              const SizedBox(height: 3),
+                              row(
+                                  AppLocalizations.of(context)!
+                                      .invoiceJewelleryGstSplitLabel,
+                                  money(preview.lineTax)),
+                              const Divider(height: 10),
+                              row(
+                                  AppLocalizations.of(context)!
+                                      .invoiceJewelleryLineTotalLabel,
+                                  money(preview.lineTotal),
+                                  bold: true),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                    const SizedBox(height: 16),
+                  ],
+                  if (_showQuantity && !billByWeight) ...[
                     TextField(
                       controller: quantityController,
                       autofocus: true,
@@ -1108,29 +1646,31 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                         (val) => setDialogState(() => discountPerUnit = val)),
                     const SizedBox(height: 16),
                   ],
-                  TextField(
-                    controller: unitPriceController,
-                    autofocus: !_showQuantity,
-                    decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context)!
-                          .fieldUnitPriceOverrideLabel,
-                      helperText: 'Default: $_currencySymbol${product.price}',
-                      border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppBorderRadius.xsmall)),
-                      prefixText: '$_currencySymbol ',
-                      filled: true,
-                      fillColor:
-                          Theme.of(context).colorScheme.surfaceContainerHighest,
+                  if (!billByWeight)
+                    TextField(
+                      controller: unitPriceController,
+                      autofocus: !_showQuantity,
+                      decoration: InputDecoration(
+                        labelText: AppLocalizations.of(context)!
+                            .fieldUnitPriceOverrideLabel,
+                        helperText: 'Default: $_currencySymbol${product.price}',
+                        border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppBorderRadius.xsmall)),
+                        prefixText: '$_currencySymbol ',
+                        filled: true,
+                        fillColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                      ),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      ],
+                      onSubmitted: (_) => addInvoiceProductImpl(),
                     ),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                    ],
-                    onSubmitted: (_) => addInvoiceProductImpl(),
-                  ),
-                  if (_columnsConfig.extraCost) ...[
+                  if (_columnsConfig.extraCost && !billByWeight) ...[
                     const SizedBox(height: 16),
                     TextField(
                       controller: extraCostController,
@@ -1449,7 +1989,9 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
           paymentTermId: _paymentTermId,
         );
 
-        await ref.read(invoiceRepositoryProvider).insertInvoice(invoice);
+        await ref
+            .read(invoiceRepositoryProvider)
+            .insertInvoice(invoice, oldGoldEntries: _oldGoldEntries);
 
         if (!mounted) return true;
         setState(() {
@@ -1785,16 +2327,22 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                 final extraCost = double.tryParse(extraCostController.text);
                 final updatedItem = InvoiceItem(
                   product: item.product,
-                  quantity: !_showQuantity
-                      ? 1.0
-                      : _fractionalQuantity
-                          ? (double.tryParse(quantityController.text) ??
-                              item.quantity)
-                          : (int.tryParse(quantityController.text) ??
-                                  double.tryParse(quantityController.text)
-                                      ?.toInt() ??
-                                  item.quantity.toInt())
-                              .toDouble(),
+                  // Jewellery lines bill by weight — keep the fractional
+                  // parse and carry the frozen rate/charges across, or an
+                  // edit would silently downgrade the line to retail.
+                  quantity: item.isJewelleryLine
+                      ? (double.tryParse(quantityController.text) ??
+                          item.quantity)
+                      : !_showQuantity
+                          ? 1.0
+                          : _fractionalQuantity
+                              ? (double.tryParse(quantityController.text) ??
+                                  item.quantity)
+                              : (int.tryParse(quantityController.text) ??
+                                      double.tryParse(quantityController.text)
+                                          ?.toInt() ??
+                                      item.quantity.toInt())
+                                  .toDouble(),
                   discount:
                       double.tryParse(discountController.text) ?? item.discount,
                   unitPrice: unitPrice,
@@ -1802,6 +2350,11 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                   unit: dialogUnit.trim(),
                   description: descriptionController.text.trim(),
                   discountPerUnit: discountPerUnit,
+                  metalRateId: item.metalRateId,
+                  netWeight: item.netWeight,
+                  makingAmount: item.makingAmount,
+                  wastageAmount: item.wastageAmount,
+                  jewelleryPieceId: item.jewelleryPieceId,
                 );
                 if (!mounted) return;
                 setState(() {
@@ -3244,7 +3797,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             color: onPressed != null
                 ? color
                 : Theme.of(context).colorScheme.onSurfaceVariant,
-            iconSize: 28,
+            iconSize: 22,
             onPressed: onPressed,
             tooltip: tooltip ?? label,
           ),
@@ -3353,7 +3906,9 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
           paymentTermId: _paymentTermId,
         );
 
-        await ref.read(invoiceRepositoryProvider).updateInvoice(updatedInvoice);
+        await ref
+            .read(invoiceRepositoryProvider)
+            .updateInvoice(updatedInvoice, oldGoldEntries: _oldGoldEntries);
 
         final refreshedInvoice = await ref
             .read(invoiceRepositoryProvider)
@@ -3742,17 +4297,19 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     final additionalTotal =
         _buildAdditionalCosts().fold(0.0, (sum, c) => sum + c.amount);
     final totals = InvoiceTotalsCalculator.totals(
-      lines: invoiceItems.map((item) => InvoiceTotalsCalculator.line(
-            price: item.effectivePrice,
-            quantity: item.quantity,
-            discount: item.discount,
-            discountPerUnit: item.discountPerUnit,
-            extraCost: item.extraCost ?? 0.0,
-            taxRatePercent: item.product.tax_rate.toDouble(),
-            priceIncludesTax: item.product.priceIncludesTax,
-            taxMode: _taxMode,
-            globalTaxRatePercent: taxRate * 100,
-          )),
+      lines: invoiceItems.map((item) => item.isJewelleryLine
+          ? item.lineAmounts
+          : InvoiceTotalsCalculator.line(
+              price: item.effectivePrice,
+              quantity: item.quantity,
+              discount: item.discount,
+              discountPerUnit: item.discountPerUnit,
+              extraCost: item.extraCost ?? 0.0,
+              taxRatePercent: item.product.tax_rate.toDouble(),
+              priceIncludesTax: item.product.priceIncludesTax,
+              taxMode: _taxMode,
+              globalTaxRatePercent: taxRate * 100,
+            )),
       taxMode: _taxMode,
       globalTaxRate: taxRate,
       globalTaxRateFormat: TaxRateFormat.fraction,
@@ -3771,6 +4328,12 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     final roundOff =
         InvoiceTotalsCalculator.roundOffAmount(total, enabled: _roundOff);
     final payable = total + roundOff;
+    // The action bar (and the payment dialog it feeds) must quote the NET
+    // balance after the old gold exchange credit — the exchange is booked
+    // as its own system receipt on save (BUG-18).
+    final oldGoldCredit = _oldGoldEntries.fold(0.0, (s, e) => s + e.amount);
+    final netPayable =
+        (payable - oldGoldCredit).clamp(0.0, double.infinity).toDouble();
 
     final bool showingSuccessScreen = !isEditing && _invoice != null;
     final validationErrors = <String>[
@@ -3833,6 +4396,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
           onTap: () => _screenFocusNode.requestFocus(),
           child: _withUnsavedChangesPopScope(Scaffold(
             appBar: AppBar(
+              toolbarHeight: 52,
               title: LayoutBuilder(
                 builder: (context, titleConstraints) {
                   // The old title Row had three unconstrained children (title +
@@ -4076,7 +4640,8 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                                             totalDiscount,
                                             invoiceDiscountAmount),
                                       ),
-                                actions: _actionButtonsV2(grandTotal: payable),
+                                actions:
+                                    _actionButtonsV2(grandTotal: netPayable),
                               ),
                             ),
                           ],
@@ -4104,19 +4669,12 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
       );
 
   Widget _flatCardV2({required Widget child, EdgeInsetsGeometry? padding}) {
     return Container(
       decoration: _flatCardDecorationV2(context),
-      padding: padding ?? const EdgeInsets.all(AppPadding.medium),
+      padding: padding ?? const EdgeInsets.all(AppPadding.xsmall),
       child: child,
     );
   }
@@ -4165,8 +4723,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         isDense: true,
         filled: true,
         fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         border: outline,
         enabledBorder: outline,
         focusedBorder: outline.copyWith(
@@ -4284,7 +4841,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             ],
           ),
           if (_customerDetailsExpanded) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
             _responsiveFieldGrid([
               TextField(
                 controller: nameController,
@@ -4312,7 +4869,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                       AppLocalizations.of(context)!.fieldGstinVatLabel),
                 ),
             ]),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _responsiveFieldGrid([
               TextField(
                 controller: emailController,
@@ -4993,7 +5550,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   Widget _buildInvoiceItemRowV2(int index) {
     final item = invoiceItems[index];
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 9),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainer,
         border: Border(
@@ -5022,7 +5579,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
               ),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -5086,7 +5643,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 6),
+                  padding: const EdgeInsets.only(top: 4),
                   child: Wrap(
                     spacing: 16,
                     runSpacing: 4,
@@ -5099,8 +5656,13 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                         _buildItemDetail('Price',
                             '$_currencySymbol${item.product.price.toStringAsFixed(2)}'),
                       if (_taxMode == TaxMode.perItem)
-                        _buildItemDetail('Tax', '${item.product.tax_rate}%'),
-                      if (item.product.priceIncludesTax) ...[
+                        _buildItemDetail(
+                            'Tax',
+                            item.isJewelleryLine
+                                ? '3% + 5%'
+                                : '${item.product.tax_rate}%'),
+                      if (item.product.priceIncludesTax &&
+                          !item.isJewelleryLine) ...[
                         _buildItemDetail(
                             _taxMode == TaxMode.perItem ? '' : 'Tax',
                             'Inclusive',
@@ -5119,6 +5681,20 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                                 : 'Qty',
                             '${item.quantity == item.quantity.roundToDouble() ? item.quantity.toInt().toString() : item.quantity.toString()}'
                             '${item.effectiveUnit.trim().isEmpty ? '' : ' ${item.effectiveUnit}'}'),
+                      if (item.isJewelleryLine) ...[
+                        _buildItemDetail(
+                            '',
+                            AppLocalizations.of(context)!.jewelleryLineSummary(
+                                '$_currencySymbol${item.effectivePrice.toStringAsFixed(2)}',
+                                (item.netWeight ?? item.quantity)
+                                    .toStringAsFixed(2)),
+                            color: Colors.deepPurple[700]),
+                        if (item.jewelleryCharges > 0)
+                          _buildItemDetail(
+                              AppLocalizations.of(context)!.invoiceMakingLabel,
+                              '+$_currencySymbol${item.jewelleryCharges.toStringAsFixed(2)}',
+                              color: Colors.teal[700]),
+                      ],
                       if (_columnsConfig.defaultDiscount || item.discount > 0)
                         _buildItemDetail('Discount',
                             '$_currencySymbol${item.discount.toStringAsFixed(2)}${item.discountPerUnit ? ' ×qty' : ''}'),
@@ -5136,7 +5712,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           AppMoney(
             item.total,
             currencySymbol: _currencySymbol,
@@ -5185,10 +5761,10 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
         Text(AppLocalizations.of(context)!.createInvoiceNoItemsAddedMessage,
             style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant)),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(AppLocalizations.of(context)!.createInvoiceSearchHintMessage,
             style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ],
     );
@@ -5306,81 +5882,391 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
   // the new 360px right panel. Same state (_invoiceDiscountController,
   // _invoiceDiscountType), just laid out in two rows with the field
   // wrapped in Expanded so it can actually shrink.
-  Widget _invoiceDiscountSectionV2() {
+  bool _discountExpanded = false;
+  bool _oldGoldExpanded = false;
+  List<OldGoldEntry> _oldGoldEntries = [];
+  bool _notesExpanded = false;
+  bool _taxExpanded = false;
+
+  /// Collapsible right-rail section: a compact title + one-line summary row
+  /// that expands into the editor. Keeps the rail scannable while rarely
+  /// used controls (discount, notes, tax switches) stay one tap away.
+  Widget _railSection({
+    required String title,
+    required String summary,
+    required bool expanded,
+    required ValueChanged<bool> onToggle,
+    required Widget child,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.04),
+        border: Border.all(color: scheme.outlineVariant),
         borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
-        border: Border.all(color: Colors.orange.withValues(alpha: 0.25)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _invoiceDiscountController,
-                  onChanged: (_) {
-                    if (!mounted) return;
-                    setState(() {});
-                  },
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: _flatFieldDecorationV2(
-                    AppLocalizations.of(context)!
-                        .createInvoiceDiscountFieldLabel,
-                    hint: '',
-                    prefixText:
-                        _invoiceDiscountType == InvoiceDiscountType.amount
-                            ? '$_currencySymbol '
-                            : null,
-                    suffixText:
-                        _invoiceDiscountType == InvoiceDiscountType.percent
-                            ? '%'
-                            : null,
+          InkWell(
+            borderRadius: BorderRadius.circular(AppBorderRadius.xsmall),
+            onTap: () => onToggle(!expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(title,
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 1),
+                        Text(summary,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12, color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
                   ),
-                ),
+                  Icon(expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20, color: scheme.onSurfaceVariant),
+                ],
               ),
-              const SizedBox(width: 8),
-              Container(
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                      color: Theme.of(context).colorScheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<InvoiceDiscountType>(
-                    value: _invoiceDiscountType,
-                    isDense: true,
-                    selectedItemBuilder: (context) => [
-                      const Center(child: Text('%')),
-                      Center(
-                          child: Text(AppLocalizations.of(context)!
-                              .discountTypeAmountShortLabel)),
-                    ],
-                    items: [
-                      const DropdownMenuItem(
-                          value: InvoiceDiscountType.percent, child: Text('%')),
-                      DropdownMenuItem(
-                          value: InvoiceDiscountType.amount,
-                          child:
-                              Text(AppLocalizations.of(context)!.labelAmount)),
-                    ],
-                    onChanged: (v) {
-                      if (v == null || !mounted) return;
-                      setState(() => _invoiceDiscountType = v);
-                    },
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
+          if (expanded) ...[
+            Divider(height: 1, color: scheme.outlineVariant),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: child,
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  String _discountSummary(double invoiceDiscountAmount) {
+    if (invoiceDiscountAmount <= 0) return 'No discount';
+    final value = _invoiceDiscountType == InvoiceDiscountType.percent
+        ? '${_invoiceDiscountValue.toStringAsFixed(1)}%'
+        : '$_currencySymbol${_invoiceDiscountValue.toStringAsFixed(2)}';
+    return '-$_currencySymbol${invoiceDiscountAmount.toStringAsFixed(2)} ($value)';
+  }
+
+  String _notesSummary() {
+    final text = notesController.text.trim();
+    if (text.isEmpty) return 'Add notes';
+    return text.replaceAll('\n', ' ');
+  }
+
+  String _taxSummary() {
+    if (!_isTaxEnabled) return 'Off';
+    final basis = _pricesIncludeTax ? 'Inclusive' : 'Exclusive';
+    if (_isPerItem) return 'Per-item · $basis';
+    return '${(taxRate * 100).toStringAsFixed(taxRate * 100 % 1 == 0 ? 0 : 1)}% · $basis';
+  }
+
+  String get _oldGoldSummary {
+    if (_oldGoldEntries.isEmpty) return 'No metal received';
+    final total = _oldGoldEntries.fold(0.0, (s, e) => s + e.amount);
+    return '-$_currencySymbol${total.toStringAsFixed(2)} · ${_oldGoldEntries.length} item(s)';
+  }
+
+  Future<void> _addOldGoldEntry() async {
+    final repo = ref.read(jewelleryRepositoryProvider);
+    final l10n = AppLocalizations.of(context)!;
+    String metal = 'gold';
+    String purity = '22K';
+    final grossCtrl = TextEditingController();
+    final netCtrl = TextEditingController();
+    final rateCtrl = TextEditingController();
+    Future<void> loadRate() async {
+      final rate = await repo.getRateForDate(
+          metal: metal, purity: purity, date: _selectedOrderDate);
+      if (rate != null) rateCtrl.text = rate.buyRatePerGram.toString();
+    }
+
+    await loadRate();
+    if (!mounted) return;
+    final entry = await showDialog<OldGoldEntry>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          double amountOf() {
+            final net = double.tryParse(netCtrl.text.trim()) ?? 0.0;
+            final rate = double.tryParse(rateCtrl.text.trim()) ?? 0.0;
+            // Rate is fetched for the selected purity — already
+            // purity-adjusted (BUG-05).
+            return net * rate;
+          }
+
+          return AlertDialog(
+            title: Text(l10n.oldGoldReceivedTitle,
+                style: const TextStyle(fontSize: AppFontSize.xlarge)),
+            content: SizedBox(
+              width: _dialogWidth(context),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: metal,
+                            isDense: true,
+                            decoration: InputDecoration(
+                                labelText: l10n.jewelleryMetalLabel,
+                                isDense: true,
+                                border: OutlineInputBorder()),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 'gold', child: Text('Gold')),
+                              DropdownMenuItem(
+                                  value: 'silver', child: Text('Silver')),
+                            ],
+                            onChanged: (v) => setDialogState(() {
+                              if (v == null) return;
+                              metal = v;
+                              loadRate();
+                            }),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: purity,
+                            isDense: true,
+                            decoration: InputDecoration(
+                                labelText: l10n.jewelleryPurityLabel,
+                                isDense: true,
+                                border: OutlineInputBorder()),
+                            items: [
+                              for (final p in MetalRate.purities)
+                                DropdownMenuItem(value: p, child: Text(p)),
+                            ],
+                            onChanged: (v) => setDialogState(() {
+                              if (v == null) return;
+                              purity = v;
+                              loadRate();
+                            }),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: grossCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration: InputDecoration(
+                                labelText: l10n.jewelleryGrossWeightLabel,
+                                isDense: true,
+                                border: OutlineInputBorder()),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: netCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            onChanged: (_) => setDialogState(() {}),
+                            decoration: InputDecoration(
+                                labelText: l10n.jewelleryNetWeightLabel,
+                                isDense: true,
+                                border: OutlineInputBorder()),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: rateCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                          labelText: l10n.oldGoldBuybackRateLabel,
+                          helperText: l10n.oldGoldBuybackRateHelper,
+                          isDense: true,
+                          border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    Builder(builder: (context) {
+                      final amount = amountOf();
+                      final scheme = Theme.of(context).colorScheme;
+                      return Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                '${l10n.oldGoldExchangeCreditLabel}: $_currencySymbol${amount.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 3),
+                            Text(l10n.oldGoldNoAutomaticRcmMessage,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant)),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(AppLocalizations.of(context)!.actionCancel),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final net = double.tryParse(netCtrl.text.trim()) ?? 0.0;
+                  final rate = double.tryParse(rateCtrl.text.trim()) ?? 0.0;
+                  if (net <= 0 || rate <= 0) return;
+                  final amount = net * rate;
+                  Navigator.pop(
+                    context,
+                    OldGoldEntry(
+                      id: const Uuid().v4(),
+                      customerId: selectedCustomer?.id,
+                      customerName: nameController.text.trim(),
+                      metal: metal,
+                      purity: purity,
+                      grossWeight:
+                          double.tryParse(grossCtrl.text.trim()) ?? 0.0,
+                      netWeight: net,
+                      ratePerGram: rate,
+                      amount: amount,
+                    ),
+                  );
+                },
+                child: Text(AppLocalizations.of(context)!.actionAdd),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (entry == null || !mounted) return;
+    setState(() => _oldGoldEntries = [..._oldGoldEntries, entry]);
+  }
+
+  Widget _oldGoldSectionChild() {
+    final l10n = AppLocalizations.of(context)!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final entry in _oldGoldEntries)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: Text(
+                '${MetalRate.metalLabel(entry.metal)} ${entry.purity} · ${entry.netWeight.toStringAsFixed(2)} g'),
+            subtitle: Text(
+              '$_currencySymbol${entry.amount.toStringAsFixed(2)}'
+              '${entry.rcmTax > 0 ? ' · RCM ${entry.rcmTax.toStringAsFixed(2)}' : ''}',
+              style: const TextStyle(fontSize: 12),
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              onPressed: () => setState(() => _oldGoldEntries.remove(entry)),
+            ),
+          ),
+        if (_oldGoldEntries.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              l10n.oldGoldNoAutomaticRcmMessage,
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+          ),
+        SizedBox(
+          width: double.infinity,
+          child: AppSecondaryButton(
+            onPressed: _addOldGoldEntry,
+            icon: const Icon(Icons.add_circle_outline, size: 16),
+            label: Text(l10n.actionAdd),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _invoiceDiscountSectionV2() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _invoiceDiscountController,
+            onChanged: (_) {
+              if (!mounted) return;
+              setState(() {});
+            },
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: _flatFieldDecorationV2(
+              AppLocalizations.of(context)!.createInvoiceDiscountFieldLabel,
+              hint: '',
+              prefixText: _invoiceDiscountType == InvoiceDiscountType.amount
+                  ? '$_currencySymbol '
+                  : null,
+              suffixText: _invoiceDiscountType == InvoiceDiscountType.percent
+                  ? '%'
+                  : null,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            border:
+                Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<InvoiceDiscountType>(
+              value: _invoiceDiscountType,
+              isDense: true,
+              selectedItemBuilder: (context) => [
+                const Center(child: Text('%')),
+                Center(
+                    child: Text(AppLocalizations.of(context)!
+                        .discountTypeAmountShortLabel)),
+              ],
+              items: [
+                const DropdownMenuItem(
+                    value: InvoiceDiscountType.percent, child: Text('%')),
+                DropdownMenuItem(
+                    value: InvoiceDiscountType.amount,
+                    child: Text(AppLocalizations.of(context)!.labelAmount)),
+              ],
+              onChanged: (v) {
+                if (v == null || !mounted) return;
+                setState(() => _invoiceDiscountType = v);
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -5388,7 +6274,11 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     return TextField(
       controller: notesController,
       maxLength: DefaultValues.additionalNotesLength,
-      maxLines: 3,
+      maxLines: 2,
+      onChanged: (_) {
+        if (!mounted) return;
+        setState(() {});
+      },
       decoration: _flatFieldDecorationV2(
           AppLocalizations.of(context)!.createInvoiceNotesOptionalLabel,
           hint: AppLocalizations.of(context)!.createInvoiceNotesHint,
@@ -5806,8 +6696,13 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
     // locally so both layout chains stay in sync.
     final roundOff =
         InvoiceTotalsCalculator.roundOffAmount(total, enabled: _roundOff);
+    // Old gold exchange credit (BUG-18): the exchange is booked as its own
+    // system receipt on save, so the printed Total / due figures must net
+    // it — otherwise the card asks the customer for money they already
+    // handed over in metal.
+    final oldGoldCredit = _oldGoldEntries.fold(0.0, (s, e) => s + e.amount);
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
@@ -5879,19 +6774,38 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             const SizedBox(height: 8),
             _buildPreviousBalanceDueRow(),
           ],
+          if (oldGoldCredit > 0) ...[
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(AppLocalizations.of(context)!.oldGoldExchangeLabel,
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.teal[700],
+                        fontWeight: FontWeight.w600)),
+                Text('-$_currencySymbol${oldGoldCredit.toStringAsFixed(2)}',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal[700])),
+              ],
+            ),
+          ],
           if (roundOff.abs() >= 0.005) ...[
             const SizedBox(height: 4),
             _buildTotalRow('Round Off', roundOff, false),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           _buildTotalRow(AppLocalizations.of(context)!.fieldTotalLabel,
-              total + roundOff, true),
+              total + roundOff - oldGoldCredit, true),
           if (_showPreviousBalance &&
               selectedCustomer != null &&
               !_isPreviousBalanceLoading &&
               _previousBalanceDue > 0) ...[
             const SizedBox(height: 8),
-            _buildTotalDueRow(total + roundOff + _previousBalanceDue),
+            _buildTotalDueRow(
+                total + roundOff - oldGoldCredit + _previousBalanceDue),
           ],
           if (isEditing &&
               _invoice != null &&
@@ -5927,14 +6841,44 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildAdditionalCostsSection(),
-                        const SizedBox(height: 12),
-                        _invoiceDiscountSectionV2(),
-                        const SizedBox(height: 18),
-                        _sectionLabelV2('Notes'),
-                        _notesFieldV2(),
-                        const SizedBox(height: 18),
-                        _sectionLabelV2('Tax settings'),
-                        _taxSettingsSectionV2(),
+                        const SizedBox(height: 10),
+                        _railSection(
+                          title: AppLocalizations.of(context)!
+                              .createInvoiceDiscountFieldLabel,
+                          summary: _discountSummary(invoiceDiscountAmount),
+                          expanded: _discountExpanded,
+                          onToggle: (v) =>
+                              setState(() => _discountExpanded = v),
+                          child: _invoiceDiscountSectionV2(),
+                        ),
+                        const SizedBox(height: 10),
+                        _railSection(
+                          title: 'Notes',
+                          summary: _notesSummary(),
+                          expanded: _notesExpanded,
+                          onToggle: (v) => setState(() => _notesExpanded = v),
+                          child: _notesFieldV2(),
+                        ),
+                        const SizedBox(height: 10),
+                        _railSection(
+                          title: 'Tax settings',
+                          summary: _taxSummary(),
+                          expanded: _taxExpanded,
+                          onToggle: (v) => setState(() => _taxExpanded = v),
+                          child: _taxSettingsSectionV2(),
+                        ),
+                        if (ref.watch(industryProfileProvider) ==
+                            IndustryProfile.jewellery) ...[
+                          const SizedBox(height: 10),
+                          _railSection(
+                            title: 'Old gold exchange',
+                            summary: _oldGoldSummary,
+                            expanded: _oldGoldExpanded,
+                            onToggle: (v) =>
+                                setState(() => _oldGoldExpanded = v),
+                            child: _oldGoldSectionChild(),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -6016,7 +6960,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                     foregroundColor: Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 16),
+                        horizontal: 20, vertical: 12),
                     shape: RoundedRectangleBorder(
                         borderRadius:
                             BorderRadius.circular(AppBorderRadius.xsmall)),
@@ -6108,7 +7052,7 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 22, vertical: 16),
+                          horizontal: 18, vertical: 12),
                       shape: RoundedRectangleBorder(
                           borderRadius:
                               BorderRadius.circular(AppBorderRadius.xsmall)),
@@ -6162,14 +7106,14 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
           child: Column(
             children: [
               _customerDetailsFormV2(),
-              AppSpacing.hSmall,
+              const SizedBox(height: 6),
               Expanded(child: _itemsTableSectionV2()),
             ],
           ),
         ),
         AppSpacing.wSmall,
         SizedBox(
-          width: Platform.isAndroid ? 300 : 360,
+          width: Platform.isAndroid ? 280 : 330,
           child: _rightPanelV2(tax, subtotal, total, grossSubtotal,
               totalDiscount, invoiceDiscountAmount),
         ),
@@ -6203,14 +7147,42 @@ class _CreateInvoiceScreenV2State extends ConsumerState<CreateInvoiceScreenV2> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildAdditionalCostsSection(),
-              const SizedBox(height: 12),
-              _invoiceDiscountSectionV2(),
-              const SizedBox(height: 18),
-              _sectionLabelV2('Notes'),
-              _notesFieldV2(),
-              const SizedBox(height: 18),
-              _sectionLabelV2('Tax settings'),
-              _taxSettingsSectionV2(),
+              const SizedBox(height: 10),
+              _railSection(
+                title: AppLocalizations.of(context)!
+                    .createInvoiceDiscountFieldLabel,
+                summary: _discountSummary(invoiceDiscountAmount),
+                expanded: _discountExpanded,
+                onToggle: (v) => setState(() => _discountExpanded = v),
+                child: _invoiceDiscountSectionV2(),
+              ),
+              const SizedBox(height: 10),
+              _railSection(
+                title: 'Notes',
+                summary: _notesSummary(),
+                expanded: _notesExpanded,
+                onToggle: (v) => setState(() => _notesExpanded = v),
+                child: _notesFieldV2(),
+              ),
+              const SizedBox(height: 10),
+              _railSection(
+                title: 'Tax settings',
+                summary: _taxSummary(),
+                expanded: _taxExpanded,
+                onToggle: (v) => setState(() => _taxExpanded = v),
+                child: _taxSettingsSectionV2(),
+              ),
+              if (ref.watch(industryProfileProvider) ==
+                  IndustryProfile.jewellery) ...[
+                const SizedBox(height: 10),
+                _railSection(
+                  title: 'Old gold exchange',
+                  summary: _oldGoldSummary,
+                  expanded: _oldGoldExpanded,
+                  onToggle: (v) => setState(() => _oldGoldExpanded = v),
+                  child: _oldGoldSectionChild(),
+                ),
+              ],
             ],
           ),
         ),

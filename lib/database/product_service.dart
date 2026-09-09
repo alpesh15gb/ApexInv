@@ -89,8 +89,8 @@ class ProductService {
             ? '(LOWER(name) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?) AND type = ?'
             : 'LOWER(name) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?',
         whereArgs: typeFilter != null
-            ? ['%$queryLOwer%', '%$queryLOwer%', typeFilter]
-            : ['%$queryLOwer%', '%$queryLOwer%'],
+            ? ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%', typeFilter]
+            : ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%'],
       );
       return result.map((e) => Product.fromMap(e)).toList();
     }
@@ -126,12 +126,18 @@ class ProductService {
         '%$queryLOwer%',
         '%$queryLOwer%',
         '%$queryLOwer%',
+        '%$queryLOwer%',
         typeFilter
       ];
     } else if (query.isNotEmpty) {
       where =
           'LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?';
-      whereArgs = ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%'];
+      whereArgs = [
+        '%$queryLOwer%',
+        '%$queryLOwer%',
+        '%$queryLOwer%',
+        '%$queryLOwer%'
+      ];
     } else if (typeFilter != null) {
       where = 'type = ?';
       whereArgs = [typeFilter];
@@ -156,12 +162,18 @@ class ProductService {
     if (query.isNotEmpty && typeFilter != null) {
       return Sqflite.firstIntValue(await db.rawQuery(
         "SELECT COUNT(*) FROM products WHERE (LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?) AND type = ?",
-        ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%', typeFilter],
+        [
+          '%$queryLOwer%',
+          '%$queryLOwer%',
+          '%$queryLOwer%',
+          '%$queryLOwer%',
+          typeFilter
+        ],
       ))!;
     } else if (query.isNotEmpty) {
       return Sqflite.firstIntValue(await db.rawQuery(
         "SELECT COUNT(*) FROM products WHERE LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(hsncode) LIKE ? OR LOWER(barcode) LIKE ?",
-        ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%'],
+        ['%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%', '%$queryLOwer%'],
       ))!;
     } else if (typeFilter != null) {
       return Sqflite.firstIntValue(await db.rawQuery(
@@ -260,9 +272,38 @@ class ProductService {
     return maps.isNotEmpty ? Product.fromMap(maps.first) : null;
   }
 
+  /// Deletes every product in one transaction, refusing while live
+  /// documents still reference them, and cascading the catalog children
+  /// (variants, jewellery attributes/pieces, batches, metadata) so the wipe
+  /// leaves no orphan rows behind (BUG-16). Historical invoice lines keep
+  /// their own snapshots, so trashed documents stay readable.
   static Future<void> deleteAllProducts() async {
     final db = await dbHelper.database;
-    await db.delete('products');
+    await db.transaction((txn) async {
+      final live = await txn.rawQuery(
+        'SELECT COUNT(*) AS c FROM invoice_items ii '
+        'JOIN invoices i ON i.id = ii.invoice_id '
+        'WHERE i.deleted_at IS NULL '
+        'AND ii.product_id IN (SELECT id FROM products)',
+      );
+      final liveCount = (live.first['c'] as num?)?.toInt() ?? 0;
+      if (liveCount > 0) {
+        throw StateError(
+            'Cannot delete all products while $liveCount line item(s) on '
+            'live invoices still reference them. Move those invoices to '
+            'the trash first.');
+      }
+      await txn.execute('DELETE FROM product_variants '
+          'WHERE product_id IN (SELECT id FROM products)');
+      await txn.execute('DELETE FROM jewellery_attributes '
+          'WHERE product_id IN (SELECT id FROM products)');
+      await txn.execute('DELETE FROM jewellery_pieces '
+          'WHERE product_id IN (SELECT id FROM products)');
+      await txn.execute('DELETE FROM batch_info '
+          'WHERE product_id IN (SELECT id FROM products)');
+      await txn.delete('product_metadata');
+      await txn.delete('products');
+    });
   }
 
   /// Insert products in batches of [batchSize] rows per transaction.
